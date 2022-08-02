@@ -35,8 +35,10 @@ void IkeLoop()
     {
         buffer = newsock.Receive(ref sender);
 
-        Console.WriteLine("P500:  "+Encoding.ASCII.GetString(buffer, 0, buffer.Length));
+        Console.WriteLine($"Port={sender.Port}  Caller={sender.Address} Data={Encoding.UTF8.GetString(buffer, 0, buffer.Length)}");
+        Console.Write("Echoing back to sender...");
         newsock.Send(buffer, buffer.Length, sender);
+        Console.Write("Done.");
     }
 }
     
@@ -54,7 +56,9 @@ void SpeLoop()
     {
         buffer = newsock.Receive(ref sender);
 
-        Console.WriteLine("P4500: "+Encoding.ASCII.GetString(buffer, 0, buffer.Length));
+        Console.WriteLine($"Port={sender.Port}  Caller={sender.Address} Data={Encoding.UTF8.GetString(buffer, 0, buffer.Length)}");
+        Console.Write("Echoing back to sender...");
         newsock.Send(buffer, buffer.Length, sender);
+        Console.Write("Done.");
     }
 }

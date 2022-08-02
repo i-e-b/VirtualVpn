@@ -39,8 +39,7 @@ public class UdpServer : IDisposable
         {
             buffer = newsock.Receive(ref sender);
 
-            Console.WriteLine(Encoding.ASCII.GetString(buffer, 0, buffer.Length));
-            newsock.Send(buffer, buffer.Length, sender);
+            Console.WriteLine($"Port={sender.Port}  Caller={sender.Address} Data={Encoding.UTF8.GetString(buffer, 0, buffer.Length)}");
         }
     }
     
@@ -58,8 +57,7 @@ public class UdpServer : IDisposable
         {
             buffer = newsock.Receive(ref sender);
 
-            Console.WriteLine(Encoding.ASCII.GetString(buffer, 0, buffer.Length));
-            newsock.Send(buffer, buffer.Length, sender);
+            Console.WriteLine($"Port={sender.Port}  Caller={sender.Address} Data={Encoding.UTF8.GetString(buffer, 0, buffer.Length)}");
         }
     }
 

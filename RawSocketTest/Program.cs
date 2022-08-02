@@ -7,7 +7,8 @@ using RawSocketTest;
 Console.WriteLine("Setup");
 
 
-EndPoint target = new IPEndPoint(new IPAddress(new byte[]{197,250,65,132}), 500);
+//EndPoint target = new IPEndPoint(new IPAddress(new byte[]{197,250,65,132}), 500); // M-P
+EndPoint target = new IPEndPoint(new IPAddress(new byte[]{159,69,13,126}), 500);    // Gerty
 using var server = new UdpServer();
 server.Start();
 
@@ -20,11 +21,11 @@ var message = new IkeMessage
 {
     SpiI = (ulong)rnd.NextInt64(),
     SpiR = 0,
-    FirstPayload = PayloadType.SA,
     Version = IkeVersion.IkeV2,
     Exchange = ExchangeType.IKE_SA_INIT,
     MessageFlag = MessageFlag.Initiator,
     MessageId = 0,
+    FirstPayload = PayloadType.SA,
     PayloadLength = 0
 };
 
