@@ -1,27 +1,28 @@
 ﻿using System.Net;
 using System.Net.Sockets;
-using System.Text;
 
 namespace RawSocketTest;
 
 public class UdpServer : IDisposable
 {
+    private readonly Action<byte[]>? _ikeResponder;
+    private readonly Action<byte[]>? _speResponder;
     private readonly Thread _commsThreadIke;
     private readonly Thread _commsThreadSpe;
-    private readonly Socket _outSock;
     private volatile bool _running;
-    private readonly Socket _inSock;
-    private byte[] _buffer;
+    private readonly UdpClient _speClient;
+    private readonly UdpClient _ikeClient;
 
-    public UdpServer()
+    public UdpServer(Action<byte[]>? ikeResponder, Action<byte[]>? speResponder)
     {
-        _outSock = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp) { Blocking = true };
-
-        _buffer = new byte[1048576];
-        _inSock = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp) { Blocking = true };
+        _ikeResponder = ikeResponder;
+        _speResponder = speResponder;
         
-        _inSock.Bind(new IPEndPoint(IPAddress.Any, 500));
-        //_inSock.Listen();
+        var speEndpoint = new IPEndPoint(IPAddress.Any, 4500);
+        _speClient = new UdpClient(speEndpoint);
+        
+        var ikeEndpoint = new IPEndPoint(IPAddress.Any, 500);
+        _ikeClient = new UdpClient(ikeEndpoint);
         
         _commsThreadIke = new Thread(IkeLoop){IsBackground = true};
         _commsThreadSpe = new Thread(SpeLoop){IsBackground = true};
@@ -36,53 +37,40 @@ public class UdpServer : IDisposable
 
     private void IkeLoop()
     {
+        var sender = new IPEndPoint(IPAddress.Any, 0);
         while (_running)
         {
             Console.WriteLine("Listening on 500...");
-            var actual = _inSock.Receive(_buffer);
-            Console.WriteLine($"Got message, {actual} bytes.");
+            var buffer = _ikeClient.Receive(ref sender);
+            Console.WriteLine($"ListenPort=500 EphemeralPort={sender.Port} Caller={sender.Address} Data->{buffer.Length} bytes");
+            _ikeResponder?.Invoke(buffer);
         }
-
-        /*var localEp = new IPEndPoint(IPAddress.Any, 500);
-        using var client = new UdpClient(localEp);
-
-        Console.WriteLine("Waiting for a client...");
-
-        var sender = new IPEndPoint(IPAddress.Any, 0);
-
-        while(_running)
-        {
-            Console.WriteLine("Waiting (500)");
-            var buffer = client.Receive(ref sender);
-
-            Console.WriteLine($"Port={sender.Port}  Caller={sender.Address} Data={Encoding.UTF8.GetString(buffer, 0, buffer.Length)}");
-        }*/
     }
     
     private void SpeLoop()
     {
-        var localEp = new IPEndPoint(IPAddress.Any, 4500);
-        using var client = new UdpClient(localEp);
-
-        Console.WriteLine("Waiting for a client...");
-
         var sender = new IPEndPoint(IPAddress.Any, 0);
-
-        while(_running)
+        while (_running)
         {
-            Console.WriteLine("Waiting (4500)");
-            var buffer = client.Receive(ref sender);
-
-            Console.WriteLine($"Port={sender.Port}  Caller={sender.Address} Data={Encoding.UTF8.GetString(buffer, 0, buffer.Length)}");
+            Console.WriteLine("Listening on 4500...");
+            var buffer = _speClient.Receive(ref sender);
+            Console.WriteLine($"ListenPort=4500 EphemeralPort={sender.Port} Caller={sender.Address} Data->{buffer.Length} bytes");
+            _speResponder?.Invoke(buffer);
         }
     }
 
-    public int SendTo(byte[] buf, SocketFlags flags, IPEndPoint target) => _outSock.SendTo(buf,flags,target);
+    public void SendIke(byte[] data, IPEndPoint target, out int bytesSent)
+    {
+        bytesSent = _ikeClient.Send(data, data.Length, target);
+        // this seems to cause 500 port to be used on the way back too
+        // unlike `Socket.SendTo(buf,flags,target)` which gives an ephemeral port
+    }
 
     public void Dispose()
     {
         _running = false;
-        _outSock.Dispose();
+        _speClient.Dispose();
+        _ikeClient.Dispose();
         GC.SuppressFinalize(this);
     }
 }

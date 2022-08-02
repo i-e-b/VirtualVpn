@@ -44,62 +44,128 @@ public class IkeMessage
     public UInt32 MessageId { get; set; }
     
     /// <summary>
-    /// Length in bytes of the full message (including headers)
+    /// Length of entire packet, including payloads and headers
     /// </summary>
-    public UInt32 PayloadLength { get; set; }
+    public UInt32 ExpectedLength { get; set; }
+    
+    /// <summary>
+    /// Length in bytes of all payloads, not including header
+    /// </summary>
+    public UInt32 PayloadLength => (UInt32)Payloads.Sum(p=>p.Size);
+
+    public List<MessagePayload> Payloads { get; set; } = new();
 
     /// <summary>
     /// Length in bytes of the 
     /// </summary>
     public const int HeaderLength = 28;
     
+
+    /// <summary>
+    /// Add a payload to the payload chain on this message
+    /// </summary>
+    public void AddPayload(PayloadType type, byte[] message)
+    {
+        Payloads.Add(new MessagePayload{
+            Data = message,
+            Type = type
+        });
+    }
+    
     public byte[] ToBytes()
     {
         // TODO: crypto, checksums, payloads
-        var packetLength = PayloadLength + HeaderLength;
+        ExpectedLength = PayloadLength + HeaderLength;
         
-        var bytes = new byte[packetLength];
+        var bytes = new byte[ExpectedLength];
         
         // Write header
-        bytes[0] = B(8, SpiI);
-        bytes[1] = B(7, SpiI);
-        bytes[2] = B(6, SpiI);
-        bytes[3] = B(5, SpiI);
-        bytes[4] = B(4, SpiI);
-        bytes[5] = B(3, SpiI);
-        bytes[6] = B(2, SpiI);
-        bytes[7] = B(1, SpiI);
+        bytes[0] = PickByte(8, SpiI);
+        bytes[1] = PickByte(7, SpiI);
+        bytes[2] = PickByte(6, SpiI);
+        bytes[3] = PickByte(5, SpiI);
+        bytes[4] = PickByte(4, SpiI);
+        bytes[5] = PickByte(3, SpiI);
+        bytes[6] = PickByte(2, SpiI);
+        bytes[7] = PickByte(1, SpiI);
         
-        bytes[ 8] = B(8, SpiR);
-        bytes[ 9] = B(7, SpiR);
-        bytes[10] = B(6, SpiR);
-        bytes[11] = B(5, SpiR);
-        bytes[12] = B(4, SpiR);
-        bytes[13] = B(3, SpiR);
-        bytes[14] = B(2, SpiR);
-        bytes[15] = B(1, SpiR);
+        bytes[ 8] = PickByte(8, SpiR);
+        bytes[ 9] = PickByte(7, SpiR);
+        bytes[10] = PickByte(6, SpiR);
+        bytes[11] = PickByte(5, SpiR);
+        bytes[12] = PickByte(4, SpiR);
+        bytes[13] = PickByte(3, SpiR);
+        bytes[14] = PickByte(2, SpiR);
+        bytes[15] = PickByte(1, SpiR);
         
         bytes[16] = (byte)FirstPayload;
         bytes[17] = (byte)Version;
         bytes[18] = (byte)Exchange;
         bytes[19] = (byte)MessageFlag;
         
-        bytes[20] = B(4, MessageId);
-        bytes[21] = B(3, MessageId);
-        bytes[22] = B(2, MessageId);
-        bytes[23] = B(1, MessageId);
+        bytes[20] = PickByte(4, MessageId);
+        bytes[21] = PickByte(3, MessageId);
+        bytes[22] = PickByte(2, MessageId);
+        bytes[23] = PickByte(1, MessageId);
         
-        bytes[24] = B(4, packetLength);
-        bytes[25] = B(3, packetLength);
-        bytes[26] = B(2, packetLength);
-        bytes[27] = B(1, packetLength);
+        bytes[24] = PickByte(4, ExpectedLength);
+        bytes[25] = PickByte(3, ExpectedLength);
+        bytes[26] = PickByte(2, ExpectedLength);
+        bytes[27] = PickByte(1, ExpectedLength);
         
         return bytes;
     }
 
-    private byte B(int byteIndex, ulong data)
+    public static IkeMessage FromBytes(byte[] rawData)
+    {
+        var result = new IkeMessage
+        {
+            SpiI = Unpack(rawData, 0, 7),
+            SpiR = Unpack(rawData, 8, 15),
+            FirstPayload = (PayloadType)rawData[16],
+            Version = (IkeVersion)rawData[17],
+            Exchange = (ExchangeType)rawData[18],
+            MessageFlag = (MessageFlag)rawData[19],
+            MessageId = (uint)Unpack(rawData, 20,23),
+            ExpectedLength = (uint)Unpack(rawData, 24,27)
+        };
+        
+        // TODO: read payloads
+
+        return result;
+    }
+
+
+
+    /// <summary>
+    /// Read a byte from a larger integer
+    /// </summary>
+    private static byte PickByte(int byteIndex, ulong data)
     {
         var s = 8 * (byteIndex - 1);
         return (byte)((data >> s) & 0xff);
     }
+
+    /// <summary>
+    /// Read bytes from start to end (inclusive) into long, in network order
+    /// </summary>
+    private static UInt64 Unpack(byte[] source, int startIdx, int endIdx)
+    {
+        var result = 0UL;
+
+        for (var i = startIdx; i <= endIdx; i++)
+        {
+            result <<= 8;
+            result |= source[i];
+        }
+        
+        return result;
+    }
+}
+
+public class MessagePayload
+{
+    public PayloadType Type { get; set; } = PayloadType.NONE;
+    public byte[] Data { get; set; } = Array.Empty<byte>();
+    public int Size { get; set; }
 }

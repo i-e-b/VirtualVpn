@@ -65,7 +65,7 @@ public enum PayloadType : byte
     NATO_1 = 21,
     GAP_1 = 22,
     
-    /// <summary> Security association </summary>
+    /// <summary> Security association (33) </summary>
     SA = 33,
     KE = 34,
     IDi = 35,
