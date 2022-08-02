@@ -130,11 +130,52 @@ public class IkeMessage
             ExpectedLength = (uint)Unpack(rawData, 24,27)
         };
         
-        // TODO: read payloads
+        // read payload chain
+        int idx = 28;
+        var nextPayload = result.FirstPayload;
+        while (idx < rawData.Length && nextPayload != PayloadType.NONE)
+        {
+            result.ParsePayload(rawData, ref idx, ref nextPayload);
+        }
 
         return result;
     }
 
+    private void ParsePayload(byte[] data, ref int idx, ref PayloadType type)
+    {
+        // Read header
+        var result = new MessagePayload
+        {
+            Type = type,
+            NextPayload = (PayloadType)data[idx+0],
+            IsCritical = data[idx+1],
+            Length = (UInt16)Unpack(data, idx+2, idx+3) // of the packet, including headers
+        };
+
+        // Read body
+        var dataLen = result.Length - 4;
+        var remains = data.Length - idx;
+        if (dataLen > 0 && dataLen <= remains)
+        {
+            result.Data = new byte[dataLen];
+            for (int i = 0; i < dataLen; i++)
+            {
+                result.Data[i] = data[idx+4+i];
+            }
+        }
+        
+        // Add to list
+        Payloads.Add(result);
+
+        // Advance to next
+        if (result.Length <= 0)
+        {
+            idx = data.Length; // don't spin on bad length
+        }
+
+        idx += result.Length;
+        type = result.NextPayload;
+    }
 
 
     /// <summary>
@@ -165,7 +206,25 @@ public class IkeMessage
 
 public class MessagePayload
 {
+    /// <summary>
+    /// Read, but not stored directly in the payload.
+    /// Meaning of the data is dependent on this.
+    /// </summary>
     public PayloadType Type { get; set; } = PayloadType.NONE;
+    
     public byte[] Data { get; set; } = Array.Empty<byte>();
     public int Size { get; set; }
+    
+    /// <summary>
+    /// Type of next payload in message chain. If 'none', this is
+    /// the end of the chain.
+    /// </summary>
+    public PayloadType NextPayload { get; set; }
+
+    public byte IsCritical { get; set; }
+    
+    /// <summary>
+    /// Total length of payload, including data and headers
+    /// </summary>
+    public ushort Length { get; set; }
 }
