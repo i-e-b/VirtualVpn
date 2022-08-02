@@ -12,6 +12,14 @@ var commsThreadSpe = new Thread(SpeLoop){IsBackground = true};
 commsThreadIke.Start();
 commsThreadSpe.Start();
 
+while (true)
+{
+    Console.WriteLine("Listening...");
+    Thread.Sleep(5000);
+    Console.WriteLine("...Listening");
+    Thread.Sleep(5000);
+}
+
 
 void IkeLoop()
 {
