@@ -18,7 +18,7 @@ public class SocketStreamFactory : IConnectableStreamSource
     public Stream ConnectUnsecured(Uri connectionTarget, TimeSpan connectionTimeout)
     {
         var s = new SocketStream(
-            new System.Net.Sockets.Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp) { Blocking = true }
+            new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Udp) { Blocking = true }
         );
 
         if (s.Socket == null) throw new Exception("Failed to connect to socket stream");
@@ -50,7 +50,7 @@ public class SocketStreamFactory : IConnectableStreamSource
     {
         var stream = new SslStream(ConnectUnsecured(connectionTarget, connectionTimeout),
             false,
-            RemoteCertificateValidationCallback);
+            RemoteCertificateValidationCallback!);
         stream.AuthenticateAsClient(connectionTarget.Host);
         return stream;
     }
