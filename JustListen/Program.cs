@@ -23,9 +23,8 @@ while (true)
 
 void IkeLoop()
 {
-    var buffer = new byte[1024];
-    var ipep = new IPEndPoint(IPAddress.Any, 500);
-    using var newsock = new UdpClient(ipep);
+    var localEp = new IPEndPoint(IPAddress.Any, 500);
+    using var client = new UdpClient(localEp);
 
     Console.WriteLine("Listen on 500...");
 
@@ -33,20 +32,21 @@ void IkeLoop()
 
     while(true)
     {
-        buffer = newsock.Receive(ref sender);
+        var buffer = client.Receive(ref sender);
 
-        Console.WriteLine($"Port={sender.Port}  Caller={sender.Address} Data={Encoding.UTF8.GetString(buffer, 0, buffer.Length)}");
+        Console.WriteLine($"Expected=500 Real Port={sender.Port}  Caller={sender.Address} Data={Encoding.UTF8.GetString(buffer, 0, buffer.Length)}");
         Console.Write("Echoing back to sender...");
-        newsock.Send(buffer, buffer.Length, sender);
-        Console.Write("Done.");
+        
+        var returnToSender = new IPEndPoint(sender.Address, 500);
+        var sent = client.Send(buffer, buffer.Length, returnToSender);
+        Console.WriteLine($"Done ({sent} bytes).");
     }
 }
     
 void SpeLoop()
 {
-    var buffer = new byte[1024];
-    var ipep = new IPEndPoint(IPAddress.Any, 4500);
-    using var newsock = new UdpClient(ipep);
+    var localEp = new IPEndPoint(IPAddress.Any, 4500);
+    using var client = new UdpClient(localEp);
 
     Console.WriteLine("Listen on 4500...");
 
@@ -54,11 +54,13 @@ void SpeLoop()
 
     while(true)
     {
-        buffer = newsock.Receive(ref sender);
+        var buffer = client.Receive(ref sender);
 
-        Console.WriteLine($"Port={sender.Port}  Caller={sender.Address} Data={Encoding.UTF8.GetString(buffer, 0, buffer.Length)}");
+        Console.WriteLine($"Expected=4500 Real Port={sender.Port}  Caller={sender.Address} Data={Encoding.UTF8.GetString(buffer, 0, buffer.Length)}");
         Console.Write("Echoing back to sender...");
-        newsock.Send(buffer, buffer.Length, sender);
-        Console.Write("Done.");
+        
+        var returnToSender = new IPEndPoint(sender.Address, 4500);
+        var sent = client.Send(buffer, buffer.Length, returnToSender);
+        Console.WriteLine($"Done ({sent} bytes).");
     }
 }
