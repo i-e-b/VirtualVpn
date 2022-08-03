@@ -5,15 +5,15 @@ namespace RawSocketTest;
 
 public class UdpServer : IDisposable
 {
-    private readonly Action<byte[]>? _ikeResponder;
-    private readonly Action<byte[]>? _speResponder;
+    private readonly Action<byte[], IPEndPoint>? _ikeResponder;
+    private readonly Action<byte[], IPEndPoint>? _speResponder;
     private readonly Thread _commsThreadIke;
     private readonly Thread _commsThreadSpe;
     private volatile bool _running;
     private readonly UdpClient _speClient;
     private readonly UdpClient _ikeClient;
 
-    public UdpServer(Action<byte[]>? ikeResponder, Action<byte[]>? speResponder)
+    public UdpServer(Action<byte[], IPEndPoint>? ikeResponder, Action<byte[], IPEndPoint>? speResponder)
     {
         _ikeResponder = ikeResponder;
         _speResponder = speResponder;
@@ -43,7 +43,7 @@ public class UdpServer : IDisposable
             Console.WriteLine("Listening on 500...");
             var buffer = _ikeClient.Receive(ref sender);
             Console.WriteLine($"ListenPort=500 EphemeralPort={sender.Port} Caller={sender.Address} Data->{buffer.Length} bytes");
-            _ikeResponder?.Invoke(buffer);
+            _ikeResponder?.Invoke(buffer, sender);
         }
     }
     
@@ -55,7 +55,7 @@ public class UdpServer : IDisposable
             Console.WriteLine("Listening on 4500...");
             var buffer = _speClient.Receive(ref sender);
             Console.WriteLine($"ListenPort=4500 EphemeralPort={sender.Port} Caller={sender.Address} Data->{buffer.Length} bytes");
-            _speResponder?.Invoke(buffer);
+            _speResponder?.Invoke(buffer, sender);
         }
     }
 

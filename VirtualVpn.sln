@@ -11,6 +11,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "_Info", "_Info", "{609B476C
 		README.md = README.md
 	EndProjectSection
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ProtocolTests", "ProtocolTests\ProtocolTests.csproj", "{F6010588-6EF2-453F-92FB-FB7522B5A767}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -25,5 +27,9 @@ Global
 		{EE3D8BBC-CFE6-4D2D-AB18-18584DA192A2}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{EE3D8BBC-CFE6-4D2D-AB18-18584DA192A2}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{EE3D8BBC-CFE6-4D2D-AB18-18584DA192A2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F6010588-6EF2-453F-92FB-FB7522B5A767}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F6010588-6EF2-453F-92FB-FB7522B5A767}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F6010588-6EF2-453F-92FB-FB7522B5A767}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F6010588-6EF2-453F-92FB-FB7522B5A767}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

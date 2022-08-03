@@ -67,6 +67,8 @@ public enum PayloadType : byte
     
     /// <summary> Security association (33) </summary>
     SA = 33,
+    
+    /// <summary> Key Exchange (34) </summary>
     KE = 34,
     IDi = 35,
     IDr = 36,
