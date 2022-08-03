@@ -3,13 +3,15 @@ using SkinnyJson;
 
 namespace RawSocketTest;
 
-public class RunTest : IDisposable
+public class VpnServer : IDisposable
 {
+    private const int IKE_HEADER = 0;
+    
     private int _messageCount;
     private readonly UdpServer _server;
     private readonly Dictionary<ulong, VpnSession> _sessions = new();
 
-    public RunTest()
+    public VpnServer()
     {
         _server = new UdpServer(IkeResponder, SpeResponder);
     }
@@ -72,9 +74,16 @@ public class RunTest : IDisposable
     {
         // write capture to file for easy testing
         _messageCount++;
-        File.WriteAllBytes(@$"C:\temp\IKEv2-{_messageCount}_Port-{sender.Port}.bin", rawData);
+        var name = @$"C:\temp\IKEv2-{_messageCount}_Port-{sender.Port}_IKE.bin";
+        File.WriteAllBytes(name, rawData);
+        Console.WriteLine($"Got a 500 packet -- {name}");
         
-        var ikeMessage = IkeMessage.FromBytes(rawData, 0);
+        IkeSessionResponder(rawData, sender, sendZeroHeader: false);
+    }
+
+    private void IkeSessionResponder(byte[] data, IPEndPoint sender, bool sendZeroHeader)
+    {
+        var ikeMessage = IkeMessage.FromBytes(data, 0);
 
         // Write interpretation to console
         //var str = Json.Freeze(ikeMessage);
@@ -106,7 +115,7 @@ public class RunTest : IDisposable
             // reply with a responder SPI and changed flags
             ikeMessage.MessageFlag = MessageFlag.Response;
 
-            _server.SendIke(ikeMessage.ToBytes(), sender, out var sent);
+            _server.SendIke(ikeMessage.ToBytes(sendZeroHeader), sender, out var sent);
             Console.WriteLine($"    Replied with {sent} bytes (echo with flipped flags)");
             // after this, we get a call on 4500 port...
         }
@@ -120,9 +129,9 @@ public class RunTest : IDisposable
     {
         // write capture to file for easy testing
         _messageCount++;
-        File.WriteAllBytes(@$"C:\temp\IKEv2-{_messageCount}_Port-{sender.Port}.bin", data);
-        
-        Console.WriteLine("Got a 4500 packet...");
+        var name = @$"C:\temp\IKEv2-{_messageCount}_Port-{sender.Port}_SPE.bin";
+        File.WriteAllBytes(name, data);
+        Console.WriteLine($"Got a 4500 packet -- {name}");
         
         if (data.Length < 4 && data[0] == 0xff) // keep alive?
         {
@@ -132,13 +141,14 @@ public class RunTest : IDisposable
         }
 
         var idx = 0;
+        var header = Bit.ReadInt32(data, ref idx); // not quite sure what this is about
         var spi = Bit.ReadUInt64(data, ref idx);
 
-        if (spi == 0) // restart session?
+        if (header == IKE_HEADER) // start session?
         {
             Console.WriteLine("    SPI zero on 4500 -- sending to 500 (IKE) responder");
             var offsetData = data.Skip(4).ToArray();
-            IkeResponder(offsetData, sender);
+            IkeSessionResponder(offsetData, sender, sendZeroHeader: true);
             return;
         }
 
@@ -178,56 +188,10 @@ public class RunTest : IDisposable
     }
 
 
+
     public void Dispose()
     {
         _server.Dispose();
         GC.SuppressFinalize(this);
-    }
-}
-
-internal class VpnSession
-{
-    private readonly UdpServer _server;
-    private readonly IkeMessage _initialMessage;
-    private long _maxSeq = -1;
-
-    public VpnSession(UdpServer server, IkeMessage initialMessage)
-    {
-        _server = server;
-        _initialMessage = initialMessage;
-    }
-    
-
-    /// <summary>
-    /// Do any shut-down stuff
-    /// </summary>
-    public void Close() { }
-
-    /// <summary>
-    /// Returns true if the given sequence is less-or-equal to the largest we've seen before
-    /// </summary>
-    public bool OutOfSequence(uint seq) => seq <= _maxSeq;
-
-    /// <summary>
-    /// Needs crypto, and some corrections. See pvpn/server.py:411
-    /// </summary>
-    public bool VerifyMessage(byte[] data)
-    {
-        return true; // temp
-    }
-
-    /// <summary>
-    /// See pvpn/server.py:416
-    /// </summary>
-    public void IncrementSequence(uint seq)
-    {
-        if (seq > (_maxSeq+65536)) _maxSeq++;
-        else if (seq == _maxSeq) _maxSeq++;
-        else _maxSeq = seq; // this isn't exactly right, see pvpn/server.py:421
-    }
-
-    public void Handle(byte[] data, IPEndPoint sender)
-    {
-        Console.WriteLine($"I should handle a {data.Length} byte session packet from {sender.Address}");
     }
 }

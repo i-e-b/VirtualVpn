@@ -64,17 +64,28 @@ public class IkeMessage
     public const int HeaderLength = 28;
     
     
-    public byte[] ToBytes()
+    /// <summary>
+    /// Serialise the message to a byte string
+    /// </summary>
+    /// <param name="sendZeroHeader">If true, 4 bytes of zero will be prepended to the data</param>
+    public byte[] ToBytes(bool sendZeroHeader = false)
     {
         // TODO: crypto, checksums, payloads
-        ExpectedLength = PayloadLength + HeaderLength;
         
+        ExpectedLength = PayloadLength + HeaderLength;
+        var offset = 0;
+        if (sendZeroHeader)
+        {
+            offset = 4;
+            ExpectedLength += 4;
+        }
+
         FirstPayload = Payloads.Count > 0 ? Payloads[0].Type : PayloadType.NONE;
         
         var bytes = new byte[ExpectedLength];
-        WriteHeader(bytes);
+        WriteHeader(bytes, offset);
 
-        var offset = 28;
+        offset += 28;
         for (int i = 0; i < Payloads.Count; i++)
         {
             // ensure chain is correct
@@ -85,40 +96,40 @@ public class IkeMessage
         return bytes;
     }
 
-    private void WriteHeader(byte[] bytes)
+    private void WriteHeader(byte[] bytes, int offset)
     {
-        bytes[0] = Bit.PickByte(8, SpiI);
-        bytes[1] = Bit.PickByte(7, SpiI);
-        bytes[2] = Bit.PickByte(6, SpiI);
-        bytes[3] = Bit.PickByte(5, SpiI);
-        bytes[4] = Bit.PickByte(4, SpiI);
-        bytes[5] = Bit.PickByte(3, SpiI);
-        bytes[6] = Bit.PickByte(2, SpiI);
-        bytes[7] = Bit.PickByte(1, SpiI);
+        bytes[offset+0] = Bit.PickByte(8, SpiI);
+        bytes[offset+1] = Bit.PickByte(7, SpiI);
+        bytes[offset+2] = Bit.PickByte(6, SpiI);
+        bytes[offset+3] = Bit.PickByte(5, SpiI);
+        bytes[offset+4] = Bit.PickByte(4, SpiI);
+        bytes[offset+5] = Bit.PickByte(3, SpiI);
+        bytes[offset+6] = Bit.PickByte(2, SpiI);
+        bytes[offset+7] = Bit.PickByte(1, SpiI);
 
-        bytes[8] = Bit.PickByte(8, SpiR);
-        bytes[9] = Bit.PickByte(7, SpiR);
-        bytes[10] = Bit.PickByte(6, SpiR);
-        bytes[11] = Bit.PickByte(5, SpiR);
-        bytes[12] = Bit.PickByte(4, SpiR);
-        bytes[13] = Bit.PickByte(3, SpiR);
-        bytes[14] = Bit.PickByte(2, SpiR);
-        bytes[15] = Bit.PickByte(1, SpiR);
+        bytes[offset+8] = Bit.PickByte(8, SpiR);
+        bytes[offset+9] = Bit.PickByte(7, SpiR);
+        bytes[offset+10] = Bit.PickByte(6, SpiR);
+        bytes[offset+11] = Bit.PickByte(5, SpiR);
+        bytes[offset+12] = Bit.PickByte(4, SpiR);
+        bytes[offset+13] = Bit.PickByte(3, SpiR);
+        bytes[offset+14] = Bit.PickByte(2, SpiR);
+        bytes[offset+15] = Bit.PickByte(1, SpiR);
 
-        bytes[16] = (byte)FirstPayload;
-        bytes[17] = (byte)Version;
-        bytes[18] = (byte)Exchange;
-        bytes[19] = (byte)MessageFlag;
+        bytes[offset+16] = (byte)FirstPayload;
+        bytes[offset+17] = (byte)Version;
+        bytes[offset+18] = (byte)Exchange;
+        bytes[offset+19] = (byte)MessageFlag;
 
-        bytes[20] = Bit.PickByte(4, MessageId);
-        bytes[21] = Bit.PickByte(3, MessageId);
-        bytes[22] = Bit.PickByte(2, MessageId);
-        bytes[23] = Bit.PickByte(1, MessageId);
+        bytes[offset+20] = Bit.PickByte(4, MessageId);
+        bytes[offset+21] = Bit.PickByte(3, MessageId);
+        bytes[offset+22] = Bit.PickByte(2, MessageId);
+        bytes[offset+23] = Bit.PickByte(1, MessageId);
 
-        bytes[24] = Bit.PickByte(4, ExpectedLength);
-        bytes[25] = Bit.PickByte(3, ExpectedLength);
-        bytes[26] = Bit.PickByte(2, ExpectedLength);
-        bytes[27] = Bit.PickByte(1, ExpectedLength);
+        bytes[offset+24] = Bit.PickByte(4, ExpectedLength);
+        bytes[offset+25] = Bit.PickByte(3, ExpectedLength);
+        bytes[offset+26] = Bit.PickByte(2, ExpectedLength);
+        bytes[offset+27] = Bit.PickByte(1, ExpectedLength);
     }
 
     public static IkeMessage FromBytes(byte[] rawData, int offset)

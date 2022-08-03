@@ -3,5 +3,5 @@
 using RawSocketTest;
 
 
-using var rt = new RunTest();
+using var rt = new VpnServer();
 rt.Run();
