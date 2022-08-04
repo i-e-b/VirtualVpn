@@ -430,6 +430,19 @@ public enum IpProtocol
     RAW = 255
 }
 
+public enum SessionState
+{
+    INITIAL = 0,
+    SA_SENT = 1,
+    ESTABLISHED = 2,
+    DELETED = 3,
+    KE_SENT = 4,
+    HASH_SENT = 5,
+    AUTH_SET = 6,
+    CONF_SENT = 7,
+    CHILD_SA_SENT = 8
+}
+
 public enum EapCode
 {
     REQUEST = 1,

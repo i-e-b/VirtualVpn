@@ -59,7 +59,7 @@ public class UdpServer : IDisposable
         }
     }
 
-    public void SendIke(byte[] data, IPEndPoint target, out int bytesSent)
+    public void SendRaw(byte[] data, IPEndPoint target, out int bytesSent)
     {
         bytesSent = _ikeClient.Send(data, data.Length, target);
         // this seems to cause 500 port to be used on the way back too

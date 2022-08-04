@@ -85,4 +85,12 @@ public static class Bit
         result |= (uint)data[idx++] << 0;
         return result;
     }
+
+    public static byte[] RandomNonce()
+    {
+        // TODO: use System.Security.Cryptography.RandomNumberGenerator  ?
+        var result = new byte[32];
+        _rnd.NextBytes(result);
+        return result;
+    }
 }

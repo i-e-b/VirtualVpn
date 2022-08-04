@@ -83,43 +83,57 @@ public class VpnServer : IDisposable
 
     private void IkeSessionResponder(byte[] data, IPEndPoint sender, bool sendZeroHeader)
     {
+        // read the message to figure out session data
         var ikeMessage = IkeMessage.FromBytes(data, 0);
 
-        // Write interpretation to console
-        //var str = Json.Freeze(ikeMessage);
-        //Console.WriteLine(str);
-        Console.WriteLine("Got a 500 packet...");
+        Console.WriteLine($"Got a 500 packet ex={ikeMessage.Exchange}");
+
+        if (ikeMessage.Exchange == ExchangeType.IDENTITY_1) // start of an IkeV1 session
+        {
+            Console.WriteLine("    it's for IKEv1. Not supported, not replying");
+            return;
+        }
 
         if (ikeMessage.Exchange == ExchangeType.IKE_SA_INIT) // start of an IkeV2 session
         {
             Console.WriteLine("    it's for a new session");
             if (_sessions.ContainsKey(ikeMessage.SpiI)) // we have a dangling session
             {
-                Console.WriteLine("        it duplicates an old session");
+                Console.WriteLine($"        it duplicates an existing session {ikeMessage.SpiR:x16}");
                 // Here we kill the old session and start another.
                 // This is a vulnerability -- an attacker could DoS by wiping a session using session init spam
-                // We could check for age here, and refuse the new session if the old one is not old enough.
+                // We check for age here, and refuse the new session if the old one is not old enough.
                 var oldSession = _sessions[ikeMessage.SpiI];
+                if (oldSession.AgeNow < TimeSpan.FromHours(1))
+                {
+                    Console.WriteLine("        duplicated session is too fresh -- rejecting");
+                    return;
+                }
+
                 _sessions.Remove(ikeMessage.SpiI);
                 oldSession.Close();
             }
 
-            // Start a new session
-            ikeMessage.SpiR = Bit.RandomSpi(); // assign ourself an SPI (will need to send to other side)
-            var newSession = new VpnSession(_server, ikeMessage);
+            // Start a new session and store it, keyed by the initiator id
+            var newSession = new VpnSession(_server, ikeMessage.SpiI);
             _sessions.Add(ikeMessage.SpiI, newSession);
-            Console.WriteLine($"    I started a new session with spi-r={ikeMessage.SpiR:x16} and spi-i={ikeMessage.SpiI:x16}");
             
-            // TEMP STUFF (should be in session)...
-            
-            // reply with a responder SPI and changed flags
-            ikeMessage.MessageFlag = MessageFlag.Response;
-
-            _server.SendIke(ikeMessage.ToBytes(sendZeroHeader), sender, out var sent);
-            Console.WriteLine($"    Replied with {sent} bytes (echo with flipped flags)");
-            // after this, we get a call on 4500 port...
+            // Pass message to new session
+            newSession.HandleIke(ikeMessage, data, sender, sendZeroHeader); 
+            return;
         }
 
+        // Should be IKE_AUTH ?
+        if (_sessions.ContainsKey(ikeMessage.SpiR))
+        {
+            Console.WriteLine($"    it's for an existing session {ikeMessage.SpiR:x16}");
+            // Pass message to existing session
+            _sessions[ikeMessage.SpiI].HandleIke(ikeMessage, data, sender, sendZeroHeader);
+        }
+        else
+        {
+            Console.WriteLine($"    it's for an existing session, but I don't know it. {ikeMessage.SpiR:x16} -- not responding");
+        }
     }
 
     /// <summary>
@@ -133,17 +147,20 @@ public class VpnServer : IDisposable
         File.WriteAllBytes(name, data);
         Console.WriteLine($"Got a 4500 packet -- {name}");
         
-        if (data.Length < 4 && data[0] == 0xff) // keep alive?
+        // Check for keep-alive ping?
+        if (data.Length < 4 && data[0] == 0xff)
         {
             Console.WriteLine("    Looks like a keep-alive ping. Sending pong");
-            _server.SendIke(data, sender, out _);
+            _server.SendRaw(data, sender, out _);
             return;
         }
-
+        
+        // Check for "IKE header" (prefix of 4 zero bytes)
         var idx = 0;
         var header = Bit.ReadInt32(data, ref idx); // not quite sure what this is about
-        var spi = Bit.ReadUInt64(data, ref idx);
 
+        // If the IKE header is there, pass back to the ike handler.
+        // We strip the padding off, and pass a flag to say it should be sent with a response
         if (header == IKE_HEADER) // start session?
         {
             Console.WriteLine("    SPI zero on 4500 -- sending to 500 (IKE) responder");
@@ -152,6 +169,9 @@ public class VpnServer : IDisposable
             return;
         }
 
+        // Read the SPI? IEB: not sure about this. The reference is weird.
+        var spi = Bit.ReadUInt64(data, ref idx);
+        
         // reject unknown sessions
         if (!_sessions.ContainsKey(spi))
         {
@@ -182,7 +202,7 @@ public class VpnServer : IDisposable
         session.IncrementSequence(seq);
 
         // do decrypt, route, etc.
-        session.Handle(data, sender);
+        session.HandleSpe(data, sender);
         
         Console.WriteLine("    Looks like a fully valid message. Other side will expect a reply.");
     }
