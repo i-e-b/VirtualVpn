@@ -11,7 +11,7 @@ namespace RawSocketTest.Crypto;
 public class Integrity
 {
     public int KeySize { get; }
-    public int OutputSize { get; }
+    public int HashSize { get; }
    
     private readonly Func<byte[],byte[],byte[]> _algo; 
     
@@ -31,37 +31,37 @@ public class Integrity
                 
             case IntegId.AUTH_HMAC_MD5_96:
                 KeySize=16;
-                OutputSize=12;
+                HashSize=12;
                 _algo = HMACMD5.HashData;
                 break;
             case IntegId.AUTH_HMAC_SHA1_96:
                 KeySize=20;
-                OutputSize=12;
+                HashSize=12;
                 _algo = HMACSHA1.HashData;
                 break;
             case IntegId.AUTH_HMAC_MD5_128:
                 KeySize=16;
-                OutputSize=16;
+                HashSize=16;
                 _algo = HMACMD5.HashData;
                 break;
             case IntegId.AUTH_HMAC_SHA1_160:
                 KeySize=20;
-                OutputSize=20;
+                HashSize=20;
                 _algo = HMACSHA1.HashData;
                 break;
             case IntegId.AUTH_HMAC_SHA2_256_128:
                 KeySize=32;
-                OutputSize=16;
+                HashSize=16;
                 _algo = HMACSHA256.HashData;
                 break;
             case IntegId.AUTH_HMAC_SHA2_384_192:
                 KeySize=48;
-                OutputSize=24;
+                HashSize=24;
                 _algo = HMACSHA384.HashData;
                 break;
             case IntegId.AUTH_HMAC_SHA2_512_256:
                 KeySize=64;
-                OutputSize=32;
+                HashSize=32;
                 _algo = HMACSHA512.HashData;
                 break;
             
@@ -73,7 +73,7 @@ public class Integrity
     public byte[] Compute(byte[] key, byte[] data)
     {
         var full = _algo(key,data);
-        if (full.Length <= OutputSize) return full;
-        return full.Take(OutputSize).ToArray();
+        if (full.Length <= HashSize) return full;
+        return full.Take(HashSize).ToArray();
     }
 }

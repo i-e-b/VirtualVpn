@@ -30,10 +30,13 @@ public class IkeCrypto
         _lastIv = null;
     }
 
-    public byte[] DecryptEsp(byte[] encrypted, out byte nextHeader)
+    /// <summary>
+    /// Recover encrypted data, and the chain byte used
+    /// </summary>
+    public byte[] Decrypt(byte[] encrypted, out byte nextHeader)
     {
         var blockSize = _cipher.BlockSize;
-        var hashSize = _integrity?.OutputSize ?? 0;
+        var hashSize = _integrity?.HashSize ?? 0;
         var cipherSize = encrypted.Length - blockSize - hashSize;
         
         // encrypted data is [ init vec ][ cipher text ][ checksum ]
@@ -49,7 +52,10 @@ public class IkeCrypto
         return decrypted.Take(messageBytes).ToArray();
     }
 
-    public byte[] EncryptEsp(byte nextHeader, byte[] plain)
+    /// <summary>
+    /// Encrypt plain data, using a chain byte
+    /// </summary>
+    public byte[] Encrypt(byte nextHeader, byte[] plain)
     {
         var blockSize = _cipher.BlockSize;
         var iv = _cipher.GenerateIv();
@@ -57,7 +63,7 @@ public class IkeCrypto
         
         var pad = new byte[padLength];
         var tail = new[]{(byte)padLength, nextHeader};
-        var checksumPad = (_integrity is null) ? Array.Empty<byte>() : new byte[_integrity.OutputSize];
+        var checksumPad = (_integrity is null) ? Array.Empty<byte>() : new byte[_integrity.HashSize];
         
         var payload = plain.Concat(pad).Concat(tail).ToArray();
         var encrypted = _cipher.Encrypt(_skE, iv, payload);
@@ -65,5 +71,50 @@ public class IkeCrypto
         var packet = iv.Concat(encrypted).Concat(checksumPad).ToArray();
         
         return packet;
+    }
+
+    /// <summary>
+    /// Return true if the checksum matches expectations
+    /// </summary>
+    public bool VerifyChecksum(byte[] encrypted)
+    {
+        if (_integrity is null) return true;
+        if (_skA is null) return false;
+        
+        // read just the main body
+        var payloadLength = encrypted.Length - _integrity.HashSize;
+        var mainPayload = encrypted.Take(payloadLength).ToArray();
+        
+        // compute
+        var expected = _integrity.Compute(_skA, mainPayload);
+
+        // copy
+        for (int i = 0; i < expected.Length; i++)
+        {
+            if (expected[i] != encrypted[i+payloadLength]) return false;
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Calculate and inject a checksum into an encrypted message
+    /// </summary>
+    public void AddChecksum(byte[] encrypted)
+    {
+        if (_integrity is null) return;
+        if (_skA is null) throw new Exception($"Checksum is present, but no checksum key was given ({nameof(_skA)})");
+        
+        // read just the main body
+        var payloadLength = encrypted.Length - _integrity.HashSize;
+        var mainPayload = encrypted.Take(payloadLength).ToArray();
+        
+        // compute
+        var sum = _integrity.Compute(_skA, mainPayload);
+        
+        // copy
+        for (int i = 0; i < sum.Length; i++)
+        {
+            encrypted[i+payloadLength] = sum[i];
+        }
     }
 }

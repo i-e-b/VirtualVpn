@@ -10,8 +10,6 @@ public class Cipher
 {
     public int KeyLength { get; }
     
-    public string ValidKeySizes => string.Join(", ",Aes.Create().LegalKeySizes.Select(ks=>$"max={ks.MaxSize}, min={ks.MinSize}, skip={ks.SkipSize}"));
-    
     /// <summary>
     /// Create a new Cipher
     /// </summary>

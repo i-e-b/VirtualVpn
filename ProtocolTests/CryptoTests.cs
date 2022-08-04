@@ -15,8 +15,6 @@ public class CryptoTests
         var key = RndKey32Byte();
         
         var cipher = new Cipher(EncryptionTypeId.ENCR_AES_CBC, key.Length * 8);
-        Console.WriteLine(cipher.ValidKeySizes); // describe key sizes
-        
         var subject = new IkeCrypto(cipher, null, null, key, null, null, null);
         
         // The cipher should pad data out to required size, and remove on decoding.
@@ -27,8 +25,8 @@ public class CryptoTests
         byte h2 = 69;
         var plain2 = Encoding.ASCII.GetBytes("This is a private message. Lorem Ipsum is simply dummy text of the printing and typesetting industry.");
         
-        var msg1 = subject.EncryptEsp(h1, plain1);
-        var msg2 = subject.EncryptEsp(h2, plain2);
+        var msg1 = subject.Encrypt(h1, plain1);
+        var msg2 = subject.Encrypt(h2, plain2);
         
         // Visual inspection that it was transformed
         Console.WriteLine(Convert.ToBase64String(plain1));
@@ -37,8 +35,8 @@ public class CryptoTests
         Console.WriteLine(Convert.ToBase64String(plain2));
         Console.WriteLine(Convert.ToBase64String(msg2));
         
-        var recovered1 = subject.DecryptEsp(msg1, out var rh1);
-        var recovered2 = subject.DecryptEsp(msg2, out var rh2);
+        var recovered1 = subject.Decrypt(msg1, out var rh1);
+        var recovered2 = subject.Decrypt(msg2, out var rh2);
         
         Assert.That(rh1, Is.EqualTo(h1), "header 1 not recovered correctly");
         Assert.That(rh2, Is.EqualTo(h2), "header 2 not recovered correctly");
@@ -52,6 +50,84 @@ public class CryptoTests
         var actual2 = Encoding.ASCII.GetString(recovered2);
         Assert.That(actual2, Is.EqualTo(expected2), "Second message not recovered");
     }
+
+    [Test]
+    public void checksums_dont_break_if_no_algorithm_given()
+    {
+        // for AES-CBC, key must be 16 to 32 bytes, in 8 byte increments
+        var key = RndKey32Byte();
+        var cipher = new Cipher(EncryptionTypeId.ENCR_AES_CBC, key.Length * 8);
+        
+        var subject = new IkeCrypto(cipher, null, null, key, null, null, null);
+        
+        var plain = Encoding.ASCII.GetBytes("This is a private message, you should not see it in the encrypted text.");
+        
+        var msg = subject.Encrypt(0, plain);
+        subject.AddChecksum(msg);
+        
+        var ok = subject.VerifyChecksum(msg);
+        
+        Assert.That(ok, Is.True, "checksum");
+        
+        var recovered = subject.Decrypt(msg, out _);
+        
+        var expected = Encoding.ASCII.GetString(plain);
+        var actual = Encoding.ASCII.GetString(recovered);
+        Assert.That(actual, Is.EqualTo(expected), "First message not recovered");
+    }
+    
+    [Test]
+    public void checksums_pass_when_data_is_correct()
+    {
+        // for AES-CBC, key must be 16 to 32 bytes, in 8 byte increments
+        var mainKey = RndKey32Byte();
+        var checksumKey = RndKey32Byte();
+        var cipher = new Cipher(EncryptionTypeId.ENCR_AES_CBC, mainKey.Length * 8);
+        var integrity = new Integrity(IntegId.AUTH_HMAC_SHA2_256_128);
+        
+        var subject = new IkeCrypto(cipher, integrity, null, mainKey, checksumKey, null, null);
+        
+        var plain = Encoding.ASCII.GetBytes("This is a private message, you should not see it in the encrypted text.");
+        
+        var msg = subject.Encrypt(0, plain);
+        subject.AddChecksum(msg);
+        
+        var ok = subject.VerifyChecksum(msg);
+        
+        Assert.That(ok, Is.True, "checksum");
+        
+        var recovered = subject.Decrypt(msg, out _);
+        
+        var expected = Encoding.ASCII.GetString(plain);
+        var actual = Encoding.ASCII.GetString(recovered);
+        Assert.That(actual, Is.EqualTo(expected), "First message not recovered");
+    }
+    
+    [Test]
+    public void checksums_fail_when_data_is_damaged()
+    {
+        // for AES-CBC, key must be 16 to 32 bytes, in 8 byte increments
+        var mainKey = RndKey32Byte();
+        var checksumKey = RndKey32Byte();
+        var cipher = new Cipher(EncryptionTypeId.ENCR_AES_CBC, mainKey.Length * 8);
+        var integrity = new Integrity(IntegId.AUTH_HMAC_SHA2_256_128);
+        
+        var subject = new IkeCrypto(cipher, integrity, null, mainKey, checksumKey, null, null);
+        
+        var plain = Encoding.ASCII.GetBytes("This is a private message, you should not see it in the encrypted text.");
+        
+        var msg = subject.Encrypt(0, plain);
+        subject.AddChecksum(msg);
+        
+        // do some damage
+        msg[0] ^= 0x40;
+        msg[^1] ^= 0x81;
+        
+        var ok = subject.VerifyChecksum(msg);
+        
+        Assert.That(ok, Is.False, "checksum");
+    }
+    
 
     private static byte[] RndKey32Byte()
     {
