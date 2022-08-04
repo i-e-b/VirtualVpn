@@ -94,7 +94,9 @@ public enum PayloadType : byte
 
 public enum IkeProtocolType : byte
 {
+    /// <summary> 0: Out of band (errors) </summary>
     NONE = 0,
+    /// <summary> 1: Key exchange </summary>
     IKE = 1,
     AH = 2,
     ESP = 3,
@@ -117,7 +119,7 @@ public enum TransformType : byte
     ESN = 5
 }
 
-public enum EncryptionTypeId : byte
+public enum EncryptionTypeId : ushort
 {
     ENCR_DES = 2,
     ENCR_3DES = 3,
@@ -413,7 +415,7 @@ public enum TrafficSelectType
     TS_FC_ADDR_RANGE = 9
 }
 
-public enum IpProtocol
+public enum IpProtocol : byte
 {
     ANY = 0,
     ICMP = 1,

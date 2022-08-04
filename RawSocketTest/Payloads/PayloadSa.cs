@@ -35,4 +35,39 @@ public class PayloadSa : MessagePayload
             Proposals.Add(Proposal.Parse(Data, length, ref idx));
         }
     }
+
+    public Proposal? GetProposalFor(EncryptionTypeId type)
+    {
+        var src = Proposals.FirstOrDefault(p=>
+            p.Transforms.Any(t=> t.Type == TransformType.ENCR && t.Id == (uint)type)
+            );
+        
+        if (src is null) return null;
+        
+        // source does a "remove redundancy" phase. See pvpn/message.py:275
+        
+        /*var typesSeen = new HashSet<TransformType>();
+        var uniqueTransforms = new List<Transform>();
+        foreach (var transform in src.Transforms)
+        {
+            if (typesSeen.Contains(transform.Type)) continue;
+            
+            typesSeen.Add(transform.Type);
+            uniqueTransforms.Add(transform);
+        }*/
+        
+        var uniqueTransforms = src.Transforms.DistinctBy(trans => trans.Type).ToList();
+
+        var prop = new Proposal
+        {
+            Number = src.Number,
+            Protocol = src.Protocol,
+            SpiSize = src.SpiSize,
+            SpiData = src.SpiData,
+            TransformCount = (byte)uniqueTransforms.Count,
+            Transforms = uniqueTransforms
+        };
+        
+        return prop;
+    }
 }

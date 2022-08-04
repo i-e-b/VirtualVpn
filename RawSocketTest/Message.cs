@@ -1,5 +1,6 @@
 ﻿// ReSharper disable BuiltInTypeReferenceStyle
 
+using RawSocketTest.Crypto;
 using RawSocketTest.Payloads;
 
 namespace RawSocketTest;
@@ -64,11 +65,15 @@ public class IkeMessage
     public const int HeaderLength = 28;
     
     
+    public int DataOffset { get; private set; }
+    public byte[] RawData { get; private set; } = Array.Empty<byte>();
+
     /// <summary>
     /// Serialise the message to a byte string
     /// </summary>
     /// <param name="sendZeroHeader">If true, 4 bytes of zero will be prepended to the data</param>
-    public byte[] ToBytes(bool sendZeroHeader = false)
+    /// <param name="ikeCrypto"></param>
+    public byte[] ToBytes(bool sendZeroHeader = false, IkeCrypto? ikeCrypto = null)
     {
         // TODO: crypto, checksums, payloads
         
@@ -81,7 +86,13 @@ public class IkeMessage
         }
 
         FirstPayload = Payloads.Count > 0 ? Payloads[0].Type : PayloadType.NONE;
-        
+
+        if (ikeCrypto is not null)
+        {
+            // TODO: implement. See pvpn/message.py:555
+            throw new Exception("Building crypto packets isn't implemented yet");
+        }
+
         var bytes = new byte[ExpectedLength];
         WriteHeader(bytes, offset);
 
@@ -136,6 +147,9 @@ public class IkeMessage
     {
         var result = new IkeMessage
         {
+            RawData = rawData,
+            DataOffset = offset,
+            
             SpiI = Bit.Unpack(rawData, offset + 0, offset + 7),
             SpiR = Bit.Unpack(rawData, offset + 8, offset + 15),
             FirstPayload = (PayloadType)rawData[offset + 16],
@@ -146,19 +160,42 @@ public class IkeMessage
             ExpectedLength = (uint)Bit.Unpack(rawData, offset + 24, offset + 27)
         };
         
-        // read payload chain
-        int idx = offset + 28;
-        var nextPayload = result.FirstPayload;
-        while (idx < rawData.Length && nextPayload != PayloadType.NONE)
-        {
-            var payload = ReadPayload(rawData, ref idx, ref nextPayload);
-            result.Payloads.Add(payload);
-        }
+        // The payload reading should be deferred until crypto is known (agreed or not encrypted).
+        // See `ReadPayloads()`
 
         return result;
     }
 
-    private static MessagePayload ReadPayload(byte[] rawData, ref int idx, ref PayloadType nextPayload)
+
+    public void ReadPayloads(IkeCrypto? encryption)
+    {
+        var offset = DataOffset; // where in the data bytes does the actual message start?
+        var srcData = RawData;
+        
+        // Decrypt message if needed. See pvpn/message.py:525
+        if (MessageFlag.HasFlag(MessageFlag.Encryption))
+        {
+            if (encryption is null) throw new Exception("Message is flagged as encrypted, but no crypto was supplied");
+            
+            // make sure we have just the target data
+            if (offset != 0) srcData = srcData.Skip(offset).ToArray();
+            
+            // decrypt data and reset offset
+            srcData = encryption.Decrypt1(srcData, MessageId);
+            offset = 0;
+        }
+
+        // read payload chain
+        int idx = offset + 28;
+        var nextPayload = FirstPayload;
+        while (idx < srcData.Length && nextPayload != PayloadType.NONE)
+        {
+            var payload = ReadPayload(srcData, encryption, ref idx, ref nextPayload);
+            Payloads.Add(payload);
+        }
+    }
+
+    private static MessagePayload ReadPayload(byte[] rawData, IkeCrypto? ikeCrypto, ref int idx, ref PayloadType nextPayload)
     {
         var thisType = nextPayload;
         // TODO: continue to fill out
@@ -179,6 +216,9 @@ public class IkeMessage
             case PayloadType.VENDOR:
                 return new PayloadVendorId(rawData, ref idx, ref nextPayload);
             
+            case PayloadType.SK: // encrypted body. TODO: This should be pumped back around to read contents?
+                return new PayloadSecured(rawData, ikeCrypto, ref idx, ref nextPayload);
+            
             default: // anything we don't have a parser for yet
             {
                 var payload = MessagePayload.Parse(rawData, ref idx, ref nextPayload);
@@ -186,5 +226,14 @@ public class IkeMessage
                 return payload;
             }
         }
+    }
+
+    /// <summary>
+    /// Get the first payload of a given type, that matches the predicate
+    /// </summary>
+    public T? GetPayload<T>(Func<T,bool>? pred = null)
+    {   
+        if (pred is null) return Payloads.OfType<T>().FirstOrDefault();
+        return Payloads.OfType<T>().FirstOrDefault(pred);
     }
 }

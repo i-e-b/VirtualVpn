@@ -13,6 +13,20 @@ public class PayloadNotify : MessagePayload
     public byte[] SpiData { get; set; } = Array.Empty<byte>();
     public byte[] InfoData { get; set; } = Array.Empty<byte>();
 
+
+    public PayloadNotify(IkeProtocolType protocol, NotifyId notify, byte[]? spi, byte[]? data)
+    {
+        ProtocolType = protocol;
+        NotificationType = notify;
+        
+        if (data is not null) InfoData = data;
+        if (spi is not null)
+        {
+            SpiData = spi;
+            SpiSize = spi.Length;
+        }
+    }
+    
     public PayloadNotify(byte[] data, ref int idx, ref PayloadType nextPayload)
     {
         ReadData(data, ref idx, ref nextPayload);
@@ -20,7 +34,7 @@ public class PayloadNotify : MessagePayload
     
     protected override void Serialise()
     {
-        
+        throw new Exception("PayloadNotify Serialise not implemented"); // TODO!
     }
     
     protected override void Deserialise()

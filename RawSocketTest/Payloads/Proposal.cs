@@ -52,4 +52,6 @@ public class Proposal
 
         return result;
     }
+
+    public Transform? GetTransform(TransformType type) => Transforms.FirstOrDefault(t=>t.Type == type);
 }

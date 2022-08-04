@@ -190,6 +190,8 @@ public class VpnServer : IDisposable
             return;
         }
         
+        // TODO: HMAC-SHA2-256-96 fix ?  See pvpn/server.py:411
+        
         // verify the checksum
         var ok = session.VerifyMessage(data);
         if (!ok)

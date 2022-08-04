@@ -9,7 +9,7 @@ public class PayloadKeyExchange : MessagePayload
     /// <summary>
     /// https://www.omnisecu.com/tcpip/what-is-diffie-hellman-group.php
     /// </summary>
-    public ushort DiffieHellmanGroup { get; set; }
+    public DhId DiffieHellmanGroup { get; set; }
     
     public PayloadKeyExchange(byte[] data, ref int idx, ref PayloadType nextPayload)
     {
@@ -25,7 +25,7 @@ public class PayloadKeyExchange : MessagePayload
         Data = new byte[length];
         
         var idx = 0;
-        Bit.WriteUInt16(DiffieHellmanGroup, Data, ref idx);
+        Bit.WriteUInt16((ushort)DiffieHellmanGroup, Data, ref idx);
         Data[idx++] = 0; // pad
         Data[idx++] = 0; // pad
 
@@ -41,7 +41,7 @@ public class PayloadKeyExchange : MessagePayload
     protected override void Deserialise()
     {
         var idx = 0;
-        DiffieHellmanGroup = Bit.ReadUInt16(Data, ref idx);
+        DiffieHellmanGroup = (DhId)Bit.ReadUInt16(Data, ref idx);
         idx += 2; // pad
         
         KeyData = new byte[Data.Length - 4];

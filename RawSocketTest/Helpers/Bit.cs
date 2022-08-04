@@ -93,4 +93,14 @@ public static class Bit
         _rnd.NextBytes(result);
         return result;
     }
+
+    public static byte[] UInt32ToBytes(uint value)
+    {
+        var data = new byte[4];
+        data[0] = (byte)((value >> 24) & 0xff);
+        data[1] = (byte)((value >> 16) & 0xff);
+        data[2] = (byte)((value >>  8) & 0xff);
+        data[3] = (byte)((value >>  0) & 0xff);
+        return data;
+    }
 }
