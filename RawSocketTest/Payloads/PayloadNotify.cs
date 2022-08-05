@@ -1,6 +1,4 @@
-﻿using System.Text;
-
-namespace RawSocketTest.Payloads;
+﻿namespace RawSocketTest.Payloads;
 
 public class PayloadNotify : MessagePayload
 {
@@ -13,6 +11,7 @@ public class PayloadNotify : MessagePayload
     public byte[] SpiData { get; set; } = Array.Empty<byte>();
     public byte[] InfoData { get; set; } = Array.Empty<byte>();
 
+    public override int Size => HeaderSize + 4 + SpiData.Length + InfoData.Length;
 
     public PayloadNotify(IkeProtocolType protocol, NotifyId notify, byte[]? spi, byte[]? data)
     {

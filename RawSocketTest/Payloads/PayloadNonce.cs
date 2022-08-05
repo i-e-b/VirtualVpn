@@ -3,8 +3,8 @@
 public class PayloadNonce : MessagePayload
 {
     public override PayloadType Type { get => PayloadType.NONCE; set { } }
-
-    public byte[] RandomData => Data;
+    
+    public override int Size => HeaderSize + Data.Length;
 
     public PayloadNonce(byte[] data, ref int idx, ref PayloadType nextPayload)
     {
@@ -13,7 +13,7 @@ public class PayloadNonce : MessagePayload
 
     public PayloadNonce(byte[] nonce)
     {
-        throw new NotImplementedException();
+        Data = nonce;
     }
 
     protected override void Serialise()

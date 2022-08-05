@@ -195,7 +195,7 @@ public class IkeMessage
         }
     }
 
-    private static MessagePayload ReadPayload(byte[] rawData, IkeCrypto? ikeCrypto, ref int idx, ref PayloadType nextPayload)
+    public static MessagePayload ReadPayload(byte[] rawData, IkeCrypto? ikeCrypto, ref int idx, ref PayloadType nextPayload)
     {
         var thisType = nextPayload;
         // TODO: continue to fill out
@@ -221,7 +221,7 @@ public class IkeMessage
             
             default: // anything we don't have a parser for yet
             {
-                var payload = MessagePayload.Parse(rawData, ref idx, ref nextPayload);
+                var payload = new PayloadUnknown(rawData, ref idx, ref nextPayload);
                 payload.Type = thisType;
                 return payload;
             }

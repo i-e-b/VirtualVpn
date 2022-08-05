@@ -10,10 +10,11 @@ public class PayloadSa : MessagePayload
 
     public PayloadSa(Proposal proposal)
     {
-        throw new NotImplementedException();
+        Proposals.Add(proposal);
     }
 
     public override PayloadType Type { get => PayloadType.SA; set { } }
+    public override int Size => HeaderSize + Proposals.Sum(p=>p.Size) + Proposals.Count * 4;
 
     public List<Proposal> Proposals { get; set; } = new();
     

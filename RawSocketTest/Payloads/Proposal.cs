@@ -12,6 +12,8 @@ public class Proposal
     public byte TransformCount { get; set; }
     public List<Transform> Transforms { get; set; } = new();
     
+    public int Size => 4 + SpiData.Length + Transforms.Sum(t=>t.Size) + Transforms.Count * 8;
+
     public static Proposal Parse(byte[] data, ushort length, ref int idx)
     {
         var result = new Proposal();

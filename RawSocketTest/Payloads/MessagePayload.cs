@@ -4,24 +4,28 @@
 /// Base MessagePayload.
 /// Use sub-classes for known types
 /// </summary>
-public class MessagePayload
+public abstract class MessagePayload
 {
+    protected const int HeaderSize = 4; // bytes
+    
     /// <summary>
     /// Read, but not stored directly in the payload.
-    /// Meaning of the data is dependent on this.
+    /// Meaning of the data is dependent on this value.
     /// </summary>
     public virtual PayloadType Type { get; set; } = PayloadType.NONE;
     
     /// <summary>
     /// Raw data of payload. Interpretation depends on type.
     /// </summary>
-    protected byte[] Data { get; set; } = Array.Empty<byte>();
-    
+    public byte[] Data { get; set; } = Array.Empty<byte>();
+
     /// <summary>
-    /// Size required to serialise this payload, including data and headers
+    /// Size required to serialise this payload, including data and headers.
+    /// This is calculated for serialisation. The declared length from message
+    /// data is in <see cref="Length"/>
     /// </summary>
-    public int Size => Data.Length + 4;
-    
+    public abstract int Size { get; }
+
     /// <summary>
     /// Type of next payload in message chain. If 'none', this is
     /// the end of the chain.
@@ -31,7 +35,8 @@ public class MessagePayload
     public byte IsCritical { get; set; }
     
     /// <summary>
-    /// Total declared length of payload, including data and headers
+    /// Total declared length of payload, including data and headers.
+    /// This comes from the incoming data. For the serialisation size, use <see cref="Size"/>
     /// </summary>
     public ushort Length { get; set; }
 
@@ -40,6 +45,7 @@ public class MessagePayload
     /// </summary>
     public int WriteBytes(byte[] dest, int offset)
     {
+        if (offset + Size > dest.Length) throw new Exception($"Target buffer is not long enough for the payload. Require {Size}, but have {dest.Length-offset} available");
         Serialise(); // update Data if needed
         Length = (ushort)Size; // measure size
         
@@ -54,13 +60,6 @@ public class MessagePayload
         foreach (var dataByte in Data) { dest[idx++] = dataByte; }
         
         return idx;
-    }
-
-    public static MessagePayload Parse(byte[] data, ref int idx, ref PayloadType type)
-    {
-        var result = new MessagePayload();
-        result.ReadData(data, ref idx, ref type);
-        return result;
     }
 
     /// <summary>
@@ -105,10 +104,10 @@ public class MessagePayload
     /// <summary>
     /// Called before writing bytes. Sub-classes should fill <see cref="Data"/>
     /// </summary>
-    protected virtual void Serialise() { }
+    protected abstract void Serialise();
     
     /// <summary>
     /// Called after copying bytes locally. Sub-classes should fill <see cref="Data"/>
     /// </summary>
-    protected virtual void Deserialise() { }
+    protected abstract void Deserialise();
 }

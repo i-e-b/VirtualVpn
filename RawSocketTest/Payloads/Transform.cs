@@ -11,4 +11,6 @@ public class Transform
     /// </summary>
     public uint Id { get; set; }
     public List<Attribute> Attributes { get; set; } = new();
+    
+    public int Size => Attributes.Sum(a=>a.Size);
 }

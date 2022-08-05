@@ -21,7 +21,7 @@ internal class VpnSession
     private long _peerMsgId;
     private byte[]? _lastMessageBytes;
     private byte[]? _peerNonce;
-    private byte[] _skD;
+    private byte[]? _skD;
     
     //## Algorithmic selections (negotiated with peer) ##//
     
@@ -136,7 +136,7 @@ internal class VpnSession
                 Console.WriteLine("IKE_SA_INIT received");
                 AssertState(SessionState.INITIAL);
                 
-                _peerNonce = request.GetPayload<PayloadNonce>()?.RandomData;
+                _peerNonce = request.GetPayload<PayloadNonce>()?.Data;
                 
                 // pick a proposal we can work with, if any
                 var chosenProposal = request.GetPayload<PayloadSa>()?.GetProposalFor(EncryptionTypeId.ENCR_AES_CBC); // we only support AES CBC mode at the moment

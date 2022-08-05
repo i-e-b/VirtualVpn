@@ -3,6 +3,8 @@
 public class PayloadKeyExchange : MessagePayload
 {
     public override PayloadType Type { get => PayloadType.KE; set { } }
+    
+    public override int Size => HeaderSize + KeyData.Length + 4;
 
     public byte[] KeyData { get; set; } = Array.Empty<byte>();
 
@@ -18,7 +20,8 @@ public class PayloadKeyExchange : MessagePayload
 
     public PayloadKeyExchange(DhId diffieHellmanGroup, byte[] publicKey)
     {
-        throw new NotImplementedException();
+        DiffieHellmanGroup = diffieHellmanGroup;
+        KeyData = publicKey;
     }
 
     /// <summary>

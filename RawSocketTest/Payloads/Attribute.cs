@@ -15,7 +15,7 @@ public class Attribute
             var value = Bit.ReadUInt16(data, ref idx);
             remains -= 4;
 
-            if ((type & 0x8000) > 0) // bit flag marks this as a key-value pair
+            if ((type & 0x8000) != 0) // bit flag marks this as a key-value pair
             {
                 attr.Type = (TransformAttr)(type & 0x7fff);
                 attr.Value = value;
@@ -37,6 +37,11 @@ public class Attribute
 
         return result;
     }
+
+    /// <summary>
+    /// Size required to store this attribute
+    /// </summary>
+    public int Size => 4 + ValueBytes.Length;
 
     public byte[] ValueBytes { get; set; } = Array.Empty<byte>();
     public ushort Value { get; set; }

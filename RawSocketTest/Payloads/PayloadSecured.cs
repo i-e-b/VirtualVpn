@@ -4,7 +4,9 @@ namespace RawSocketTest.Payloads;
 
 public class PayloadSecured : MessagePayload
 {
-    public override PayloadType Type { get => PayloadType.NONCE; set { } }
+    public override PayloadType Type { get => PayloadType.SK; set { } }
+    
+    public override int Size => HeaderSize + Data.Length;
 
     public byte[]? PlainBody { get; private set; }
 
