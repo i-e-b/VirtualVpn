@@ -1,6 +1,7 @@
 ﻿using System.Net;
 using RawSocketTest.Crypto;
 using RawSocketTest.Payloads;
+using SkinnyJson;
 
 namespace RawSocketTest;
 
@@ -86,15 +87,16 @@ internal class VpnSession
     // pvpn/server.py:253
     private byte[] BuildResponse(ExchangeType exchange, bool sendZeroHeader, IkeCrypto? crypto, params MessagePayload[] payloads)
     {
-        var resp = new IkeMessage();
-        resp.Exchange = exchange;
-        resp.SpiI = _peerSpi;
-        resp.SpiR = _localSpi;
-        resp.MessageFlag = MessageFlag.Response;
-        resp.MessageId = (uint)_peerMsgId;
+        var resp = new IkeMessage
+        {
+            Exchange = exchange,
+            SpiI = _peerSpi,
+            SpiR = _localSpi,
+            MessageFlag = MessageFlag.Response,
+            MessageId = (uint)_peerMsgId,
+            Version = IkeVersion.IkeV2,
+        };
         resp.Payloads.AddRange(payloads);
-        
-        _peerMsgId++;
         
         return resp.ToBytes(sendZeroHeader, crypto); // should wrap payloads in PayloadSK if we have crypto
     }
@@ -102,7 +104,7 @@ internal class VpnSession
     /// <summary>
     /// Handle an incoming key exchange message
     /// </summary>
-    public void HandleIke(IkeMessage request, byte[] data, IPEndPoint sender, bool sendZeroHeader)
+    public void HandleIke(IkeMessage request, IPEndPoint sender, bool sendZeroHeader)
     {
         // pvpn/server.py:260
         LastTouchUtc = DateTime.UtcNow;
@@ -129,12 +131,14 @@ internal class VpnSession
         }
 
         request.ReadPayloads(_peerCrypto); // pvpn/server.py:266
+        
+        _peerMsgId++;
 
         switch (request.Exchange)
         {
             case ExchangeType.IKE_SA_INIT: // pvpn/server.py:268
-                Console.WriteLine("IKE_SA_INIT received");
-                AssertState(SessionState.INITIAL);
+                Console.WriteLine("        Session: IKE_SA_INIT received");
+                AssertState(SessionState.INITIAL, request);
                 
                 _peerNonce = request.GetPayload<PayloadNonce>()?.Data;
                 
@@ -153,7 +157,7 @@ internal class VpnSession
                     || payloadKe.KeyData[0] == 0)
                 { // pvpn/server.py:274
                     
-                    Console.WriteLine("    Could not find an agreeable proposition. Sending rejection.");
+                    Console.WriteLine($"        Session: Could not find an agreeable proposition. Sending rejection to {sender.Address}:{sender.Port}");
                     Reply(to: sender, message: BuildResponse(ExchangeType.IKE_SA_INIT, sendZeroHeader, null, 
                         new PayloadNotify(IkeProtocolType.NONE, NotifyId.INVALID_KE_PAYLOAD, null, null)
                         ));
@@ -172,10 +176,20 @@ internal class VpnSession
                     new PayloadNotify(IkeProtocolType.NONE, NotifyId.NAT_DETECTION_SOURCE_IP, Array.Empty<byte>(), Bit.RandomBytes(20))
                     // payloads
                     );
+                
+                // IEB: THIS IS FAILING:
+/*
+received packet: from 185.81.252.44[500] to 159.69.13.126[500] (208 bytes)
+  length of TRANSFORM_SUBSTRUCTURE substructure list invalid
+  parsing of a PROPOSAL_SUBSTRUCTURE substructure failed
+payload type SECURITY_ASSOCIATION could not be parsed
+message parsing failed
+*/
+                Console.WriteLine($"        Session: Sending IKE_SA_INIT reply to {sender.Address}:{sender.Port}");
                 Reply(to: sender, message: saMessage);
                 _state = SessionState.SA_SENT;
                 // store this message somewhere? pvpn/server.py:286
-                Console.WriteLine("    Completed IKE_SA_INIT, transition to state=SA_SENT");
+                Console.WriteLine("        Session: Completed IKE_SA_INIT, transition to state=SA_SENT");
                 break;
 
             case ExchangeType.IKE_AUTH: // pvpn/server.py:287
@@ -290,9 +304,15 @@ internal class VpnSession
     /// Throw an exception if we're not in the expected state.
     /// Otherwise do nothing
     /// </summary>
-    private void AssertState(SessionState expected)
+    private void AssertState(SessionState expected, IkeMessage ikeMessage)
     {
-        if (_state != expected) throw new Exception($"Expected to be in state {expected.ToString()}, but was in {_state.ToString()}");
+        if (_state != expected)
+        {
+            Console.WriteLine(Json.Freeze(ikeMessage));
+            throw new Exception($"Expected to be in state {expected.ToString()}, but was in {_state.ToString()}");
+        }
+
+        Console.WriteLine($"        Session: State correct: {_state.ToString()} = {expected.ToString()}");
     }
 
     /// <summary>

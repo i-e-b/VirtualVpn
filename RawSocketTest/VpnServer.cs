@@ -94,46 +94,32 @@ public class VpnServer : IDisposable
             return;
         }
 
-        if (ikeMessage.Exchange == ExchangeType.IKE_SA_INIT) // start of an IkeV2 session
+        if (_sessions.ContainsKey(ikeMessage.SpiI))
         {
-            Console.WriteLine("    it's for a new session");
-            if (_sessions.ContainsKey(ikeMessage.SpiI)) // we have a dangling session
-            {
-                Console.WriteLine($"        it duplicates an existing session {ikeMessage.SpiR:x16}");
-                // Here we kill the old session and start another.
-                // This is a vulnerability -- an attacker could DoS by wiping a session using session init spam
-                // We check for age here, and refuse the new session if the old one is not old enough.
-                var oldSession = _sessions[ikeMessage.SpiI];
-                if (oldSession.AgeNow < TimeSpan.FromHours(1))
-                {
-                    Console.WriteLine("        duplicated session is too fresh -- rejecting");
-                    return;
-                }
-
-                _sessions.Remove(ikeMessage.SpiI);
-                oldSession.Close();
-            }
-
-            // Start a new session and store it, keyed by the initiator id
-            var newSession = new VpnSession(_server, ikeMessage.SpiI);
-            _sessions.Add(ikeMessage.SpiI, newSession);
+            Console.WriteLine($"    it's for an existing session started elsewhere? {ikeMessage.SpiI:x16} => {ikeMessage.SpiR:x16}");
             
-            // Pass message to new session
-            newSession.HandleIke(ikeMessage, data, sender, sendZeroHeader); 
+            // Pass message to existing session
+            _sessions[ikeMessage.SpiI].HandleIke(ikeMessage, sender, sendZeroHeader);
             return;
         }
 
-        // Should be IKE_AUTH ?
         if (_sessions.ContainsKey(ikeMessage.SpiR))
         {
-            Console.WriteLine($"    it's for an existing session {ikeMessage.SpiR:x16}");
+            Console.WriteLine($"    it's for an existing session we started? {ikeMessage.SpiI:x16} => {ikeMessage.SpiR:x16}");
+            
             // Pass message to existing session
-            _sessions[ikeMessage.SpiI].HandleIke(ikeMessage, data, sender, sendZeroHeader);
+            _sessions[ikeMessage.SpiR].HandleIke(ikeMessage, sender, sendZeroHeader);
+            return;
         }
-        else
-        {
-            Console.WriteLine($"    it's for an existing session, but I don't know it. {ikeMessage.SpiR:x16} -- not responding");
-        }
+
+        Console.WriteLine($"    it's for a new session?  {ikeMessage.SpiI:x16} => {ikeMessage.SpiR:x16}");
+            
+        // Start a new session and store it, keyed by the initiator id
+        var newSession = new VpnSession(_server, ikeMessage.SpiI);
+        _sessions.Add(ikeMessage.SpiI, newSession);
+            
+        // Pass message to new session
+        newSession.HandleIke(ikeMessage, sender, sendZeroHeader); 
     }
 
     /// <summary>
