@@ -21,6 +21,11 @@ public class Cipher
         KeyLength = keyLength;
     }
 
+    public static bool IsSupported(EncryptionTypeId transform)
+    {
+        return transform == EncryptionTypeId.ENCR_AES_CBC;
+    }
+
     public virtual int BlockSize => 16;
     public virtual int KeySize => KeyLength / 8;
 

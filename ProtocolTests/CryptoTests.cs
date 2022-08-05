@@ -169,7 +169,13 @@ public class CryptoTests
         
         Assert.That(ok, Is.False, "checksum");
     }
-    
+
+    [Test]
+    public void ike_crypto_can_start()
+    {
+        // IkeCrypto has lots of static data
+        _ = new IkeCrypto(new Cipher(EncryptionTypeId.ENCR_AES_CBC, 64), null, null, new byte[64], null, null, null);
+    }
 
     private static byte[] RndKey32Byte()
     {

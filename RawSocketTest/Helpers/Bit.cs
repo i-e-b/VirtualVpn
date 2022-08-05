@@ -135,7 +135,7 @@ public static class Bit
     {
         if (size < 0) throw new Exception("Invalid subset size: must be zero or greater");
         if (size == 0) return Array.Empty<byte>();
-        if (idx + size >= source.Length) throw new Exception("Invalid subset size: tried to read off the end of source");
+        if (idx + size > source.Length) throw new Exception("Invalid subset size: tried to read off the end of source");
         
         var result = new byte[size];
 

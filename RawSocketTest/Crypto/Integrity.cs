@@ -27,7 +27,7 @@ public class Integrity
             case IntegId.AUTH_AES_128_GMAC:
             case IntegId.AUTH_AES_192_GMAC:
             case IntegId.AUTH_AES_256_GMAC:
-                throw new Exception($"PRF function {transform.ToString()} is not supported");
+                throw new Exception($"Integrity: PRF function {transform.ToString()} is not supported");
                 
             case IntegId.AUTH_HMAC_MD5_96:
                 KeySize=16;
@@ -75,5 +75,33 @@ public class Integrity
         var full = _algo(key,data);
         if (full.Length <= HashSize) return full;
         return full.Take(HashSize).ToArray();
+    }
+
+    public static bool IsSupported(IntegId transformId)
+    {
+        switch (transformId)
+        {
+            case IntegId.AUTH_NONE:
+            case IntegId.AUTH_DES_MAC:
+            case IntegId.AUTH_KPDK_MD5:
+            case IntegId.AUTH_AES_XCBC_96:
+            case IntegId.AUTH_AES_CMAC_96:
+            case IntegId.AUTH_AES_128_GMAC:
+            case IntegId.AUTH_AES_192_GMAC:
+            case IntegId.AUTH_AES_256_GMAC:
+                return false;
+                
+            case IntegId.AUTH_HMAC_MD5_96:
+            case IntegId.AUTH_HMAC_SHA1_96:
+            case IntegId.AUTH_HMAC_MD5_128:
+            case IntegId.AUTH_HMAC_SHA1_160:
+            case IntegId.AUTH_HMAC_SHA2_256_128:
+            case IntegId.AUTH_HMAC_SHA2_384_192:
+            case IntegId.AUTH_HMAC_SHA2_512_256:
+                return true;
+                
+            default:
+                throw new ArgumentOutOfRangeException(nameof(transformId), transformId, null);
+        }
     }
 }

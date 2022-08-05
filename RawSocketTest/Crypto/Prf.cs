@@ -40,10 +40,31 @@ public class Prf
             case PrfId.PRF_AES128_CMAC:
             case PrfId.PRF_AES128_XCBC:
             case PrfId.PRF_HMAC_TIGER:
-                throw new Exception($"PRF function {transform.ToString()} is not supported");
+                throw new Exception($"Hash: PRF function {transform.ToString()} is not supported");
             
             default:
                 throw new ArgumentOutOfRangeException(nameof(transform), transform, null);
+        }
+    }
+    
+    public static bool IsSupported(PrfId transformId)
+    {
+        switch (transformId)
+        {
+            case PrfId.PRF_HMAC_MD5:
+            case PrfId.PRF_HMAC_SHA1:
+            case PrfId.PRF_HMAC_SHA2_256:
+            case PrfId.PRF_HMAC_SHA2_384:
+            case PrfId.PRF_HMAC_SHA2_512:
+                return true;
+            
+            case PrfId.PRF_AES128_CMAC:
+            case PrfId.PRF_AES128_XCBC:
+            case PrfId.PRF_HMAC_TIGER:
+                return false;
+            
+            default:
+                throw new ArgumentOutOfRangeException(nameof(transformId), transformId, null);
         }
     }
 
@@ -71,4 +92,5 @@ public class Prf
             }
         }
     }
+
 }

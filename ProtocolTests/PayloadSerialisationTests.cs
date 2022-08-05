@@ -176,6 +176,7 @@ public class PayloadSerialisationTests
         Assert.That(restored.Type, Is.EqualTo(original.Type), "Type");
         
         Assert.That(restored.Proposals.Count, Is.EqualTo(original.Proposals.Count), "Proposals .Count");
+        #region Proposal deep value testing
         for (int i = 0; i < original.Proposals.Count; i++)
         {
             var r = restored.Proposals[i];
@@ -213,5 +214,40 @@ public class PayloadSerialisationTests
                 }
             }
         }
+        #endregion
+    }
+    
+    [Test]
+    public void VendorId_round_trip()
+    {
+        // set values
+        var original = new PayloadVendorId("test vendor id") {
+            NextPayload = PayloadType.CERTREQ
+        };
+
+        // serialise
+        Console.WriteLine($"Original requires {original.Size} bytes");
+        var buffer = new byte[original.Size];
+        var written = original.WriteBytes(buffer, 0);
+        
+        Assert.That(written, Is.EqualTo(original.Size), "Written bytes did not match declared size");
+        
+        // deserialise
+        var idx = 0;
+        var nextType = original.Type; // must be correct, or will get wrong wrapper
+        var raw = IkeMessage.ReadPayload(buffer, null, ref idx, ref nextType);
+        var restored = raw as PayloadVendorId;
+        
+        Assert.That(restored, Is.Not.Null, $"Did not read payload correctly -- type was {raw.GetType()}");
+        Assert.That(nextType, Is.EqualTo(PayloadType.CERTREQ), "Payload NEXT type was wrong");
+        Assert.That(restored.Type, Is.EqualTo(PayloadType.VENDOR), "Payload type was wrong");
+        Assert.That(idx, Is.EqualTo(written), "Not all bytes written were read"); // needs to be correct, otherwise the offset is wrong for next payload
+        Assert.That(restored.Size, Is.EqualTo(original.Size), "Original and restored disagree on serialisation size");
+        
+        // check values
+        Assert.That(restored.Type, Is.EqualTo(original.Type), "Type");
+        Assert.That(restored.Data, Is.EqualTo(original.Data).AsCollection, "Data");
+        
+        Assert.That(restored.Description, Is.EqualTo(original.Description), "Description");
     }
 }

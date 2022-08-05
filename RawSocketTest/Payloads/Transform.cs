@@ -32,7 +32,6 @@ public class Transform
     /// </summary>
     public int Size => Attributes.Sum(a=>a.Size);
 
-
     public byte[] SerialiseAttributes()
     {
         var data = new byte[Size];
@@ -46,5 +45,20 @@ public class Transform
         if (idx != data.Length) throw new Exception($"Attributes did not fill data. Expected {data.Length}, got {idx}");
         
         return data;
+    }
+
+    public override string ToString()
+    {
+        var idStr = Type switch
+        {
+            TransformType.ENCR => ((EncryptionTypeId)Id).ToString(),
+            TransformType.PRF => ((PrfId)Id).ToString(),
+            TransformType.INTEG => ((IntegId)Id).ToString(),
+            TransformType.DH => ((DhId)Id).ToString(),
+            TransformType.ESN => ((EsnId)Id).ToString(),
+            _ => "???"
+        };
+
+        return $"{Type.ToString()} id={idStr} attr=[{string.Join("; ", Attributes.Select(a=>a.ToString()))}]";
     }
 }

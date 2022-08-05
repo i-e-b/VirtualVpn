@@ -83,4 +83,9 @@ public class TransformAttribute
     public byte[] ValueBytes { get; private set; } = Array.Empty<byte>();
     public ushort Value { get; set; }
     public TransformAttr Type { get; set; }
+
+    public override string ToString()
+    {
+        return $"{Type.ToString()}: {Value}";
+    }
 }

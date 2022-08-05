@@ -139,7 +139,10 @@ internal class VpnSession
                 _peerNonce = request.GetPayload<PayloadNonce>()?.Data;
                 
                 // pick a proposal we can work with, if any
-                var chosenProposal = request.GetPayload<PayloadSa>()?.GetProposalFor(EncryptionTypeId.ENCR_AES_CBC); // we only support AES CBC mode at the moment
+                var saPayload = request.GetPayload<PayloadSa>();
+                if (saPayload is null) throw new Exception("IKE_SA_INIT did not contain any SA proposals");
+                
+                var chosenProposal = saPayload.GetProposalFor(EncryptionTypeId.ENCR_AES_CBC); // we only support AES CBC mode at the moment
                 var payloadKe = request.GetPayload<PayloadKeyExchange>();
                 var preferredDiffieHellman = chosenProposal?.GetTransform(TransformType.DH)?.Id;
 

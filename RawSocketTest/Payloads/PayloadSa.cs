@@ -1,4 +1,6 @@
-﻿namespace RawSocketTest.Payloads;
+﻿using RawSocketTest.Crypto;
+
+namespace RawSocketTest.Payloads;
 
 // pvpn.message.PayloadSA - pvpn/message.py:286
 public class PayloadSa : MessagePayload
@@ -68,18 +70,14 @@ public class PayloadSa : MessagePayload
         if (src is null) return null;
         
         // source does a "remove redundancy" phase. See pvpn/message.py:275
+        // var uniqueTransforms = src.Transforms.DistinctBy(trans => trans.Type).ToList();
         
-        /*var typesSeen = new HashSet<TransformType>();
-        var uniqueTransforms = new List<Transform>();
-        foreach (var transform in src.Transforms)
-        {
-            if (typesSeen.Contains(transform.Type)) continue;
-            
-            typesSeen.Add(transform.Type);
-            uniqueTransforms.Add(transform);
-        }*/
+        // what we actually want is to strip any transforms we don't support
+        var supportedTransforms = src.Transforms.Where(IsSupported).ToList();
         
-        var uniqueTransforms = src.Transforms.DistinctBy(trans => trans.Type).ToList();
+        // and then just pick one of each type
+        var uniqueSupportedTransforms = supportedTransforms.DistinctBy(trans => trans.Type).ToList();
+        
 
         var prop = new Proposal
         {
@@ -87,10 +85,25 @@ public class PayloadSa : MessagePayload
             Protocol = src.Protocol,
             SpiSize = src.SpiSize,
             SpiData = src.SpiData,
-            TransformCount = (byte)uniqueTransforms.Count,
-            Transforms = uniqueTransforms
+            TransformCount = (byte)uniqueSupportedTransforms.Count,
+            Transforms = uniqueSupportedTransforms
         };
         
         return prop;
+    }
+
+    private bool IsSupported(Transform transform)
+    {
+        var type = transform.Type;
+        return type switch
+        {
+            TransformType.ENCR => Cipher.IsSupported((EncryptionTypeId)transform.Id),
+            TransformType.PRF => Prf.IsSupported((PrfId)transform.Id),
+            TransformType.INTEG => Integrity.IsSupported((IntegId)transform.Id),
+            TransformType.DH => IkeCrypto.IsSupported((DhId)transform.Id),
+            TransformType.ESN => false // ??
+            ,
+            _ => false
+        };
     }
 }
