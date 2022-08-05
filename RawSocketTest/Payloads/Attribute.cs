@@ -59,6 +59,7 @@ public class TransformAttribute
             else // no flag, so 'value' is the length of a byte array
             {
                 attr.Type = (TransformAttr)type;
+                attr.Value = value;
                 remains -= value;
                 attr.ValueBytes = new byte[value];
                 for (int i = 0; i < value; i++)

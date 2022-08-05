@@ -43,6 +43,8 @@ public class Transform
             attribute.WriteBytes(data, ref idx);
         }
         
+        if (idx != data.Length) throw new Exception($"Attributes did not fill data. Expected {data.Length}, got {idx}");
+        
         return data;
     }
 }

@@ -174,6 +174,44 @@ public class PayloadSerialisationTests
         
         // check values
         Assert.That(restored.Type, Is.EqualTo(original.Type), "Type");
-        Assert.That(restored.Proposals, Is.EqualTo(original.Proposals).AsCollection, "Proposals"); // TODO: need to deep inspect this properly
+        
+        Assert.That(restored.Proposals.Count, Is.EqualTo(original.Proposals.Count), "Proposals .Count");
+        for (int i = 0; i < original.Proposals.Count; i++)
+        {
+            var r = restored.Proposals[i];
+            var o = original.Proposals[i];
+            
+            Assert.That(r.Number, Is.EqualTo(o.Number), $"Proposal {i}: Number");
+            Assert.That(r.Protocol, Is.EqualTo(o.Protocol), $"Proposal {i}: Protocol");
+            Assert.That(r.Size, Is.EqualTo(o.Size), $"Proposal {i}: Size");
+            
+            Assert.That(r.SpiSize, Is.EqualTo(o.SpiSize), $"Proposal {i}: SpiSize");
+            Assert.That(r.SpiData, Is.EqualTo(o.SpiData).AsCollection, $"Proposal {i}: SpiData");
+            
+            Assert.That(r.TransformCount, Is.EqualTo(o.TransformCount), $"Proposal {i}: TransformCount");
+            Assert.That(r.Transforms.Count, Is.EqualTo(o.Transforms.Count), $"Proposal {i}: Transforms .Count");
+            for (int j = 0; j < o.Transforms.Count; j++)
+            {
+                var rt = r.Transforms[j];
+                var ot = o.Transforms[j];
+                
+                Assert.That(rt.Id, Is.EqualTo(ot.Id), $"Proposal {i}, Transform {j}: Id");
+                Assert.That(rt.Length, Is.EqualTo(ot.Length), $"Proposal {i}, Transform {j}: Length");
+                Assert.That(rt.Size, Is.EqualTo(ot.Size), $"Proposal {i}, Transform {j}: Size");
+                Assert.That(rt.Type, Is.EqualTo(ot.Type), $"Proposal {i}, Transform {j}: Type");
+                Assert.That(rt.Attributes.Count, Is.EqualTo(ot.Attributes.Count), $"Proposal {i}, Transform {j}: Attributes.Count");
+
+                for (int k = 0; k < ot.Attributes.Count; k++)
+                {
+                    var ra = rt.Attributes[k];
+                    var oa = ot.Attributes[k];
+                    
+                    Assert.That(ra.Size, Is.EqualTo(oa.Size), $"Proposal {i}, Transform {j}, Attribute {k}: Size");
+                    Assert.That(ra.Type, Is.EqualTo(oa.Type), $"Proposal {i}, Transform {j}, Attribute {k}: Type");
+                    Assert.That(ra.Value, Is.EqualTo(oa.Value), $"Proposal {i}, Transform {j}, Attribute {k}: Value");
+                    Assert.That(ra.ValueBytes, Is.EqualTo(oa.ValueBytes).AsCollection, $"Proposal {i}, Transform {j}, Attribute {k}: ValueBytes");
+                }
+            }
+        }
     }
 }

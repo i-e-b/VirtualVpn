@@ -39,10 +39,12 @@ public class Proposal
             var more = TransformCount - (i+1);
             var transform = Transforms[i];
             var attrData = transform.SerialiseAttributes();
+            transform.Length = (ushort)(attrData.Length+8); // data is without chain headers            
+            
             
             data[idx++] = (byte)more;
             idx++; // pad
-            Bit.WriteUInt16((ushort)(attrData.Length+8), data, ref idx); // data is without chain headers
+            Bit.WriteUInt16(transform.Length, data, ref idx);
             data[idx++] = (byte)transform.Type;
             idx++; // pad
             Bit.WriteUInt16((ushort)transform.Id, data, ref idx); // data is without chain headers
