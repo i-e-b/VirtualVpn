@@ -94,6 +94,13 @@ public static class Bit
         return result;
     }
 
+    public static byte[] RandomBytes(int count)
+    {
+        var result = new byte[count];
+        _rnd.NextBytes(result);
+        return result;
+    }
+
     public static byte[] UInt32ToBytes(uint value)
     {
         var data = new byte[4];
@@ -102,5 +109,41 @@ public static class Bit
         data[2] = (byte)((value >>  8) & 0xff);
         data[3] = (byte)((value >>  0) & 0xff);
         return data;
+    }
+
+    public static byte[] UInt64ToBytes(ulong value)
+    {
+        var data = new byte[8];
+        
+        data[0] = (byte)((value >> 56) & 0xff);
+        data[1] = (byte)((value >> 48) & 0xff);
+        data[2] = (byte)((value >> 40) & 0xff);
+        data[3] = (byte)((value >> 32) & 0xff);
+        
+        data[4] = (byte)((value >> 24) & 0xff);
+        data[5] = (byte)((value >> 16) & 0xff);
+        data[6] = (byte)((value >>  8) & 0xff);
+        data[7] = (byte)((value >>  0) & 0xff);
+        
+        return data;
+    }
+
+    /// <summary>
+    /// Read an subset of bytes into a new array
+    /// </summary>
+    public static byte [] Subset(int size, byte[] source, ref int idx)
+    {
+        if (size < 0) throw new Exception("Invalid subset size: must be zero or greater");
+        if (size == 0) return Array.Empty<byte>();
+        if (idx + size >= source.Length) throw new Exception("Invalid subset size: tried to read off the end of source");
+        
+        var result = new byte[size];
+
+        for (int i = 0; i < size; i++)
+        {
+            result[i] = source[idx++];
+        }
+        
+        return result;
     }
 }

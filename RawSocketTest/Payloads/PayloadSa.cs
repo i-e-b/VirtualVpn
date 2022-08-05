@@ -8,6 +8,11 @@ public class PayloadSa : MessagePayload
         ReadData(data, ref idx, ref nextPayload);
     }
 
+    public PayloadSa(Proposal proposal)
+    {
+        throw new NotImplementedException();
+    }
+
     public override PayloadType Type { get => PayloadType.SA; set { } }
 
     public List<Proposal> Proposals { get; set; } = new();

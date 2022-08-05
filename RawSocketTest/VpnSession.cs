@@ -21,6 +21,7 @@ internal class VpnSession
     private long _peerMsgId;
     private byte[]? _lastMessageBytes;
     private byte[]? _peerNonce;
+    private byte[] _skD;
     
     //## Algorithmic selections (negotiated with peer) ##//
     
@@ -132,22 +133,24 @@ internal class VpnSession
         switch (request.Exchange)
         {
             case ExchangeType.IKE_SA_INIT: // pvpn/server.py:268
+                Console.WriteLine("IKE_SA_INIT received");
                 AssertState(SessionState.INITIAL);
                 
                 _peerNonce = request.GetPayload<PayloadNonce>()?.RandomData;
                 
                 // pick a proposal we can work with, if any
-                var chosenProp = request.GetPayload<PayloadSa>()?.GetProposalFor(EncryptionTypeId.ENCR_AES_CBC); // we only support AES CBC mode at the moment
+                var chosenProposal = request.GetPayload<PayloadSa>()?.GetProposalFor(EncryptionTypeId.ENCR_AES_CBC); // we only support AES CBC mode at the moment
                 var payloadKe = request.GetPayload<PayloadKeyExchange>();
-                var preferredDiffieHellman = chosenProp?.GetTransform(TransformType.DH)?.Id;
+                var preferredDiffieHellman = chosenProposal?.GetTransform(TransformType.DH)?.Id;
 
                 // make sure we ended up with one we agree on
-                if (chosenProp is null || payloadKe is null || preferredDiffieHellman is null
+                if (chosenProposal is null || payloadKe is null || preferredDiffieHellman is null
                     || (uint)payloadKe.DiffieHellmanGroup != preferredDiffieHellman.Value
                     || payloadKe.KeyData.Length < 1
                     || payloadKe.KeyData[0] == 0)
                 { // pvpn/server.py:274
                     
+                    Console.WriteLine("    Could not find an agreeable proposition. Sending rejection.");
                     Reply(to: sender, message: BuildResponse(ExchangeType.IKE_SA_INIT, sendZeroHeader, null, 
                         new PayloadNotify(IkeProtocolType.NONE, NotifyId.INVALID_KE_PAYLOAD, null, null)
                         ));
@@ -156,17 +159,32 @@ internal class VpnSession
                 
                 // build key
                 IkeCrypto.DiffieHellman(payloadKe.DiffieHellmanGroup, payloadKe.KeyData, out var publicKey, out var sharedSecret);
-                // IEB: left off here
+                CreateKeyAndCrypto(chosenProposal, sharedSecret, null);
 
+                var saMessage = BuildResponse(ExchangeType.IKE_SA_INIT, sendZeroHeader, null,
+                    new PayloadSa(chosenProposal),
+                    new PayloadNonce(_localNonce),
+                    new PayloadKeyExchange(payloadKe.DiffieHellmanGroup, publicKey),
+                    new PayloadNotify(IkeProtocolType.NONE, NotifyId.NAT_DETECTION_DESTINATION_IP, Array.Empty<byte>(), Bit.RandomBytes(20)),
+                    new PayloadNotify(IkeProtocolType.NONE, NotifyId.NAT_DETECTION_SOURCE_IP, Array.Empty<byte>(), Bit.RandomBytes(20))
+                    // payloads
+                    );
+                Reply(to: sender, message: saMessage);
+                _state = SessionState.SA_SENT;
+                // store this message somewhere? pvpn/server.py:286
+                Console.WriteLine("    Completed IKE_SA_INIT, transition to state=SA_SENT");
                 break;
 
             case ExchangeType.IKE_AUTH: // pvpn/server.py:287
+                Console.WriteLine("IKE_AUTH received");
                 break;
 
             case ExchangeType.INFORMATIONAL: // pvpn/server.py:315
+                Console.WriteLine("INFORMATIONAL received");
                 break;
 
             case ExchangeType.CREATE_CHILD_SA: // pvpn/server.py:340
+                Console.WriteLine("CREATE_CHILD_SA received");
                 break;
 
             
@@ -189,6 +207,74 @@ internal class VpnSession
         Console.WriteLine($"    Replied with {sent} bytes (echo with flipped flags)");
         // after this, we get a call on 4500 port to continue encrypted
         */
+    }
+
+    /// <summary>
+    /// Generate key from DH exchange, build crypto protocols.
+    /// </summary>
+    private void CreateKeyAndCrypto(Proposal proposal, byte[] sharedSecret, byte[]? oldSkD)
+    {
+        // pvpn/server.py:223
+        // Check the state is ok
+        if (_peerNonce is null) throw new Exception("Did not receive N-once from peer");
+        
+        // Gather up selected protocol, and check all results are valid
+        var prfId = proposal.GetTransform(TransformType.PRF)?.Id;
+        if (prfId is null) throw new Exception("Chosen proposal has no PRF section");
+        var integId = proposal.GetTransform(TransformType.INTEG)?.Id;
+        if (integId is null) throw new Exception("Chosen proposal has no INTEG section");
+        var cipherInfo = proposal.GetTransform(TransformType.ENCR);
+        if (cipherInfo is null) throw new Exception("Chosen proposal has no ENCR section");
+        var keyLength = GetKeyLength(cipherInfo);
+        if (keyLength is null) throw new Exception("Chosen proposal ENCR section has no KEY_LENGTH attribute");
+        
+        // Build protocols
+        var prf = new Prf((PrfId)prfId);
+        var integ = new Integrity((IntegId)integId);
+        var cipher = new Cipher((EncryptionTypeId)cipherInfo.Id, keyLength.Value);
+        
+        byte[] sKeySeed;
+        if (oldSkD is null)
+        {
+            sKeySeed = prf.Hash(_peerNonce.Concat(_localNonce).ToArray(), sharedSecret);
+        }
+        else
+        {
+            sKeySeed = prf.Hash(oldSkD, sharedSecret.Concat(_peerNonce).Concat(_localNonce).ToArray());
+        }
+        
+        // Generate crypto bases
+        // IEB: very suspect code
+        /*
+        keymat_fmt = struct.Struct('>{0}s{1}s{1}s{2}s{2}s{0}s{0}s'.format(prf.key_size, integ.key_size, cipher.key_size))
+        keymat = prf.prfplus(skeyseed, self.peer_nonce+self.my_nonce+self.peer_spi+self.my_spi)
+        self.sk_d, sk_ai, sk_ar, sk_ei, sk_er, sk_pi, sk_pr = keymat_fmt.unpack(bytes(next(keymat) for _ in range(keymat_fmt.size)))*/
+        
+        var totalSize = 3*prf.KeySize + 2*integ.KeySize + 2*cipher.KeySize;
+        var seed = _peerNonce.Concat(_localNonce).Concat(Bit.UInt64ToBytes(_peerSpi)).Concat(Bit.UInt64ToBytes(_localSpi)).ToArray();
+        var keySource = prf.HashFont(sKeySeed, seed, includeCount: true).Take(totalSize).ToArray();
+        
+        var idx = 0;
+        _skD = Bit.Subset(prf.KeySize, keySource, ref idx);
+        var skAi = Bit.Subset(integ.KeySize, keySource, ref idx);
+        var skAr = Bit.Subset(integ.KeySize, keySource, ref idx);
+        var skEi = Bit.Subset(cipher.KeySize, keySource, ref idx);
+        var skEr = Bit.Subset(cipher.KeySize, keySource, ref idx);
+        var skPi = Bit.Subset(prf.KeySize, keySource, ref idx);
+        var skPr = Bit.Subset(prf.KeySize, keySource, ref idx);
+        
+        // build crypto for both sides
+        _myCrypto = new IkeCrypto(cipher, integ, prf, skEr, skAr, skPr, null);
+        _peerCrypto = new IkeCrypto(cipher, integ, prf, skEi, skAi, skPi, null);
+    }
+
+    /// <summary>
+    /// Find a transform attribute with type of key-length,
+    /// and return the value
+    /// </summary>
+    private int? GetKeyLength(Transform info)
+    {
+        return info.Attributes.FirstOrDefault(a=>a.Type == TransformAttr.KEY_LENGTH)?.Value;
     }
 
     private void Reply(IPEndPoint to, byte[] message)

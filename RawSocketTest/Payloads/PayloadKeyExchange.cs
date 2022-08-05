@@ -15,7 +15,12 @@ public class PayloadKeyExchange : MessagePayload
     {
         ReadData(data, ref idx, ref nextPayload);
     }
-    
+
+    public PayloadKeyExchange(DhId diffieHellmanGroup, byte[] publicKey)
+    {
+        throw new NotImplementedException();
+    }
+
     /// <summary>
     /// Re-write 'Data' array
     /// </summary>

@@ -10,7 +10,12 @@ public class PayloadNonce : MessagePayload
     {
         ReadData(data, ref idx, ref nextPayload);
     }
-    
+
+    public PayloadNonce(byte[] nonce)
+    {
+        throw new NotImplementedException();
+    }
+
     protected override void Serialise()
     {
     }
