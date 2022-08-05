@@ -21,6 +21,23 @@ public class PayloadSa : MessagePayload
     protected override void Serialise()
     {
         // chain proposals
+        Data = new byte[Size - HeaderSize];
+
+        var idx = 0;
+        for (int i = 0; i < Proposals.Count; i++)
+        {
+            var more = Proposals.Count - (i+1);
+            var proposal = Proposals[i];
+            var proposalBytes = proposal.Serialise();
+            
+            Data[idx++] = (byte)more;
+            idx++; // unused
+            Bit.WriteUInt16((ushort)proposalBytes.Length, Data, ref idx);
+            for (int k = 0; k < proposalBytes.Length; k++)
+            {
+                Data[idx++] = proposalBytes[k];
+            }
+        }
     }
     
     protected override void Deserialise()

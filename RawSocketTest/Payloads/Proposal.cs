@@ -14,11 +14,53 @@ public class Proposal
     
     public int Size => 4 + SpiData.Length + Transforms.Sum(t=>t.Size) + Transforms.Count * 8;
 
+
+    public byte[] Serialise()
+    {
+        var data = new byte[Size];
+        
+        // update sizes
+        SpiSize = (byte)SpiData.Length;
+        TransformCount = (byte)Transforms.Count;
+        
+        var idx = 0;
+        data[idx++] = Number;
+        data[idx++] = (byte)Protocol;
+        data[idx++] = SpiSize;
+        data[idx++] = TransformCount;
+
+        for (int i = 0; i < SpiData.Length; i++)
+        {
+            data[idx++] = SpiData[i];
+        }
+
+        for (int i = 0; i < Transforms.Count; i++)
+        {
+            var more = TransformCount - (i+1);
+            var transform = Transforms[i];
+            var attrData = transform.SerialiseAttributes();
+            
+            data[idx++] = (byte)more;
+            idx++; // pad
+            Bit.WriteUInt16((ushort)(attrData.Length+8), data, ref idx); // data is without chain headers
+            data[idx++] = (byte)transform.Type;
+            idx++; // pad
+            Bit.WriteUInt16((ushort)transform.Id, data, ref idx); // data is without chain headers
+
+            for (int k = 0; k < attrData.Length; k++)
+            {
+                data[idx++] = attrData[k];
+            }
+        }
+        
+        return data;
+    }
+    
     public static Proposal Parse(byte[] data, ushort length, ref int idx)
     {
         var result = new Proposal();
         
-        if (length + idx >= data.Length) return result; // truncated data or corrupted length
+        if (length + idx > data.Length) return result; // truncated data or corrupted length
         
         // read proposal header
         result.Number = data[idx++];
@@ -47,7 +89,7 @@ public class Proposal
             trans.Id = Bit.ReadUInt16(data, ref idx);
             
             // pvpn/message.py:256
-            trans.Attributes.AddRange(Attribute.ParseChain(data, trans.Length - 8, ref idx));
+            trans.Attributes.AddRange(TransformAttribute.ParseChain(data, trans.Length - 8, ref idx));
             
             result.Transforms.Add(trans);
         }

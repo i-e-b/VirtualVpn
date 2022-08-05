@@ -33,7 +33,24 @@ public class PayloadNotify : MessagePayload
     
     protected override void Serialise()
     {
-        throw new Exception("PayloadNotify Serialise not implemented"); // TODO!
+        SpiSize = SpiData.Length;
+        
+        var idx = 0;
+        Data = new byte[Size - HeaderSize];
+        
+        Data[idx++] = (byte)ProtocolType;
+        Data[idx++] = (byte)SpiSize;
+        Bit.WriteUInt16((ushort)NotificationType, Data, ref idx);
+
+        for (int i = 0; i < SpiData.Length; i++)
+        {
+            Data[idx++] = SpiData[i];
+        }
+
+        for (int i = 0; i < InfoData.Length; i++)
+        {
+            Data[idx++] = InfoData[i];
+        }
     }
     
     protected override void Deserialise()

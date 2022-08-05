@@ -45,9 +45,12 @@ public abstract class MessagePayload
     /// </summary>
     public int WriteBytes(byte[] dest, int offset)
     {
-        if (offset + Size > dest.Length) throw new Exception($"Target buffer is not long enough for the payload. Require {Size}, but have {dest.Length-offset} available");
+        var size = Size;
+        if (offset + size > dest.Length) throw new Exception($"Target buffer is not long enough for the payload. Require {size}, but have {dest.Length-offset} available");
         Serialise(); // update Data if needed
-        Length = (ushort)Size; // measure size
+        if (Data.Length + HeaderSize != size) throw new Exception($"Internal error: {GetType()} miscalculated serialisation size. Declared {size}, but provided {Data.Length + HeaderSize}");
+        
+        Length = (ushort)Size; // measure size to write into header
         
         // write header
         var idx = offset;
@@ -99,7 +102,6 @@ public abstract class MessagePayload
         idx += Length;
         type = NextPayload;
     }
-
 
     /// <summary>
     /// Called before writing bytes. Sub-classes should fill <see cref="Data"/>
