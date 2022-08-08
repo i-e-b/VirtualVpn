@@ -2,6 +2,7 @@
 
 using RawSocketTest.Crypto;
 using RawSocketTest.Payloads;
+using SkinnyJson;
 
 namespace RawSocketTest;
 
@@ -66,7 +67,13 @@ public class IkeMessage
     
     
     public int DataOffset { get; private set; }
-    public byte[] RawData { get; private set; } = Array.Empty<byte>();
+    
+    /// <summary>
+    /// Original data supplied across network.
+    /// Empty if message is generated locally.
+    /// The values here should never be updated once the message is received.
+    /// </summary>
+    private byte[] RawData { get; set; } = Array.Empty<byte>();
 
     /// <summary>
     /// Serialise the message to a byte string
@@ -175,15 +182,17 @@ public class IkeMessage
     }
 
 
-    public void ReadPayloads(IkeCrypto? encryption)
+    public void ReadPayloadChain(IkeCrypto? encryption)
     {
         var offset = DataOffset; // where in the data bytes does the actual message start?
         var srcData = RawData;
         
         // Decrypt message if needed. See pvpn/message.py:525
+        // NOTE: this is whole-message encryption. SK payload encryption is separate, and handled in `ReadSinglePayload` below.
         if (MessageFlag.HasFlag(MessageFlag.Encryption))
         {
             if (encryption is null) throw new Exception("Message is flagged as encrypted, but no crypto was supplied");
+            
             
             // make sure we have just the target data
             if (offset != 0) srcData = srcData.Skip(offset).ToArray();
@@ -194,47 +203,83 @@ public class IkeMessage
         }
 
         // read payload chain
-        int idx = offset + 28;
-        var nextPayload = FirstPayload;
-        while (idx < srcData.Length && nextPayload != PayloadType.NONE)
-        {
-            var payload = ReadPayload(srcData, encryption, ref idx, ref nextPayload);
-            Payloads.Add(payload);
-        }
+        var idx = offset+28;
+        var payloads = ReadPayloadChainInternal(FirstPayload, encryption, ref idx, srcData);
+
+        Payloads.AddRange(payloads);
     }
 
-    public static MessagePayload ReadPayload(byte[] rawData, IkeCrypto? ikeCrypto, ref int idx, ref PayloadType nextPayload)
+    private static IEnumerable<MessagePayload> ReadPayloadChainInternal(PayloadType first, IkeCrypto? encryption, ref int idx, byte[] srcData)
+    {
+        var payloads = new List<MessagePayload>();
+        var nextPayload = first;
+        while (idx < srcData.Length && nextPayload != PayloadType.NONE)
+        {
+            var payload = ReadSinglePayload(srcData, encryption, ref idx, ref nextPayload);
+            payloads.AddRange(payload);
+        }
+
+        return payloads;
+    }
+
+    /// <summary>
+    /// Read one payload's bytes, and interpret into the appropriate class types.
+    /// The SK payload contains potentially many child payloads, so we return enumerable
+    /// </summary>
+    public static IEnumerable<MessagePayload> ReadSinglePayload(byte[] srcData, IkeCrypto? ikeCrypto, ref int idx, ref PayloadType nextPayload)
     {
         var thisType = nextPayload;
         // TODO: continue to fill out
         switch (thisType)
         {
             case PayloadType.SA:
-                return new PayloadSa(rawData, ref idx, ref nextPayload);
+                return One(new PayloadSa(srcData, ref idx, ref nextPayload));
             
             case PayloadType.KE:
-                return new PayloadKeyExchange(rawData, ref idx, ref nextPayload);
+                return One(new PayloadKeyExchange(srcData, ref idx, ref nextPayload));
             
             case PayloadType.NONCE:
-                return new PayloadNonce(rawData, ref idx, ref nextPayload);
+                return One(new PayloadNonce(srcData, ref idx, ref nextPayload));
             
             case PayloadType.NOTIFY:
-                return new PayloadNotify(rawData, ref idx, ref nextPayload);
+                return One(new PayloadNotify(srcData, ref idx, ref nextPayload));
             
             case PayloadType.VENDOR:
-                return new PayloadVendorId(rawData, ref idx, ref nextPayload);
-            
+                return One(new PayloadVendorId(srcData, ref idx, ref nextPayload));
+
             case PayloadType.SK: // encrypted body. TODO: This should be pumped back around to read contents?
-                return new PayloadSecured(rawData, ikeCrypto, ref idx, ref nextPayload);
-            
+            {
+                if (ikeCrypto is null) throw new Exception("Received an encrypted packet without agreeing on session crypto");
+                var ok = ikeCrypto.VerifyChecksum(srcData); // IEB: currently failing?
+                if (!ok) Console.WriteLine("CHECKSUM FAILED! We will continue, but result might be unreliable");
+                
+                var expandedPayload = new PayloadSecured(srcData, ikeCrypto, ref idx, ref nextPayload);
+                // TODO: read the 'plain' as a new set of payloads
+                
+                Console.WriteLine($"    Plain body has {expandedPayload.PlainBody?.Length.ToString() ?? "no"} bytes");
+                if (expandedPayload.PlainBody?.Length > 0)
+                {
+                    Console.WriteLine($"    Reading inner payload, starting with {nextPayload.ToString()}");
+    
+                    var childIdx = 0;
+                    var innerPayloads = ReadPayloadChainInternal(nextPayload, ikeCrypto, ref childIdx, expandedPayload.PlainBody).ToList();
+                    
+                    Console.WriteLine($"    Got {innerPayloads.Count} inner payloads:\r\n{Json.Beautify(Json.Freeze(innerPayloads))}");
+                    
+                    return innerPayloads;
+                }
+
+                return Array.Empty<MessagePayload>();
+            }
             default: // anything we don't have a parser for yet
             {
-                var payload = new PayloadUnknown(rawData, ref idx, ref nextPayload);
-                payload.Type = thisType;
-                return payload;
+                var payload = new PayloadUnknown(srcData, ref idx, ref nextPayload) { Type = thisType };
+                return One(payload);
             }
         }
     }
+
+    private static IEnumerable<T> One<T>(T thing) { yield return thing; }
 
     /// <summary>
     /// Get the first payload of a given type, that matches the predicate

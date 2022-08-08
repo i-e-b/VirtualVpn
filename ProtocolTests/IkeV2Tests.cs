@@ -14,7 +14,7 @@ public class IkeV2Tests
         var bytes = File.ReadAllBytes("SampleData/IkeV2_message1.bin");
         
         var ikeMessage = IkeMessage.FromBytes(bytes, 0);
-        ikeMessage.ReadPayloads(null);
+        ikeMessage.ReadPayloadChain(null);
         
         var str = Json.Beautify(Json.Freeze(ikeMessage));
         Console.WriteLine(str);
@@ -26,7 +26,7 @@ public class IkeV2Tests
         var bytes = File.ReadAllBytes("SampleData/IKEv2-Reply_-1_Port-500_IKE.bin");
         
         var ikeMessage = IkeMessage.FromBytes(bytes, 0);
-        ikeMessage.ReadPayloads(null);
+        ikeMessage.ReadPayloadChain(null);
         
         var str = Json.Beautify(Json.Freeze(ikeMessage));
         Console.WriteLine(str);

@@ -143,7 +143,8 @@ internal class VpnSession
             return;
         }
 
-        request.ReadPayloads(_peerCrypto); // pvpn/server.py:266
+        // We should have crypto now, as long as we're out of IKE_SA_INIT phase
+        request.ReadPayloadChain(_peerCrypto); // pvpn/server.py:266
 
         switch (request.Exchange)
         {
@@ -155,7 +156,8 @@ internal class VpnSession
             case ExchangeType.IKE_AUTH: // pvpn/server.py:287
                 AssertState(SessionState.SA_SENT, request);
                 Console.WriteLine("IKE_AUTH received");
-                Console.WriteLine($"This session has Crypto.\r\n  Me-> {_myCrypto}\r\nThem-> {_peerCrypto}");
+                Console.WriteLine($"This session has Crypto.\r\n  Me-> {_myCrypto}\r\nThem-> {_peerCrypto}\r\n");
+                Console.WriteLine(Json.Beautify(Json.Freeze(request)));
                 break;
 
             case ExchangeType.INFORMATIONAL: // pvpn/server.py:315

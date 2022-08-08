@@ -32,27 +32,37 @@ public class Cipher
 
     public int BlockSize => 16;
     public int KeySize => KeyLength / 8;
-
+    
     public byte[] Encrypt(byte[] key, byte[] iv, byte[] data)
     {
-        var aes = Aes.Create();
-        aes.Mode = CipherMode.CBC;
-        aes.IV = iv;
-        aes.Key = key;
-        
-        return aes.EncryptCbc(data, iv);
+        return AesCipher(key).EncryptCbc(data, iv, PaddingMode.None);
     }
 
     public byte[] Decrypt(byte[] key, byte[] iv, byte[] data)
     {
-        var aes = Aes.Create();
-        aes.Key = key;
-        
-        return aes.DecryptCbc(data, iv);
+        return AesCipher(key).DecryptCbc(data, iv, PaddingMode.None);
     }
 
     public byte[] GenerateIv()
     {
         return RandomNumberGenerator.GetBytes(BlockSize);
+    }
+
+    /// <summary>
+    /// Create a AES-CBC cipher with key set.
+    /// <para></para>
+    /// NOTE: IV and padding-mode are critical to this working,
+    /// but are ignored if set here.
+    /// <para></para>
+    /// The IKEv2 has its own padding mechanism, so we must always
+    /// use dotnet PaddingMode <see cref="PaddingMode.None"/>
+    /// otherwise decryption will fail.
+    /// </summary>
+    private static Aes AesCipher(byte[] key)
+    {
+        var aes = Aes.Create();
+        aes.Mode = CipherMode.CBC;
+        aes.Key = key;
+        return aes;
     }
 }

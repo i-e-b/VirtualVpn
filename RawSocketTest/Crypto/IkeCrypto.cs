@@ -69,16 +69,49 @@ public class IkeCrypto
     /// </summary>
     public byte[] Decrypt(byte[] encrypted, out IpProtocol nextHeader)
     {
-        var blockSize = _cipher.BlockSize;
+        /*
+                               1                   2                   3
+           0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+          +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+          !                     Initialization Vector                     !
+          !         (length is block size for encryption algorithm)       !
+          +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+     <--+
+          !                    Encrypted IKE Payloads                     !        |
+          +               +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+        |
+          !               !             Padding (0-255 octets)            !       This is cipher input data
+          +-+-+-+-+-+-+-+-+                               +-+-+-+-+-+-+-+-+        |
+          !                                               !  Pad Length   !        |
+          +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+     <--+
+    */
+        
+        var initVectorSize = _cipher.BlockSize;
         var hashSize = _integrity?.HashSize ?? 0;
-        var cipherSize = encrypted.Length - blockSize - hashSize;
-
+        var cipherSize = encrypted.Length - initVectorSize - hashSize;
+        
         // encrypted data is [ init vec ][ cipher text ][ checksum ]
-        var iv = encrypted.Take(blockSize).ToArray();
-        var cipherText = encrypted.Skip(blockSize).Take(cipherSize).ToArray();
+        var iv = encrypted.Take(initVectorSize).ToArray();
+        var cipherText = encrypted.Skip(initVectorSize).Take(cipherSize).ToArray();
 
+        /* prepare data to authenticate-decrypt:
+         * | IV | plain | padding | ICV |
+         *       \____crypt______/   ^
+         *              |           /
+         *              v          /
+         *     assoc -> + ------->/
+         */
+        
         // decrypted data is [ message data ][ padding ][ pad len ][ carry-over ]
-        var decrypted = _cipher.Decrypt(_skE, iv, cipherText);
+        byte[] decrypted;
+        try
+        {
+            decrypted = _cipher.Decrypt(_skE, iv, cipherText);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to decrypt: {ex}");
+            throw;
+        }
+
         nextHeader = (IpProtocol)decrypted[^1]; // last element
         var padLength = decrypted[^2]; // second-last element
         var messageBytes = decrypted.Length - padLength - 2;
@@ -117,12 +150,21 @@ public class IkeCrypto
 
         // read just the main body
         var payloadLength = encrypted.Length - _integrity.HashSize;
+        //var mainPayload = (new byte[4]).Concat(encrypted.Take(payloadLength)).ToArray();
         var mainPayload = encrypted.Take(payloadLength).ToArray();
 
         // compute
         var expected = _integrity.Compute(_skA, mainPayload);
-
+        
+        // TEST CODE
         // copy
+        var actual = new byte[expected.Length];
+        for (int i = 0; i < expected.Length; i++) { actual[i] = encrypted[i + payloadLength]; }
+        
+        Console.WriteLine($"    Comparing checksums: sk-A={Hex(_skA)}; {Hex(expected)} == {Hex(actual)} ?");
+        // END TEST CODE
+        
+        // compare
         for (int i = 0; i < expected.Length; i++)
         {
             if (expected[i] != encrypted[i + payloadLength]) return false;
@@ -130,6 +172,8 @@ public class IkeCrypto
 
         return true;
     }
+
+    private static string Hex(IEnumerable<byte> expected) => string.Join("", expected.Select(v=>v.ToString("x2")));
 
     /// <summary>
     /// Calculate and inject a checksum into an encrypted message

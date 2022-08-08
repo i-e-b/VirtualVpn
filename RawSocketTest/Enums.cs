@@ -106,7 +106,14 @@ public enum IkeProtocolType : byte
 
 public enum IkeVersion : byte
 {
+    /// <summary>
+    /// Version 1.0 -- not supported
+    /// </summary>
     IkeV1 = 0x10,
+    
+    /// <summary>
+    /// Version 2.0
+    /// </summary>
     IkeV2 = 0x20
 }
 
@@ -342,7 +349,12 @@ public enum IdType
 public enum AuthMethod
 {
     RSA = 1,
+    
+    /// <summary>
+    /// Pre-Shared Key. Usually stored in /etc/ipsec.secrets
+    /// </summary>
     PSK = 2,
+    
     DSS = 3,
     ECDSA_SHA_256 = 9,
     ECDSA_SHA_384 = 10,
