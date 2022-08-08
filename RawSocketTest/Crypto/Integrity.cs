@@ -10,6 +10,7 @@ namespace RawSocketTest.Crypto;
 /// </summary>
 public class Integrity
 {
+    private readonly IntegId _transform;
     public int KeySize { get; }
     public int HashSize { get; }
    
@@ -17,6 +18,7 @@ public class Integrity
     
     public Integrity(IntegId transform)
     {
+        _transform = transform;
         switch (transform)
         {
             case IntegId.AUTH_NONE:
@@ -69,6 +71,8 @@ public class Integrity
                 throw new ArgumentOutOfRangeException(nameof(transform), transform, null);
         }
     }
+
+    public override string ToString() => $"Algorithm={_transform.ToString()} KeySize={KeySize} HashSize={HashSize};";
 
     public byte[] Compute(byte[] key, byte[] data)
     {

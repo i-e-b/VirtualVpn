@@ -10,6 +10,10 @@ public class Cipher
 {
     public int KeyLength { get; }
     
+    public EncryptionTypeId CipherType => EncryptionTypeId.ENCR_AES_CBC; // if we support more, then store selected here
+
+    public override string ToString() => $"Type={CipherType.ToString()} Block={BlockSize} bytes Key={KeySize} bytes;";
+
     /// <summary>
     /// Create a new Cipher
     /// </summary>
@@ -26,10 +30,10 @@ public class Cipher
         return transform == EncryptionTypeId.ENCR_AES_CBC;
     }
 
-    public virtual int BlockSize => 16;
-    public virtual int KeySize => KeyLength / 8;
+    public int BlockSize => 16;
+    public int KeySize => KeyLength / 8;
 
-    public virtual byte[] Encrypt(byte[] key, byte[] iv, byte[] data)
+    public byte[] Encrypt(byte[] key, byte[] iv, byte[] data)
     {
         var aes = Aes.Create();
         aes.Mode = CipherMode.CBC;
@@ -39,7 +43,7 @@ public class Cipher
         return aes.EncryptCbc(data, iv);
     }
 
-    public virtual byte[] Decrypt(byte[] key, byte[] iv, byte[] data)
+    public byte[] Decrypt(byte[] key, byte[] iv, byte[] data)
     {
         var aes = Aes.Create();
         aes.Key = key;

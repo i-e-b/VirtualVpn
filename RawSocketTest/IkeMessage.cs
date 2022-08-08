@@ -103,7 +103,13 @@ public class IkeMessage
             Payloads[i].NextPayload = (i+1 < Payloads.Count) ? Payloads[i+1].Type : PayloadType.NONE;
             offset = Payloads[i].WriteBytes(bytes, offset);
         }
-        
+
+
+        if (ikeCrypto is not null)
+        {
+            // TODO: write checksum
+        }
+
         if (offset != ExpectedLength) throw new Exception($"Unexpected write length. Expected {ExpectedLength}, but got {offset}");
 
         return bytes;

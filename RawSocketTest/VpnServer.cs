@@ -5,7 +5,7 @@ namespace RawSocketTest;
 
 public class VpnServer : IDisposable
 {
-    private const int IKE_HEADER = 0;
+    private const int IkeHeader = 0;
     
     private int _messageCount;
     private readonly UdpServer _server;
@@ -27,38 +27,15 @@ public class VpnServer : IDisposable
 // Switch on ipsec on Gerty (`ipsec restart`), make sure there is a ruleset for the test PC.
 
 //var target = new IPEndPoint(new IPAddress(new byte[]{197,250,65,132}), 500); // M-P
-        var target = new IPEndPoint(new IPAddress(new byte[] { 159, 69, 13, 126 }), 500); // Gerty
+//var target = new IPEndPoint(new IPAddress(new byte[] { 159, 69, 13, 126 }), 500); // Gerty
 
         Thread.Sleep(1000);
 
         _server.Start();
 
-        Console.WriteLine("trying to send raw");
-
-        var message = new IkeMessage
-        {
-            SpiI = Bit.RandomSpi(),
-            SpiR = 0,
-            Version = IkeVersion.IkeV2,
-            Exchange = ExchangeType.IKE_SA_INIT,
-            MessageFlag = MessageFlag.Initiator,
-            MessageId = 0,
-            FirstPayload = PayloadType.NONE
-        };
-
-// INIT comes with these payloads: SA(33), KE(34), Nonce(40), Vendor ID (43), Notify(41)
-//message.AddPayload(PayloadType.SA, new byte[1]);
-
-        var buf = message.ToBytes();
-
         var limit = 50;
         for (int i = 0; i < limit; i++)
         {
-            // contact other side first:
-            //server.SendIke(buf, target, out var sent);
-            //Console.WriteLine($"Sent {sent} bytes. Waiting for response ({i+1} of {limit})");
-            //Thread.Sleep(500);
-
             // wait for other side to contact:
             Console.Write(".");
             Thread.Sleep(1500);
@@ -147,7 +124,7 @@ public class VpnServer : IDisposable
 
         // If the IKE header is there, pass back to the ike handler.
         // We strip the padding off, and pass a flag to say it should be sent with a response
-        if (header == IKE_HEADER) // start session?
+        if (header == IkeHeader) // start session?
         {
             Console.WriteLine("    SPI zero on 4500 -- sending to 500 (IKE) responder");
             var offsetData = data.Skip(4).ToArray();

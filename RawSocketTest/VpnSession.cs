@@ -98,8 +98,6 @@ internal class VpnSession
         };
         resp.Payloads.AddRange(payloads);
         
-        // IEB: Do I need to run the checksum against this?
-        
         return resp.ToBytes(sendZeroHeader, crypto); // should wrap payloads in PayloadSK if we have crypto
     }
 
@@ -107,6 +105,19 @@ internal class VpnSession
     /// Handle an incoming key exchange message
     /// </summary>
     public void HandleIke(IkeMessage request, IPEndPoint sender, bool sendZeroHeader)
+    {
+        try
+        {
+            HandleIkeInternal(request, sender, sendZeroHeader);
+            _peerMsgId++;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to handle IKE message. Error: {ex}");
+        }
+    }
+
+    private void HandleIkeInternal(IkeMessage request, IPEndPoint sender, bool sendZeroHeader)
     {
         // pvpn/server.py:260
         LastTouchUtc = DateTime.UtcNow;
@@ -133,67 +144,18 @@ internal class VpnSession
         }
 
         request.ReadPayloads(_peerCrypto); // pvpn/server.py:266
-        
-        _peerMsgId++;
 
         switch (request.Exchange)
         {
             case ExchangeType.IKE_SA_INIT: // pvpn/server.py:268
-                Console.WriteLine("        Session: IKE_SA_INIT received");
                 AssertState(SessionState.INITIAL, request);
-                
-                _peerNonce = request.GetPayload<PayloadNonce>()?.Data;
-                
-                // pick a proposal we can work with, if any
-                var saPayload = request.GetPayload<PayloadSa>();
-                if (saPayload is null) throw new Exception("IKE_SA_INIT did not contain any SA proposals");
-                
-                var chosenProposal = saPayload.GetProposalFor(EncryptionTypeId.ENCR_AES_CBC); // we only support AES CBC mode at the moment
-                var payloadKe = request.GetPayload<PayloadKeyExchange>();
-                var preferredDiffieHellman = chosenProposal?.GetTransform(TransformType.DH)?.Id;
-
-                // make sure we ended up with one we agree on
-                if (chosenProposal is null || payloadKe is null || preferredDiffieHellman is null
-                    || (uint)payloadKe.DiffieHellmanGroup != preferredDiffieHellman.Value
-                    || payloadKe.KeyData.Length < 1
-                    || payloadKe.KeyData[0] == 0)
-                { // pvpn/server.py:274
-                    
-                    Console.WriteLine($"        Session: Could not find an agreeable proposition. Sending rejection to {sender.Address}:{sender.Port}");
-                    Reply(to: sender, message: BuildResponse(ExchangeType.IKE_SA_INIT, sendZeroHeader, null, 
-                        new PayloadNotify(IkeProtocolType.NONE, NotifyId.INVALID_KE_PAYLOAD, null, null)
-                        ));
-                    return;
-                }
-                
-                // build key
-                IkeCrypto.DiffieHellman(payloadKe.DiffieHellmanGroup, payloadKe.KeyData, out var publicKey, out var sharedSecret);
-                CreateKeyAndCrypto(chosenProposal, sharedSecret, null);
-
-                var saMessage = BuildResponse(ExchangeType.IKE_SA_INIT, sendZeroHeader, null,
-                    new PayloadSa(chosenProposal),
-                    new PayloadNonce(_localNonce),
-                    new PayloadKeyExchange(payloadKe.DiffieHellmanGroup, publicKey),
-                    new PayloadNotify(IkeProtocolType.NONE, NotifyId.NAT_DETECTION_DESTINATION_IP, Array.Empty<byte>(), Bit.RandomBytes(20)),
-                    new PayloadNotify(IkeProtocolType.NONE, NotifyId.NAT_DETECTION_SOURCE_IP, Array.Empty<byte>(), Bit.RandomBytes(20))
-                    );
-                
-                // IEB: THIS IS FAILING:
-/*
-received packet: from 185.81.252.44[500] to 159.69.13.126[500] (208 bytes)
-parsed IKE_SA_INIT response 1 [ SA No KE N(NATD_D_IP) N(NATD_S_IP) ]
-received message ID 1, expected 0, ignored
-*/
-                
-                Console.WriteLine($"        Session: Sending IKE_SA_INIT reply to {sender.Address}:{sender.Port}");
-                Reply(to: sender, message: saMessage);
-                _state = SessionState.SA_SENT;
-                // store this message somewhere? pvpn/server.py:286
-                Console.WriteLine("        Session: Completed IKE_SA_INIT, transition to state=SA_SENT");
+                HandleSaInit(request, sender, sendZeroHeader);
                 break;
 
             case ExchangeType.IKE_AUTH: // pvpn/server.py:287
+                AssertState(SessionState.SA_SENT, request);
                 Console.WriteLine("IKE_AUTH received");
+                Console.WriteLine($"This session has Crypto.\r\n  Me-> {_myCrypto}\r\nThem-> {_peerCrypto}");
                 break;
 
             case ExchangeType.INFORMATIONAL: // pvpn/server.py:315
@@ -208,22 +170,54 @@ received message ID 1, expected 0, ignored
             default:
                throw new Exception($"Unexpected request: {request.Exchange.ToString()}");
         }
+    }
 
-        //########## TEST JUNK ############
-        /*Console.WriteLine($"I should handle a {data.Length} byte session packet from {sender.Address}");
-        
-        request.SpiR = Bit.RandomSpi(); // assign ourself an SPI (will need to send to other side)
-        Console.WriteLine($"    I started a new session with spi-r={request.SpiR:x16} and spi-i={request.SpiI:x16}");
-            
-        // TEMP STUFF (should be in session)...
-            
-        // reply with a responder SPI and changed flags
-        request.MessageFlag = MessageFlag.Response;
+    private void HandleSaInit(IkeMessage request, IPEndPoint sender, bool sendZeroHeader)
+    {
+        Console.WriteLine("        Session: IKE_SA_INIT received");
 
-        _server.SendRaw(request.ToBytes(sendZeroHeader), sender, out var sent);
-        Console.WriteLine($"    Replied with {sent} bytes (echo with flipped flags)");
-        // after this, we get a call on 4500 port to continue encrypted
-        */
+        _peerNonce = request.GetPayload<PayloadNonce>()?.Data;
+
+        // pick a proposal we can work with, if any
+        var saPayload = request.GetPayload<PayloadSa>();
+        if (saPayload is null) throw new Exception("IKE_SA_INIT did not contain any SA proposals");
+
+        var chosenProposal = saPayload.GetProposalFor(EncryptionTypeId.ENCR_AES_CBC); // we only support AES CBC mode at the moment
+        var payloadKe = request.GetPayload<PayloadKeyExchange>();
+        var preferredDiffieHellman = chosenProposal?.GetTransform(TransformType.DH)?.Id;
+
+        // make sure we ended up with one we agree on
+        if (chosenProposal is null || payloadKe is null || preferredDiffieHellman is null
+            || (uint)payloadKe.DiffieHellmanGroup != preferredDiffieHellman.Value
+            || payloadKe.KeyData.Length < 1
+            || payloadKe.KeyData[0] == 0)
+        {
+            // pvpn/server.py:274
+
+            Console.WriteLine($"        Session: Could not find an agreeable proposition. Sending rejection to {sender.Address}:{sender.Port}");
+            Reply(to: sender, message: BuildResponse(ExchangeType.IKE_SA_INIT, sendZeroHeader, null,
+                new PayloadNotify(IkeProtocolType.NONE, NotifyId.INVALID_KE_PAYLOAD, null, null)
+            ));
+            return;
+        }
+
+        // build key
+        CryptoKeyExchange.DiffieHellman(payloadKe.DiffieHellmanGroup, payloadKe.KeyData, out var publicKey, out var sharedSecret);
+        CreateKeyAndCrypto(chosenProposal, sharedSecret, null);
+
+        var saMessage = BuildResponse(ExchangeType.IKE_SA_INIT, sendZeroHeader, null,
+            new PayloadSa(chosenProposal),
+            new PayloadNonce(_localNonce),
+            new PayloadKeyExchange(payloadKe.DiffieHellmanGroup, publicKey),
+            new PayloadNotify(IkeProtocolType.NONE, NotifyId.NAT_DETECTION_DESTINATION_IP, Array.Empty<byte>(), Bit.RandomBytes(20)),
+            new PayloadNotify(IkeProtocolType.NONE, NotifyId.NAT_DETECTION_SOURCE_IP, Array.Empty<byte>(), Bit.RandomBytes(20))
+        );
+
+        Console.WriteLine($"        Session: Sending IKE_SA_INIT reply to {sender.Address}:{sender.Port}");
+        Reply(to: sender, message: saMessage);
+        _state = SessionState.SA_SENT;
+
+        Console.WriteLine("        Session: Completed IKE_SA_INIT, transition to state=SA_SENT");
     }
 
     /// <summary>

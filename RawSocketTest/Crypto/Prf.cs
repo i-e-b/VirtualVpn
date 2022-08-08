@@ -8,12 +8,14 @@ using System.Security.Cryptography;
 /// </summary>
 public class Prf
 {
+    private readonly PrfId _transform;
     public int KeySize { get; }
     
     private readonly Func<byte[],byte[],byte[]> _algo;
 
     public Prf(PrfId transform)
     {
+        _transform = transform;
         switch (transform)
         {
             case PrfId.PRF_HMAC_MD5:
@@ -46,7 +48,9 @@ public class Prf
                 throw new ArgumentOutOfRangeException(nameof(transform), transform, null);
         }
     }
-    
+
+    public override string ToString() => $"Function={_transform.ToString()} KeySize={KeySize};";
+
     public static bool IsSupported(PrfId transformId)
     {
         switch (transformId)
