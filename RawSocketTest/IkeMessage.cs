@@ -60,7 +60,7 @@ public class IkeMessage
     public List<MessagePayload> Payloads { get; set; } = new();
 
     /// <summary>
-    /// Length in bytes of the 
+    /// Length in bytes of the IKE message header
     /// </summary>
     public const int HeaderLength = 28;
     
@@ -75,7 +75,7 @@ public class IkeMessage
     /// <param name="ikeCrypto"></param>
     public byte[] ToBytes(bool sendZeroHeader = false, IkeCrypto? ikeCrypto = null)
     {
-        // TODO: crypto, checksums, payloads
+        // TODO: crypto, checksums
         
         ExpectedLength = PayloadLength + HeaderLength;
         var offset = 0;
@@ -103,6 +103,8 @@ public class IkeMessage
             Payloads[i].NextPayload = (i+1 < Payloads.Count) ? Payloads[i+1].Type : PayloadType.NONE;
             offset = Payloads[i].WriteBytes(bytes, offset);
         }
+        
+        if (offset != ExpectedLength) throw new Exception($"Unexpected write length. Expected {ExpectedLength}, but got {offset}");
 
         return bytes;
     }

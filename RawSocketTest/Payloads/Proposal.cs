@@ -14,6 +14,8 @@ public class Proposal
     
     public int Size => 4 + SpiData.Length + Transforms.Sum(t=>t.Size) + Transforms.Count * 8;
 
+    private const byte TransformHasMore = 3;
+    private const byte TransformLastOne = 0;
 
     public byte[] Serialise()
     {
@@ -36,10 +38,10 @@ public class Proposal
 
         for (int i = 0; i < Transforms.Count; i++)
         {
-            var more = TransformCount - (i+1);
+            var more = (i == TransformCount - 1) ? TransformLastOne : TransformHasMore; // this is NOT a count, it's a flag, which is different from other 'more' flags
             var transform = Transforms[i];
             var attrData = transform.SerialiseAttributes();
-            transform.Length = (ushort)(attrData.Length+8); // data is without chain headers            
+            transform.Length = (ushort)(attrData.Length+8); // data is without chain headers
             
             
             data[idx++] = (byte)more;

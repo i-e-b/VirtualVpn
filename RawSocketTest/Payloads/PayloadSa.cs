@@ -5,6 +5,9 @@ namespace RawSocketTest.Payloads;
 // pvpn.message.PayloadSA - pvpn/message.py:286
 public class PayloadSa : MessagePayload
 {
+    private const byte PayloadHasMore = 2;
+    private const byte PayloadLastOne = 0;
+    
     public PayloadSa(byte[] data, ref int idx, ref PayloadType nextPayload)
     {
         ReadData(data, ref idx, ref nextPayload);
@@ -28,13 +31,15 @@ public class PayloadSa : MessagePayload
         var idx = 0;
         for (int i = 0; i < Proposals.Count; i++)
         {
-            var more = Proposals.Count - (i+1);
+            var more = (i == Proposals.Count - 1) ? PayloadLastOne : PayloadHasMore; // this is NOT a count, it's a flag, which is different from other 'more' flags
+            
             var proposal = Proposals[i];
             var proposalBytes = proposal.Serialise();
+            var length = proposalBytes.Length+4;
             
             Data[idx++] = (byte)more;
             idx++; // unused
-            Bit.WriteUInt16((ushort)proposalBytes.Length, Data, ref idx);
+            Bit.WriteUInt16((ushort)length, Data, ref idx);
             for (int k = 0; k < proposalBytes.Length; k++)
             {
                 Data[idx++] = proposalBytes[k];

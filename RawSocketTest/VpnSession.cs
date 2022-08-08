@@ -98,6 +98,8 @@ internal class VpnSession
         };
         resp.Payloads.AddRange(payloads);
         
+        // IEB: Do I need to run the checksum against this?
+        
         return resp.ToBytes(sendZeroHeader, crypto); // should wrap payloads in PayloadSK if we have crypto
     }
 
@@ -174,17 +176,15 @@ internal class VpnSession
                     new PayloadKeyExchange(payloadKe.DiffieHellmanGroup, publicKey),
                     new PayloadNotify(IkeProtocolType.NONE, NotifyId.NAT_DETECTION_DESTINATION_IP, Array.Empty<byte>(), Bit.RandomBytes(20)),
                     new PayloadNotify(IkeProtocolType.NONE, NotifyId.NAT_DETECTION_SOURCE_IP, Array.Empty<byte>(), Bit.RandomBytes(20))
-                    // payloads
                     );
                 
                 // IEB: THIS IS FAILING:
 /*
 received packet: from 185.81.252.44[500] to 159.69.13.126[500] (208 bytes)
-  length of TRANSFORM_SUBSTRUCTURE substructure list invalid
-  parsing of a PROPOSAL_SUBSTRUCTURE substructure failed
-payload type SECURITY_ASSOCIATION could not be parsed
-message parsing failed
+parsed IKE_SA_INIT response 1 [ SA No KE N(NATD_D_IP) N(NATD_S_IP) ]
+received message ID 1, expected 0, ignored
 */
+                
                 Console.WriteLine($"        Session: Sending IKE_SA_INIT reply to {sender.Address}:{sender.Port}");
                 Reply(to: sender, message: saMessage);
                 _state = SessionState.SA_SENT;
@@ -298,6 +298,9 @@ message parsing failed
     {
         _lastMessageBytes = message;
         _server.SendRaw(message, to, out _);
+        
+        var name = @$"C:\temp\IKEv2-Reply_{_maxSeq}_Port-{to.Port}_IKE.bin";
+        File.WriteAllBytes(name, message);
     }
 
     /// <summary>
