@@ -1,5 +1,6 @@
 ﻿using System.Net;
 using RawSocketTest.Crypto;
+using RawSocketTest.Helpers;
 using RawSocketTest.Payloads;
 using SkinnyJson;
 
@@ -205,8 +206,8 @@ internal class VpnSession
         }
 
         // build key
-        CryptoKeyExchange.DiffieHellman(payloadKe.DiffieHellmanGroup, payloadKe.KeyData, out var publicKey, out var sharedSecret);
-        CreateKeyAndCrypto(chosenProposal, sharedSecret, null);
+        DHKeyExchange.DiffieHellman(payloadKe.DiffieHellmanGroup, payloadKe.KeyData, out var publicKey, out var sharedSecret);
+        CreateKeyAndCrypto(chosenProposal, sharedSecret, publicKey, null, payloadKe.KeyData);
 
         var saMessage = BuildResponse(ExchangeType.IKE_SA_INIT, sendZeroHeader, null,
             new PayloadSa(chosenProposal),
@@ -226,7 +227,7 @@ internal class VpnSession
     /// <summary>
     /// Generate key from DH exchange, build crypto protocols.
     /// </summary>
-    private void CreateKeyAndCrypto(Proposal proposal, byte[] sharedSecret, byte[]? oldSkD)
+    private void CreateKeyAndCrypto(Proposal proposal, byte[] sharedSecret, byte[] publicKey, byte[]? oldSkD, byte[] payloadKeData)
     {
         // pvpn/server.py:223
         // Check the state is ok
@@ -258,15 +259,10 @@ internal class VpnSession
         }
         
         // Generate crypto bases
-        // IEB: very suspect code
-        /*
-        keymat_fmt = struct.Struct('>{0}s{1}s{1}s{2}s{2}s{0}s{0}s'.format(prf.key_size, integ.key_size, cipher.key_size))
-        keymat = prf.prfplus(skeyseed, self.peer_nonce+self.my_nonce+self.peer_spi+self.my_spi)
-        self.sk_d, sk_ai, sk_ar, sk_ei, sk_er, sk_pi, sk_pr = keymat_fmt.unpack(bytes(next(keymat) for _ in range(keymat_fmt.size)))*/
         
         var totalSize = 3*prf.KeySize + 2*integ.KeySize + 2*cipher.KeySize;
         var seed = _peerNonce.Concat(_localNonce).Concat(Bit.UInt64ToBytes(_peerSpi)).Concat(Bit.UInt64ToBytes(_localSpi)).ToArray();
-        var keySource = prf.HashFont(sKeySeed, seed, includeCount: true).Take(totalSize).ToArray();
+        var keySource = prf.PrfPlus(sKeySeed, seed, totalSize);
         
         var idx = 0;
         _skD = Bit.Subset(prf.KeySize, keySource, ref idx);
@@ -277,9 +273,27 @@ internal class VpnSession
         var skPi = Bit.Subset(prf.KeySize, keySource, ref idx);
         var skPr = Bit.Subset(prf.KeySize, keySource, ref idx);
         
+        if (idx != keySource.Length) throw new Exception($"Unexpected key set length in {nameof(CreateKeyAndCrypto)}. Expected {keySource.Length} but got {idx}");
+        
         // build crypto for both sides
         _myCrypto = new IkeCrypto(cipher, integ, prf, skEr, skAr, skPr, null);
         _peerCrypto = new IkeCrypto(cipher, integ, prf, skEi, skAi, skPi, null);
+        
+        File.WriteAllText(@"C:\temp\zzzLastSessionKeys.txt",
+            Bit.Describe("SK d", _skD)+
+            Bit.Describe("skAi", skAi)+
+            Bit.Describe("skAr", skAr)+
+            Bit.Describe("skEi", skEi)+
+            Bit.Describe("skEr", skEr)+
+            Bit.Describe("skPi", skPi)+
+            Bit.Describe("skPr", skPr)+
+            Bit.Describe("keySource", keySource)+
+            Bit.Describe("seed", seed)+
+            Bit.Describe("secret", sharedSecret)+
+            Bit.Describe("sKeySeed", sKeySeed)+
+            Bit.Describe("publicKey", publicKey)+
+            Bit.Describe("payloadKe", payloadKeData)
+            );
     }
 
     /// <summary>

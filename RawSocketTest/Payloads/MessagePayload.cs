@@ -1,4 +1,6 @@
-﻿namespace RawSocketTest.Payloads;
+﻿using RawSocketTest.Helpers;
+
+namespace RawSocketTest.Payloads;
 
 /// <summary>
 /// Base MessagePayload.

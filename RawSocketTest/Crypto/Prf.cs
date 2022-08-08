@@ -79,10 +79,38 @@ public class Prf
     public byte[] Hash(byte[] key, byte[] data) => _algo(key, data);
 
     /// <summary>
-    /// Generate a large sequence of bytes using a key and seed
+    /// Generate a large sequence of bytes using a key and seed, by folding
+    /// multiple rounds of data together. Then truncates?
     /// </summary>
-    public IEnumerable<byte> HashFont(byte[] key, byte[] seed, bool includeCount = true)
+    public byte[] PrfPlus(byte[] key, byte[] seed, int byteCount)
     {
+        var ret = new List<byte>();
+        var prev = Array.Empty<byte>();
+        var round = 1;
+        while (ret.Count < byteCount)
+        {
+            var data = prev.Concat(seed).Concat(new[]{(byte)round}).ToArray();
+            prev = Hash(key, data);
+            
+            ret.AddRange(prev);
+            round++;
+        }
+        return ret.GetRange(0, byteCount).ToArray();
+    }
+
+    public IEnumerable<byte> HashFont_Old(byte[] key, byte[] seed, bool includeCount = true)
+        {
+        /*def prfplus(key, data, n):
+    ret = bytes()
+    prev = bytes()
+    round = 1
+    while len(ret) < n:
+        prev = prf(key, prev + data + pack("!B", round))
+        ret += prev
+        round += 1
+    return ret[:n]*/
+        
+        
         var bytes = Array.Empty<byte>();
         for (var i = 1; i < 1024; i++)
         {

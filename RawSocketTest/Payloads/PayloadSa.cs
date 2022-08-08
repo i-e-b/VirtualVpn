@@ -1,4 +1,5 @@
 ﻿using RawSocketTest.Crypto;
+using RawSocketTest.Helpers;
 
 namespace RawSocketTest.Payloads;
 
@@ -105,7 +106,7 @@ public class PayloadSa : MessagePayload
             TransformType.ENCR => Cipher.IsSupported((EncryptionTypeId)transform.Id),
             TransformType.PRF => Prf.IsSupported((PrfId)transform.Id),
             TransformType.INTEG => Integrity.IsSupported((IntegId)transform.Id),
-            TransformType.DH => CryptoKeyExchange.IsSupported((DhId)transform.Id),
+            TransformType.DH => DHKeyExchange.IsSupported((DhId)transform.Id),
             TransformType.ESN => false // ??
             ,
             _ => false

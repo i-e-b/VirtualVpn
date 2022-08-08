@@ -1,6 +1,7 @@
 ﻿// ReSharper disable BuiltInTypeReferenceStyle
 
 using RawSocketTest.Crypto;
+using RawSocketTest.Helpers;
 using RawSocketTest.Payloads;
 using SkinnyJson;
 
@@ -12,7 +13,8 @@ public class IkeMessage
     /// Sender Security Parameter Indexes.
     /// This must be populated by the entity initially starting the key exchange
     /// <para></para>
-    /// RFC 4301: An arbitrary 32-bit value that is used by a receiver to identify the SA to which an incoming packet should be bound
+    /// RFC 4301: An arbitrary 32-bit value that is used by a receiver to identify the SA to which an incoming packet should be bound;
+    /// RFC 5723: "octet SPIi[8], SPIr[8];"
     /// </summary>
     public UInt64 SpiI { get; set; }
     

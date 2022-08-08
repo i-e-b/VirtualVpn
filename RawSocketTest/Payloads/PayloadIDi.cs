@@ -1,4 +1,6 @@
-﻿namespace RawSocketTest.Payloads;
+﻿using RawSocketTest.Helpers;
+
+namespace RawSocketTest.Payloads;
 
 // pvpn/message.py:117
 public class PayloadIDi : MessagePayload

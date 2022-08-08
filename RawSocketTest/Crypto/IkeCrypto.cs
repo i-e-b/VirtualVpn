@@ -1,4 +1,5 @@
 ﻿using System.Text;
+using RawSocketTest.Helpers;
 
 namespace RawSocketTest.Crypto;
 
@@ -150,22 +151,14 @@ public class IkeCrypto
 
         var cxBase = encrypted.Length - _integrity.HashSize;
         var target = Bit.Subset(_integrity.HashSize, encrypted, ref cxBase);
-        
-        var result = false;
-        var chop = 0;
-        while (!result)
-        {
-            var idx = 4;
-            if (chop + idx >= encrypted.Length) break;
-            
-            var shorter = Bit.Subset(encrypted.Length - chop - idx, encrypted, ref idx);
-            var longer = new byte[4].Concat(shorter).ToArray();
 
-            result = VerifyChecksumInternal(shorter, target);
-            result |= VerifyChecksumInternal(longer, target);
-            
-            chop ++;
-        }
+        var idx = 0;
+        var shorter = Bit.Subset(encrypted.Length - cxBase, encrypted, ref idx);
+        var longer = new byte[4].Concat(shorter).ToArray();
+
+        var result = VerifyChecksumInternal(shorter, target);
+        result    |= VerifyChecksumInternal(longer,  target);
+        
         return result;
     }
 

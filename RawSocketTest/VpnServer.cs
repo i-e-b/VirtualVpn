@@ -1,11 +1,12 @@
 ﻿using System.Net;
+using RawSocketTest.Helpers;
 using SkinnyJson;
 
 namespace RawSocketTest;
 
 public class VpnServer : IDisposable
 {
-    private const int IkeHeader = 0;
+    private const int NonEspHeader = 0; // https://docs.strongswan.org/docs/5.9/features/natTraversal.html
     
     private int _messageCount;
     private readonly UdpServer _server;
@@ -124,7 +125,7 @@ public class VpnServer : IDisposable
 
         // If the IKE header is there, pass back to the ike handler.
         // We strip the padding off, and pass a flag to say it should be sent with a response
-        if (header == IkeHeader) // start session?
+        if (header == NonEspHeader) // start session?
         {
             Console.WriteLine("    SPI zero on 4500 -- sending to 500 (IKE) responder");
             var offsetData = data.Skip(4).ToArray();
@@ -132,7 +133,11 @@ public class VpnServer : IDisposable
             return;
         }
 
-        // Read the SPI? IEB: not sure about this. The reference is weird.
+        // There is no Non-ESP marker, so the first 4 bytes are the ESP "Security Parameters Index".
+        // This is 32 bits, and not the 64 bits of the IKE SPI?
+        // (see https://docs.strongswan.org/docs/5.9/features/natTraversal.html , https://en.wikipedia.org/wiki/Security_Parameter_Index )
+        // "The SPI (as per RFC 2401) is a required part of an IPsec Security Association (SA)"
+        idx = 0;
         var spi = Bit.ReadUInt64(data, ref idx);
         
         // reject unknown sessions

@@ -8,6 +8,7 @@
     </PropertyGroup>
 
     <ItemGroup>
+      <PackageReference Include="Chaos.NaCl.Standard" Version="1.0.0" />
       <PackageReference Include="SkinnyJson" Version="2.1.1" />
     </ItemGroup>
 

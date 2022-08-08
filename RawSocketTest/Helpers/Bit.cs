@@ -1,5 +1,8 @@
 ﻿// ReSharper disable BuiltInTypeReferenceStyle
-namespace RawSocketTest;
+
+using System.Text;
+
+namespace RawSocketTest.Helpers;
 
 /// <summary>
 /// Byte and bit twiddling
@@ -145,5 +148,32 @@ public static class Bit
         }
         
         return result;
+    }
+
+    /// <summary>
+    /// Generate a description string in the same format as StrongSwan logs
+    /// </summary>
+    public static string Describe(string name, byte[] bytes)
+    {
+        var sb = new StringBuilder();
+        
+        sb.Append(name);
+        sb.Append(" => ");
+        sb.Append(bytes.Length);
+        sb.Append("bytes");
+        
+        var idx = 0;
+        while (idx < bytes.Length)
+        {
+            sb.AppendLine();
+            sb.Append($"{idx:d4}: ");
+            for (int b = 0; (b < 16) && (idx < bytes.Length); b++)
+            {
+                sb.Append($"{bytes[idx++]:X2} ");
+            }
+        }
+
+        sb.AppendLine();
+        return sb.ToString();
     }
 }
