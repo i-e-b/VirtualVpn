@@ -13,8 +13,14 @@ public class DHKeyExchange
         {
             Console.WriteLine("Using NaCl Ed25519");
             Chaos.NaCl.Ed25519.KeyPairFromSeed(out publicKey, out sharedSecret, peerData);
+            
+            // need to pack sharedSecret back into 32 bytes (polynomial to binary?)
+            
             return;
         }
+        
+        
+        Console.WriteLine($"### DID NOT USE EXPECTED DH GROUP!!! {(int)group} => {group.ToString()}");
 
         // pvpn/crypto.py:213
         
