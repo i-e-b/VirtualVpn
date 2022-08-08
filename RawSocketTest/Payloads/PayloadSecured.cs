@@ -37,7 +37,7 @@ public class PayloadSecured : MessagePayload
         
         if (ikeCrypto is null) return; // can't decrypt
         
-        //var ok = ikeCrypto.VerifyChecksum(Data); // IEB: currently failing?
+        var ok = ikeCrypto.VerifyChecksum(Data); // IEB: currently failing?
         //if (!ok) return;
         
         PlainBody = ikeCrypto.Decrypt(Data, out var nextHeader);

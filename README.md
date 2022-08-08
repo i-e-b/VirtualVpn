@@ -15,3 +15,9 @@ https://github.com/qwj/python-vpn
 https://datatracker.ietf.org/doc/html/rfc7296
 https://www.omnisecu.com/tcpip/ikev2-phase-1-and-phase-2-message-exchanges.php
 https://security.stackexchange.com/questions/56434/understanding-the-details-of-spi-in-ike-and-ipsec
+
+
+## Current issues & work-face
+
+- Decryption and checksum on first SA payload from StrongSwan are not working.
+  This is likely an issue with key generation or sharing?

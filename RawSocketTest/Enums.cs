@@ -39,6 +39,9 @@ public enum ExchangeType : byte
     GSA_REKEY = 41
 }
 
+/// <summary>
+/// Payload types from https://www.iana.org/assignments/ikev2-parameters/ikev2-parameters.xhtml#ikev2-parameters-2
+/// </summary>
 public enum PayloadType : byte
 {
     NONE = 0,
@@ -70,7 +73,9 @@ public enum PayloadType : byte
     
     /// <summary> Key Exchange (34) </summary>
     KE = 34,
+    /// <summary> Identification - Initiator (35) </summary>
     IDi = 35,
+    /// <summary> Identification - Responder (36) </summary>
     IDr = 36,
     CERT = 37,
     CERTREQ = 38,
@@ -79,10 +84,13 @@ public enum PayloadType : byte
     NOTIFY = 41,
     DELETE = 42,
     VENDOR = 43,
+    /// <summary> Traffic Selector - Initiator (44) </summary>
     TSi = 44,
+    /// <summary> Traffic Selector - Responder (45) </summary>
     TSr = 45,
     SK = 46,
     CP = 47,
+    /// <summary> Extensible Authentication (48) </summary>
     EAP = 48,
     GSPM = 49,
     IDg = 50,
@@ -96,9 +104,11 @@ public enum IkeProtocolType : byte
 {
     /// <summary> 0: Out of band (errors) </summary>
     NONE = 0,
-    /// <summary> 1: Key exchange </summary>
+    /// <summary> 1: Key exchange. Used to start a Security Association (SA) for use with ESP/AH </summary>
     IKE = 1,
+    /// <summary> 2: Authentication Header. Rarely used. </summary>
     AH = 2,
+    /// <summary> 3: Encapsulating Security Payload. Provides Data Integrity, Encryption, Authentication, and Anti-Replay functions. </summary>
     ESP = 3,
     FC_ESP_HEADER = 4,
     FC_CT_AUTHENTICATION = 5

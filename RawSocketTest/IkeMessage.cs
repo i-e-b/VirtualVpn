@@ -246,12 +246,17 @@ public class IkeMessage
             
             case PayloadType.VENDOR:
                 return One(new PayloadVendorId(srcData, ref idx, ref nextPayload));
+            
+            case PayloadType.IDi:
+                return One(new PayloadIDi(srcData, ref idx, ref nextPayload));
 
             case PayloadType.SK: // encrypted body. TODO: This should be pumped back around to read contents?
             {
                 if (ikeCrypto is null) throw new Exception("Received an encrypted packet without agreeing on session crypto");
-                var ok = ikeCrypto.VerifyChecksum(srcData); // IEB: currently failing?
-                if (!ok) Console.WriteLine("CHECKSUM FAILED! We will continue, but result might be unreliable");
+                
+                var ok = ikeCrypto.VerifyChecksum(srcData); // IEB: currently failing? Crypto results also look wrong
+                //if (!ok) Console.WriteLine("CHECKSUM FAILED! We will continue, but result might be unreliable");
+                if (!ok) throw new Exception("CHECKSUM FAILED!");
                 
                 var expandedPayload = new PayloadSecured(srcData, ikeCrypto, ref idx, ref nextPayload);
                 // TODO: read the 'plain' as a new set of payloads
@@ -260,6 +265,7 @@ public class IkeMessage
                 if (expandedPayload.PlainBody?.Length > 0)
                 {
                     Console.WriteLine($"    Reading inner payload, starting with {nextPayload.ToString()}");
+                    File.WriteAllBytes(@"C:\temp\SK_Plain.bin", expandedPayload.PlainBody);
     
                     var childIdx = 0;
                     var innerPayloads = ReadPayloadChainInternal(nextPayload, ikeCrypto, ref childIdx, expandedPayload.PlainBody).ToList();

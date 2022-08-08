@@ -77,12 +77,13 @@ public abstract class MessagePayload
         // Read header
         Type = type;
         NextPayload = (PayloadType)data[idx + 0];
-        IsCritical = data[idx + 1];
+        IsCritical = (byte)(data[idx + 1] >> 7);
         Length = (UInt16)Bit.Unpack(data, idx + 2, idx + 3); // of the packet, including headers
 
         // Copy body locally
         var dataLen = Length - 4;
         var remains = data.Length - idx;
+        if (remains < dataLen) throw new Exception($"Message payload data was truncated. Other side declared {dataLen}, but received {remains}. This may be a cryptographic error.");
         if (dataLen > 0 && dataLen <= remains)
         {
             Data = new byte[dataLen];

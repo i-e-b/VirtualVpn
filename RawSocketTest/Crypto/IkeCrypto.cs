@@ -148,28 +148,40 @@ public class IkeCrypto
         if (_integrity is null) return true;
         if (_skA is null) return false;
 
-        // read just the main body
-        var payloadLength = encrypted.Length - _integrity.HashSize;
-        //var mainPayload = (new byte[4]).Concat(encrypted.Take(payloadLength)).ToArray();
-        var mainPayload = encrypted.Take(payloadLength).ToArray();
+        var cxBase = encrypted.Length - _integrity.HashSize;
+        var target = Bit.Subset(_integrity.HashSize, encrypted, ref cxBase);
+        
+        var result = false;
+        var chop = 0;
+        while (!result)
+        {
+            var idx = 4;
+            if (chop + idx >= encrypted.Length) break;
+            
+            var shorter = Bit.Subset(encrypted.Length - chop - idx, encrypted, ref idx);
+            var longer = new byte[4].Concat(shorter).ToArray();
 
+            result = VerifyChecksumInternal(shorter, target);
+            result |= VerifyChecksumInternal(longer, target);
+            
+            chop ++;
+        }
+        return result;
+    }
+
+    private bool VerifyChecksumInternal(byte[] encrypted, byte[] target)
+    {
         // compute
-        var expected = _integrity.Compute(_skA, mainPayload);
+        var expected = _integrity!.Compute(_skA!, encrypted);
         
-        // TEST CODE
-        // copy
-        var actual = new byte[expected.Length];
-        for (int i = 0; i < expected.Length; i++) { actual[i] = encrypted[i + payloadLength]; }
-        
-        Console.WriteLine($"    Comparing checksums: sk-A={Hex(_skA)}; {Hex(expected)} == {Hex(actual)} ?");
-        // END TEST CODE
+        Console.WriteLine($"    Comparing checksums: {Hex(expected)} == {Hex(target)} ? sk-A={Hex(_skA!)}");
         
         // compare
         for (int i = 0; i < expected.Length; i++)
         {
-            if (expected[i] != encrypted[i + payloadLength]) return false;
+            if (expected[i] != target[i]) return false;
         }
-
+        
         return true;
     }
 

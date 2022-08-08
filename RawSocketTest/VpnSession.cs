@@ -144,7 +144,8 @@ internal class VpnSession
         }
 
         // We should have crypto now, as long as we're out of IKE_SA_INIT phase
-        request.ReadPayloadChain(_peerCrypto); // pvpn/server.py:266
+        //request.ReadPayloadChain(_peerCrypto); // pvpn/server.py:266
+        request.ReadPayloadChain(_myCrypto); // pvpn/server.py:266
 
         switch (request.Exchange)
         {
