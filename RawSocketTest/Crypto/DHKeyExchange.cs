@@ -44,23 +44,27 @@ public class DHKeyExchange
 
         // IEB: all of this seems to be faulty!
 
+        
+        //System.Security.Cryptography.ff
 
 
 
         if (!_primes.ContainsKey(group)) throw new Exception($"Prime group {group.ToString()} is not supported");
         
         //var peer = new BigInteger(peerData, isBigEndian:true);
-        var peer = new BigInteger(peerData, isBigEndian:true, isUnsigned: false); // their public key
+        var peer = new BigInteger(peerData, isBigEndian:false, isUnsigned: false); // their public key
         var prime = _primes[group];
         
         var p = prime.P;                    // prime for modular forms, private key scale
         var l = prime.L;                    // key length
-        var privateBytes = new byte[peerData.Length];
-        RandomNumberGenerator.Fill(privateBytes);
-        var a = new BigInteger(privateBytes, isUnsigned: true); // private key (random)
+        
+        //var privateBytes = new byte[peerData.Length];
+        //RandomNumberGenerator.Fill(privateBytes);
+        var a = Abs(p*2); //new BigInteger(privateBytes, isUnsigned: true); // private key (random)
 
         BigInteger pub, shs;
-
+        Console.WriteLine($"Key exchange with prime group {group.ToString()}...");
+        
         if (prime.G_Function is not null)
         {
             Console.WriteLine($"Elliptic curve, l={l}, a={a}, p={p}, peer={peer}");

@@ -9,6 +9,7 @@
 
     <ItemGroup>
       <PackageReference Include="SkinnyJson" Version="2.1.1" />
+      <PackageReference Include="System.Security.Cryptography.OpenSsl" Version="5.0.0" />
     </ItemGroup>
 
 </Project>

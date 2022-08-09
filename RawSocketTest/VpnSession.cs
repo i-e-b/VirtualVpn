@@ -269,8 +269,13 @@ internal class VpnSession
         Console.WriteLine($"        Session: We agree on a viable proposition, and it is the default. Continue with key share for {payloadKe.DiffieHellmanGroup.ToString()}" +
                           $" Supplied length is {payloadKe.KeyData.Length} bytes");
         
-        DHKeyExchange.DiffieHellman(payloadKe.DiffieHellmanGroup, payloadKe.KeyData /*Them public*/, out var publicKey, out var sharedSecret);
-        CreateKeyAndCrypto(chosenProposal, sharedSecret, publicKey, null, payloadKe.KeyData);
+        
+        var keys = new ModpDHKeyExchange(group: 14, n: 64); 
+        var secret = keys.DeriveSecret(payloadKe.KeyData);
+        var publicKey = keys.GetPublicKey();
+        
+        //DHKeyExchange.DiffieHellman(payloadKe.DiffieHellmanGroup, payloadKe.KeyData /*Them public*/, out var publicKey, out var sharedSecret);
+        CreateKeyAndCrypto(chosenProposal, secret, publicKey, null, payloadKe.KeyData);
 
         var saMessage = BuildResponse(ExchangeType.IKE_SA_INIT, sendZeroHeader, null,
             new PayloadSa(chosenProposal),
