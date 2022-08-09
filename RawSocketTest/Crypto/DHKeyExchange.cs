@@ -2,6 +2,9 @@
 using System.Globalization;
 using System.Numerics;
 using System.Security.Cryptography;
+using Org.BouncyCastle.Crypto.Agreement;
+using Org.BouncyCastle.Crypto.Parameters;
+using Org.BouncyCastle.Security;
 using RawSocketTest.Helpers;
 using static System.Numerics.BigInteger;
 
@@ -9,19 +12,13 @@ namespace RawSocketTest.Crypto;
 
 public class DHKeyExchange
 {
-    private static readonly byte[] _privateKey = new byte[32];
-    static DHKeyExchange()
-    {
-        RandomNumberGenerator.Fill(_privateKey);
-    }
-    
     /// <summary>
     /// `payloadKe.KeyData` -> the other side's public key
     /// I then generate my private key randomly, figure out my public key, and send.
     /// In parallel to that, I have enough details to form the key
     ///
     /// This is easiest to understand in modular DH, but everything has moved on to elliptic curves.
-    ///  
+    ///  <code>
     ///  ┌──────────────────────────┬──────────────────────────┐
     ///  │            Them          │         Us               │
     ///  ├──────────────────────────┴──────────────────────────┤
@@ -31,7 +28,7 @@ public class DHKeyExchange
     ///  │  a = (g^A) mod p         │   b = (g^b) mod p        │
     ///  ├──────────────────────────┴──────────────────────────┤
     ///  │                      Exchange                       │
-    ///  │           a ─────────►       ◄─────────── b         │
+    ///  │           a ─────────►     ◄─────────── b         │
     ///  ├──────────────────────────┬──────────────────────────┤
     ///  │  K = (g^BA)%p = (b^A)%p  │  K = (g^AB)%p = (a^B)%p  │
     ///  ├──────────────────────────┴──────────────────────────┤
@@ -40,25 +37,99 @@ public class DHKeyExchange
     ///   Where 'a' and 'b' are the public keys,
     ///   'A' and 'B' are the private keys,
     ///   and 'K' is the shared secret.
-    /// 
+    /// </code>
     /// We only need the shared secret to generate the other
     /// keys, so the rest can be ignored once we have that.
     /// </summary>
     public static void DiffieHellman(DhId group, byte[] peerData, out byte[] publicKey, out byte[] sharedSecret)
     {
         // pvpn/crypto.py:213
-        
+
+        // IEB: all of this seems to be faulty!
+
+
+
+
         if (!_primes.ContainsKey(group)) throw new Exception($"Prime group {group.ToString()} is not supported");
         
         //var peer = new BigInteger(peerData, isBigEndian:true);
-        var peer = new BigInteger(peerData, isBigEndian:true, isUnsigned: true); // their public key
+        var peer = new BigInteger(peerData, isBigEndian:true, isUnsigned: false); // their public key
         var prime = _primes[group];
         
         var p = prime.P;                    // prime for modular forms, private key scale
         var l = prime.L;                    // key length
-        var a = new BigInteger(_privateKey, isUnsigned: true); // private key
+        var privateBytes = new byte[peerData.Length];
+        RandomNumberGenerator.Fill(privateBytes);
+        var a = new BigInteger(privateBytes, isUnsigned: true); // private key
 
+        
+        if (group == DhId.DH_14)
+        {
+            var sr = new SecureRandom();
+            //new Org.BouncyCastle.Crypto.CipherKeyGenerator().I
+            /*
+            // Alice side -- probably not us
+            var keyGen = GeneratorUtilities.GetKeyPairGenerator("DH")!;
+            var myGen = new DHParametersGenerator();
+            myGen.Init(2048, 30, sr);
+            var myParams = myGen.GenerateParameters()!;
+            
+            var kgp = new DHKeyGenerationParameters(sr, myParams);
+            keyGen.Init(kgp);
+            
+            var myKeyPair = keyGen.GenerateKeyPair();
+            var keyAgree = AgreementUtilities.GetBasicAgreement("DH");
+            keyAgree.Init(myKeyPair.Private);
+            */
+            
+            // https://www.rfc-editor.org/rfc/rfc3526#section-3
+            var primeHex="FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B139B22514A08798E3404DDEF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245E485B576625E7EC6F44C42E9A637ED6B0BFF5CB6F406B7EDEE386BFB5A899FA5AE9F24117C4B1FE649286651ECE45B3DC2007CB8A163BF0598DA48361C55D39A69163FA8FD24CF5F83655D23DCA3AD961C62F356208552BB9ED529077096966D670C354E4ABC9804F1746C08CA18217C32905E462E36CE3BE39E772C180E86039B2783A2EC07A28FB5C55DF06F4C52C9DE2BCBF6955817183995497CEA956AE515D2261898FA051015728E5A8AACAA68FFFFFFFFFFFFFFFF";
+            var generatorHex="02";
+            
+            var keyGen = GeneratorUtilities.GetKeyPairGenerator("DH")!;
+            var dhParams = new DHParameters(
+                p: new Org.BouncyCastle.Math.BigInteger( primeHex, 16),
+                g: new Org.BouncyCastle.Math.BigInteger( generatorHex, 16));
+            
+            var keyGenParams = new DHKeyGenerationParameters(sr, dhParams);
+            keyGen.Init(keyGenParams);
+            
+            var keyPair = keyGen.GenerateKeyPair();
+            var keyAgree = (DHBasicAgreement)AgreementUtilities.GetBasicAgreement("DH");
+            keyAgree.Init(keyPair.Private);
+            
+            var privateDH = (DHPrivateKeyParameters)keyPair.Private;
+            var publicDH = (DHPublicKeyParameters)keyPair.Public;
+            
+            var bcPeer = new Org.BouncyCastle.Math.BigInteger(peerData);
+            var alice = new DHPublicKeyParameters(bcPeer, dhParams); // peer data not accepted here?
+            
+            var x = keyAgree.CalculateAgreement(alice);
+            
+            Console.WriteLine(keyPair.ToString());
+            Console.WriteLine(x.ToString());
+            
+            publicKey = BcGetBytes(publicDH.Y!);
+            sharedSecret = BcGetBytes(x);
+            return;
+        }
+        
         BigInteger pub, shs;
+        
+        /*
+        if (group == DhId.DH_14)
+        {
+            // https://www.rfc-editor.org/rfc/rfc3526#section-3
+            
+            // 2^2048 - 2^1984 - 1 + 2^64 * { [2^1918 pi] + 124476 }
+            //var p = Pow(2,2048) - Pow(2,1984) - 1 + Pow(2,64) * ( (Pow(2,1918) * Math.PI) + 124476);
+            var pstr = "FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B139B22514A08798E3404DDEF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245E485B576625E7EC6F44C42E9A637ED6B0BFF5CB6F406B7EDEE386BFB5A899FA5AE9F24117C4B1FE649286651ECE45B3DC2007CB8A163BF0598DA48361C55D39A69163FA8FD24CF5F83655D23DCA3AD961C62F356208552BB9ED529077096966D670C354E4ABC9804F1746C08CA18217C32905E462E36CE3BE39E772C180E86039B2783A2EC07A28FB5C55DF06F4C52C9DE2BCBF6955817183995497CEA956AE515D2261898FA051015728E5A8AACAA68FFFFFFFFFFFFFFFF";
+            var pbytes = Bit.ParseBytes(pstr);
+            
+            p = new BigInteger(pbytes, isUnsigned:true, isBigEndian:false); // works, but results in "applying DH public value failed"
+        }
+        */
+        
 
         if (prime.G_Function is not null)
         {
@@ -88,15 +159,20 @@ public class DHKeyExchange
             var g = prime.G_Value.Value;
             Console.WriteLine($"Modular form, l={l}, g={g}, a={a}, p={p}, peer={peer}");
             
-            pub = ModPow(g, a, p);
-            shs = ModPow(peer, a, p);
-            
-            publicKey = ToBytesPadded(pub, l);
-            sharedSecret = ToBytesPadded(shs, l);
+            pub = ModPow(g, a, Abs(p));
+            shs = ModPow(peer, a, Abs(p));
+
+            publicKey = ToBytesPadded(pub, l*2).Take(l).ToArray();
+            sharedSecret = ToBytesPadded(shs, l*2).Take(l).ToArray();
             return;
         }
         
         throw new Exception($"Invalid prime definition for group {group.ToString()}");
+    }
+
+    private static byte[] BcGetBytes(Org.BouncyCastle.Math.BigInteger p0)
+    {
+        return p0.ToByteArray()!;
     }
 
     [SuppressMessage("ReSharper", "InconsistentNaming")]
@@ -238,7 +314,7 @@ public class DHKeyExchange
     
     private static byte[] ToBytesPadded(BigInteger value, int len)
     {
-        var vb = value.ToByteArray(isBigEndian:true, isUnsigned: true);
+        var vb = value.ToByteArray(isBigEndian:true, isUnsigned: false);
         var pad = len - vb.Length;
         
         Console.WriteLine($"Key needs {pad} bytes of padding");
@@ -252,6 +328,7 @@ public class DHKeyExchange
 
     public static bool IsSupported(DhId transformId) //=> _primes.ContainsKey(transformId);
     {
+        // This is M-Pesa specific, as they haven't updated since 2006
         return transformId == DhId.DH_14;
     }
 
@@ -275,11 +352,13 @@ public class DHKeyExchange
             };
         }
 
-        public static DhSrc Exp(int l, int gi, string p)
+        public static DhSrc Exp(int gi, int l, string p)
         {
+            var pBytes = Bit.ParseBytes(p);
+            
             return new DhSrc
             {
-                P = Parse(p, NumberStyles.HexNumber),
+                P = new BigInteger(pBytes, isUnsigned:false, isBigEndian:true),
                 G_Value = new BigInteger(gi),
                 G_Function = null,
                 G_Tuple = null,
@@ -289,10 +368,13 @@ public class DHKeyExchange
 
         public static DhSrc ExpBig(int l, string p, string g)
         {
+            var pBytes = Bit.ParseBytes(p);
+            var gBytes = Bit.ParseBytes(g);
+            
             return new DhSrc
             {
-                P = Parse(p, NumberStyles.HexNumber),
-                G_Value = Parse(g, NumberStyles.HexNumber),
+                P = new BigInteger(pBytes, isUnsigned:false, isBigEndian:true),
+                G_Value = new BigInteger(gBytes, isUnsigned:false, isBigEndian:true),
                 G_Function = null,
                 G_Tuple = null,
                 L = l
@@ -301,9 +383,11 @@ public class DHKeyExchange
     
         public static DhSrc Elliptic(int l, string p, params string[] ge)
         {
+            var pBytes = Bit.ParseBytes(p);
+            
             return new DhSrc
             {
-                P = Parse(p, NumberStyles.HexNumber),
+                P = new BigInteger(pBytes, isUnsigned:false, isBigEndian:true),
                 G_Value = null,
                 G_Function = null,
                 G_Tuple = ge.Select(s => s.StartsWith('-') ? Parse(s, NumberStyles.Integer) : Parse(s, NumberStyles.HexNumber)).ToArray(),

@@ -1,5 +1,6 @@
 ﻿// ReSharper disable BuiltInTypeReferenceStyle
 
+using System.Globalization;
 using System.Text;
 
 namespace RawSocketTest.Helpers;
@@ -104,6 +105,14 @@ public static class Bit
         return result;
     }
 
+
+    public static byte[] UInt16ToBytes(ushort value)
+    {
+        var data = new byte[2];
+        data[0] = (byte)((value >>  8) & 0xff);
+        data[1] = (byte)((value >>  0) & 0xff);
+        return data;
+    }
     public static byte[] UInt32ToBytes(uint value)
     {
         var data = new byte[4];
@@ -180,5 +189,17 @@ public static class Bit
 
         sb.AppendLine();
         return sb.ToString();
+    }
+
+    public static byte[] ParseBytes(string pstr)
+    {
+        var accum = new List<byte>();
+
+        for (int i = 0; i < pstr.Length; i += 2)
+        {
+            accum.Add(byte.Parse($"{pstr[i]}{pstr[i+1]}",NumberStyles.HexNumber));
+        }
+        
+        return accum.ToArray();
     }
 }

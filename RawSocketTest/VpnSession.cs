@@ -175,11 +175,44 @@ internal class VpnSession
                throw new Exception($"Unexpected request: {request.Exchange.ToString()}");
         }
     }
-    
-    private static readonly byte[] _publicFix = {
+
+    // TODO: replace with random for the session
+    private static readonly byte[] _publicFix =
+    {
         0x08, 0x5D, 0xE0, 0x94, 0x6B, 0xBE, 0xAB, 0x4A, 0x74, 0x7E, 0x87, 0x5C, 0x3D, 0x0F, 0xFD, 0x70,
-        0xEA, 0x00, 0x9C, 0x01, 0x5A, 0x0D, 0xE6, 0x00, 0x5B, 0xCE, 0xF3, 0x31, 0x1B, 0x50, 0x6C, 0x22
+        0xEA, 0x00, 0x9C, 0x01, 0x5A, 0x0D, 0xE6, 0x00, 0x5B, 0xCE, 0xF3, 0x31, 0x1B, 0x50, 0x6C, 0x22,
+        /*0xE8, 0x13, 0xE7, 0x6D, 0x65, 0x19, 0xDA, 0x7C, 0x34, 0xF1, 0xEA, 0x80, 0x52, 0x94, 0xB7, 0x93,
+        0x47, 0xB3, 0xB9, 0x24, 0x3D, 0xDC, 0xDE, 0x70, 0x74, 0xCB, 0x95, 0xC1, 0x50, 0x5C, 0x2F, 0x53,
+        0x58, 0x88, 0x62, 0xB9, 0xC7, 0x18, 0xC3, 0xBA, 0x72, 0x1F, 0x37, 0x7C, 0x7D, 0xBC, 0x00, 0x42,
+        0x67, 0x87, 0xBF, 0x72, 0x7C, 0x40, 0x23, 0x19, 0xBB, 0xAD, 0x17, 0xF1, 0x19, 0xCF, 0xC7, 0xC0,
+        0x38, 0x82, 0xF6, 0xF2, 0x7E, 0x33, 0x9F, 0x74, 0xDD, 0x36, 0x07, 0xB3, 0x70, 0xFF, 0xF4, 0xB4,
+        0xF9, 0xCC, 0xD8, 0x84, 0x01, 0x80, 0xAC, 0xFA, 0xD0, 0x99, 0xAE, 0x32, 0xEC, 0x7C, 0x10, 0x8D,
+        0xE8, 0xB3, 0xB1, 0xC0, 0xEE, 0xA5, 0xE9, 0x3D, 0x45, 0xCE, 0x58, 0xD0, 0xA6, 0xB5, 0xB6, 0x54,
+        0x37, 0x38, 0xB8, 0x55, 0x2D, 0x8B, 0xC5, 0x75, 0x83, 0x9D, 0x21, 0x91, 0x4E, 0x8A, 0x02, 0x26,
+        0x1B, 0xA7, 0x33, 0x00, 0xEB, 0xB5, 0x2F, 0xE5, 0x28, 0xF8, 0x50, 0x66, 0x1E, 0xAE, 0x5A, 0xDC,
+        0xDE, 0x1F, 0x0B, 0x20, 0xD4, 0xA4, 0x13, 0x1F, 0x71, 0xD0, 0x2C, 0x1F, 0xA6, 0x8C, 0xBD, 0x4A,
+        0x1E, 0x1D, 0x4E, 0xF8, 0x91, 0x31, 0x3E, 0x14, 0x2D, 0x3C, 0xC7, 0x28, 0x8C, 0xCB, 0x7F, 0xF4,
+        0x9F, 0x85, 0xB4, 0xDA, 0x0E, 0x81, 0x32, 0x71, 0x7D, 0x8C, 0xFF, 0x27, 0x0E, 0x1E, 0x97, 0x44,
+        0x7D, 0xC4, 0x57, 0xE6, 0x49, 0xB8, 0x92, 0xD1, 0xED, 0xE3, 0x68, 0xE2, 0x4C, 0xDB, 0x02, 0x23,
+        0xC4, 0x89, 0x03, 0xFD, 0xC8, 0x69, 0xD5, 0x94, 0x11, 0x25, 0x55, 0x65, 0x68, 0x78, 0x23, 0x7F*/
     };
+
+    public void TriggerSession()
+    {
+        // this is pretty much what we'll have to do to start a session.
+        Proposal defaultProposal = new Proposal(); // TODO: fill this in
+        byte[] newPublicKey = new byte[256]; // todo: generate
+        
+        var reKeyMessage = BuildResponse(ExchangeType.IKE_SA_INIT, false, null,
+            new PayloadSa(defaultProposal),
+            new PayloadNonce(_localNonce),
+            new PayloadKeyExchange(DhId.DH_14, newPublicKey), // Pre-start our preferred exchange
+            new PayloadNotify(IkeProtocolType.NONE, NotifyId.NAT_DETECTION_DESTINATION_IP, Array.Empty<byte>(), Bit.RandomBytes(20)),
+            new PayloadNotify(IkeProtocolType.NONE, NotifyId.NAT_DETECTION_SOURCE_IP, Array.Empty<byte>(), Bit.RandomBytes(20))
+        );
+        
+        // todo: send the message
+    }
 
     private void HandleSaInit(IkeMessage request, IPEndPoint sender, bool sendZeroHeader)
     {
@@ -211,45 +244,21 @@ internal class VpnSession
         // then we will make a new proposal with a new key exchange.
         if ((uint)payloadKe.DiffieHellmanGroup != preferredDiffieHellman.Value)
         {
-            Console.WriteLine($"        Session: We agree on a viable proposition, but it was not the default. Sending a new key exchange set");
+            Console.WriteLine("        Session: We agree on a viable proposition, but it was not the default. Requesting switch.");
             
             var reKeyMessage = BuildResponse(ExchangeType.IKE_SA_INIT, sendZeroHeader, null,
                 new PayloadSa(chosenProposal),
-                new PayloadNonce(_localNonce),
-                new PayloadKeyExchange((DhId)preferredDiffieHellman.Value, _publicFix),
-                new PayloadNotify(IkeProtocolType.NONE, NotifyId.NAT_DETECTION_DESTINATION_IP, Array.Empty<byte>(), Bit.RandomBytes(20)),
-                new PayloadNotify(IkeProtocolType.NONE, NotifyId.NAT_DETECTION_SOURCE_IP, Array.Empty<byte>(), Bit.RandomBytes(20))
+                new PayloadNotify(IkeProtocolType.IKE, NotifyId.INVALID_KE_PAYLOAD, Bit.UInt64ToBytes(request.SpiI), Bit.UInt16ToBytes((ushort)DhId.DH_14))
             );
             
             Reply(to: sender, message: reKeyMessage);
             _peerMsgId--; // this is not going to count as a sequenced message
             return;
-/*
- parsed IKE_SA_INIT response 0 [ N(INVAL_KE) ]
-peer didn't accept DH group CURVE_25519, it requested MODP_2048
-initiating IKE_SA mpesa[9] to 197.250.65.132
-generating IKE_SA_INIT request 0 [ SA KE No N(NATD_S_IP) N(NATD_D_IP) N(FRAG_SUP) N(HASH_ALG) N(REDIR_SUP) ]
-sending packet: from 159.69.13.126[500] to 197.250.65.132[500] (1128 bytes)
-received packet: from 197.250.65.132[500] to 159.69.13.126[500] (619 bytes)
-parsed IKE_SA_INIT response 0 [ SA KE No V V N(NATD_S_IP) N(NATD_D_IP) CERTREQ N(FRAG_SUP) V ]
-received Cisco Delete Reason vendor ID
-received Cisco Copyright (c) 2009 vendor ID
-received FRAGMENTATION vendor ID
-selected proposal: IKE:AES_CBC_256/HMAC_SHA2_256_128/PRF_HMAC_SHA2_256/MODP_2048
-received 2 cert requests for an unknown ca
-sending cert request for "CN=VPN root CA"
-authentication of '159.69.13.126' (myself) with pre-shared key
-establishing CHILD_SA mpesa{5}
-generating IKE_AUTH request 1 [ IDi N(INIT_CONTACT) CERTREQ IDr AUTH SA TSi TSr N(MOBIKE_SUP) N(ADD_4_ADDR) N(ADD_4_ADDR) N(ADD_4_ADDR) N(ADD_4_ADDR) N(ADD_4_ADDR) N(ADD_6_ADDR) N(EAP_ONLY) N(MSG_ID_SYN_SUP) ]
-sending packet: from 159.69.13.126[4500] to 197.250.65.132[4500] (480 bytes)
-received packet: from 197.250.65.132[4500] to 159.69.13.126[4500] (256 bytes)
-parsed IKE_AUTH response 1 [ V IDr AUTH SA TSi TSr N(ESP_TFC_PAD_N) N(NON_FIRST_FRAG) N(MOBIKE_SUP) ]
-authentication of '197.250.65.132' with pre-shared key successful
-*/
         }
 
         // build key
-        
+        Console.WriteLine($"        Session: We agree on a viable proposition, and it is the default. Continue with key share for {payloadKe.DiffieHellmanGroup.ToString()}" +
+                          $" Supplied length is {payloadKe.KeyData.Length} bytes");
         
         DHKeyExchange.DiffieHellman(payloadKe.DiffieHellmanGroup, payloadKe.KeyData /*Them public*/, out var publicKey, out var sharedSecret);
         CreateKeyAndCrypto(chosenProposal, sharedSecret, publicKey, null, payloadKe.KeyData);
