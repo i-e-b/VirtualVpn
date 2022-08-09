@@ -8,8 +8,6 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <PackageReference Include="BouncyCastle.NetCore" Version="1.9.0" />
-      <PackageReference Include="Chaos.NaCl.Standard" Version="1.0.0" />
       <PackageReference Include="SkinnyJson" Version="2.1.1" />
     </ItemGroup>
 

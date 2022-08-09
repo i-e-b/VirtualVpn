@@ -75,7 +75,7 @@ public class IkeMessage
     /// Empty if message is generated locally.
     /// The values here should never be updated once the message is received.
     /// </summary>
-    private byte[] RawData { get; set; } = Array.Empty<byte>();
+    public byte[] RawData { get; set; } = Array.Empty<byte>();
 
     /// <summary>
     /// Serialise the message to a byte string

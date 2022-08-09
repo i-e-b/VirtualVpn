@@ -2,9 +2,6 @@
 using System.Globalization;
 using System.Numerics;
 using System.Security.Cryptography;
-using Org.BouncyCastle.Crypto.Agreement;
-using Org.BouncyCastle.Crypto.Parameters;
-using Org.BouncyCastle.Security;
 using RawSocketTest.Helpers;
 using static System.Numerics.BigInteger;
 
@@ -60,76 +57,9 @@ public class DHKeyExchange
         var l = prime.L;                    // key length
         var privateBytes = new byte[peerData.Length];
         RandomNumberGenerator.Fill(privateBytes);
-        var a = new BigInteger(privateBytes, isUnsigned: true); // private key
+        var a = new BigInteger(privateBytes, isUnsigned: true); // private key (random)
 
-        
-        if (group == DhId.DH_14)
-        {
-            var sr = new SecureRandom();
-            //new Org.BouncyCastle.Crypto.CipherKeyGenerator().I
-            /*
-            // Alice side -- probably not us
-            var keyGen = GeneratorUtilities.GetKeyPairGenerator("DH")!;
-            var myGen = new DHParametersGenerator();
-            myGen.Init(2048, 30, sr);
-            var myParams = myGen.GenerateParameters()!;
-            
-            var kgp = new DHKeyGenerationParameters(sr, myParams);
-            keyGen.Init(kgp);
-            
-            var myKeyPair = keyGen.GenerateKeyPair();
-            var keyAgree = AgreementUtilities.GetBasicAgreement("DH");
-            keyAgree.Init(myKeyPair.Private);
-            */
-            
-            // https://www.rfc-editor.org/rfc/rfc3526#section-3
-            var primeHex="FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B139B22514A08798E3404DDEF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245E485B576625E7EC6F44C42E9A637ED6B0BFF5CB6F406B7EDEE386BFB5A899FA5AE9F24117C4B1FE649286651ECE45B3DC2007CB8A163BF0598DA48361C55D39A69163FA8FD24CF5F83655D23DCA3AD961C62F356208552BB9ED529077096966D670C354E4ABC9804F1746C08CA18217C32905E462E36CE3BE39E772C180E86039B2783A2EC07A28FB5C55DF06F4C52C9DE2BCBF6955817183995497CEA956AE515D2261898FA051015728E5A8AACAA68FFFFFFFFFFFFFFFF";
-            var generatorHex="02";
-            
-            var keyGen = GeneratorUtilities.GetKeyPairGenerator("DH")!;
-            var dhParams = new DHParameters(
-                p: new Org.BouncyCastle.Math.BigInteger( primeHex, 16),
-                g: new Org.BouncyCastle.Math.BigInteger( generatorHex, 16));
-            
-            var keyGenParams = new DHKeyGenerationParameters(sr, dhParams);
-            keyGen.Init(keyGenParams);
-            
-            var keyPair = keyGen.GenerateKeyPair();
-            var keyAgree = (DHBasicAgreement)AgreementUtilities.GetBasicAgreement("DH");
-            keyAgree.Init(keyPair.Private);
-            
-            var privateDH = (DHPrivateKeyParameters)keyPair.Private;
-            var publicDH = (DHPublicKeyParameters)keyPair.Public;
-            
-            var bcPeer = new Org.BouncyCastle.Math.BigInteger(peerData);
-            var alice = new DHPublicKeyParameters(bcPeer, dhParams); // peer data not accepted here?
-            
-            var x = keyAgree.CalculateAgreement(alice);
-            
-            Console.WriteLine(keyPair.ToString());
-            Console.WriteLine(x.ToString());
-            
-            publicKey = BcGetBytes(publicDH.Y!);
-            sharedSecret = BcGetBytes(x);
-            return;
-        }
-        
         BigInteger pub, shs;
-        
-        /*
-        if (group == DhId.DH_14)
-        {
-            // https://www.rfc-editor.org/rfc/rfc3526#section-3
-            
-            // 2^2048 - 2^1984 - 1 + 2^64 * { [2^1918 pi] + 124476 }
-            //var p = Pow(2,2048) - Pow(2,1984) - 1 + Pow(2,64) * ( (Pow(2,1918) * Math.PI) + 124476);
-            var pstr = "FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B139B22514A08798E3404DDEF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245E485B576625E7EC6F44C42E9A637ED6B0BFF5CB6F406B7EDEE386BFB5A899FA5AE9F24117C4B1FE649286651ECE45B3DC2007CB8A163BF0598DA48361C55D39A69163FA8FD24CF5F83655D23DCA3AD961C62F356208552BB9ED529077096966D670C354E4ABC9804F1746C08CA18217C32905E462E36CE3BE39E772C180E86039B2783A2EC07A28FB5C55DF06F4C52C9DE2BCBF6955817183995497CEA956AE515D2261898FA051015728E5A8AACAA68FFFFFFFFFFFFFFFF";
-            var pbytes = Bit.ParseBytes(pstr);
-            
-            p = new BigInteger(pbytes, isUnsigned:true, isBigEndian:false); // works, but results in "applying DH public value failed"
-        }
-        */
-        
 
         if (prime.G_Function is not null)
         {
@@ -159,8 +89,8 @@ public class DHKeyExchange
             var g = prime.G_Value.Value;
             Console.WriteLine($"Modular form, l={l}, g={g}, a={a}, p={p}, peer={peer}");
             
-            pub = ModPow(g, a, Abs(p));
-            shs = ModPow(peer, a, Abs(p));
+            pub = ModPow(g, a, p);
+            shs = ModPow(peer, a, p);
 
             publicKey = ToBytesPadded(pub, l*2).Take(l).ToArray();
             sharedSecret = ToBytesPadded(shs, l*2).Take(l).ToArray();
@@ -170,9 +100,16 @@ public class DHKeyExchange
         throw new Exception($"Invalid prime definition for group {group.ToString()}");
     }
 
-    private static byte[] BcGetBytes(Org.BouncyCastle.Math.BigInteger p0)
+    private static byte[] ReverseBytes(byte[] peerData)
     {
-        return p0.ToByteArray()!;
+        var result = new byte[peerData.Length];
+
+        for (int i = 0, j=peerData.Length-1; i < result.Length; i++, j--)
+        {
+            result[i] = peerData[j];
+        }
+        
+        return result;
     }
 
     [SuppressMessage("ReSharper", "InconsistentNaming")]
