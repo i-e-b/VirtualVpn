@@ -175,6 +175,11 @@ internal class VpnSession
                throw new Exception($"Unexpected request: {request.Exchange.ToString()}");
         }
     }
+    
+    private static readonly byte[] _publicFix = {
+        0x08, 0x5D, 0xE0, 0x94, 0x6B, 0xBE, 0xAB, 0x4A, 0x74, 0x7E, 0x87, 0x5C, 0x3D, 0x0F, 0xFD, 0x70,
+        0xEA, 0x00, 0x9C, 0x01, 0x5A, 0x0D, 0xE6, 0x00, 0x5B, 0xCE, 0xF3, 0x31, 0x1B, 0x50, 0x6C, 0x22
+    };
 
     private void HandleSaInit(IkeMessage request, IPEndPoint sender, bool sendZeroHeader)
     {
@@ -186,27 +191,67 @@ internal class VpnSession
         var saPayload = request.GetPayload<PayloadSa>();
         if (saPayload is null) throw new Exception("IKE_SA_INIT did not contain any SA proposals");
 
-        var chosenProposal = saPayload.GetProposalFor(EncryptionTypeId.ENCR_AES_CBC); // we only support AES CBC mode at the moment
+        var chosenProposal = saPayload.GetProposalFor(EncryptionTypeId.ENCR_AES_CBC); // we only support AES CBC mode at the moment, and M-Pesa only does DH-14
         var payloadKe = request.GetPayload<PayloadKeyExchange>();
+        
         var preferredDiffieHellman = chosenProposal?.GetTransform(TransformType.DH)?.Id;
 
-        // make sure we ended up with one we agree on
-        if (chosenProposal is null || payloadKe is null || preferredDiffieHellman is null
-            || (uint)payloadKe.DiffieHellmanGroup != preferredDiffieHellman.Value
-            || payloadKe.KeyData.Length < 1
-            || payloadKe.KeyData[0] == 0)
+        // If there is nothing we can agree on, this session is dead. Send an error message
+        if (chosenProposal is null || payloadKe is null || preferredDiffieHellman is null ||  payloadKe.KeyData.Length < 1)
         {
             // pvpn/server.py:274
-
             Console.WriteLine($"        Session: Could not find an agreeable proposition. Sending rejection to {sender.Address}:{sender.Port}");
             Reply(to: sender, message: BuildResponse(ExchangeType.IKE_SA_INIT, sendZeroHeader, null,
-                new PayloadNotify(IkeProtocolType.NONE, NotifyId.INVALID_KE_PAYLOAD, null, null)
+                new PayloadNotify(IkeProtocolType.IKE, NotifyId.INVALID_KE_PAYLOAD, null, null)
             ));
             return;
         }
+        
+        // If we can agree on a proposition, but the initiator's default is not acceptable,
+        // then we will make a new proposal with a new key exchange.
+        if ((uint)payloadKe.DiffieHellmanGroup != preferredDiffieHellman.Value)
+        {
+            Console.WriteLine($"        Session: We agree on a viable proposition, but it was not the default. Sending a new key exchange set");
+            
+            var reKeyMessage = BuildResponse(ExchangeType.IKE_SA_INIT, sendZeroHeader, null,
+                new PayloadSa(chosenProposal),
+                new PayloadNonce(_localNonce),
+                new PayloadKeyExchange((DhId)preferredDiffieHellman.Value, _publicFix),
+                new PayloadNotify(IkeProtocolType.NONE, NotifyId.NAT_DETECTION_DESTINATION_IP, Array.Empty<byte>(), Bit.RandomBytes(20)),
+                new PayloadNotify(IkeProtocolType.NONE, NotifyId.NAT_DETECTION_SOURCE_IP, Array.Empty<byte>(), Bit.RandomBytes(20))
+            );
+            
+            Reply(to: sender, message: reKeyMessage);
+            _peerMsgId--; // this is not going to count as a sequenced message
+            return;
+/*
+ parsed IKE_SA_INIT response 0 [ N(INVAL_KE) ]
+peer didn't accept DH group CURVE_25519, it requested MODP_2048
+initiating IKE_SA mpesa[9] to 197.250.65.132
+generating IKE_SA_INIT request 0 [ SA KE No N(NATD_S_IP) N(NATD_D_IP) N(FRAG_SUP) N(HASH_ALG) N(REDIR_SUP) ]
+sending packet: from 159.69.13.126[500] to 197.250.65.132[500] (1128 bytes)
+received packet: from 197.250.65.132[500] to 159.69.13.126[500] (619 bytes)
+parsed IKE_SA_INIT response 0 [ SA KE No V V N(NATD_S_IP) N(NATD_D_IP) CERTREQ N(FRAG_SUP) V ]
+received Cisco Delete Reason vendor ID
+received Cisco Copyright (c) 2009 vendor ID
+received FRAGMENTATION vendor ID
+selected proposal: IKE:AES_CBC_256/HMAC_SHA2_256_128/PRF_HMAC_SHA2_256/MODP_2048
+received 2 cert requests for an unknown ca
+sending cert request for "CN=VPN root CA"
+authentication of '159.69.13.126' (myself) with pre-shared key
+establishing CHILD_SA mpesa{5}
+generating IKE_AUTH request 1 [ IDi N(INIT_CONTACT) CERTREQ IDr AUTH SA TSi TSr N(MOBIKE_SUP) N(ADD_4_ADDR) N(ADD_4_ADDR) N(ADD_4_ADDR) N(ADD_4_ADDR) N(ADD_4_ADDR) N(ADD_6_ADDR) N(EAP_ONLY) N(MSG_ID_SYN_SUP) ]
+sending packet: from 159.69.13.126[4500] to 197.250.65.132[4500] (480 bytes)
+received packet: from 197.250.65.132[4500] to 159.69.13.126[4500] (256 bytes)
+parsed IKE_AUTH response 1 [ V IDr AUTH SA TSi TSr N(ESP_TFC_PAD_N) N(NON_FIRST_FRAG) N(MOBIKE_SUP) ]
+authentication of '197.250.65.132' with pre-shared key successful
+*/
+        }
 
         // build key
-        DHKeyExchange.DiffieHellman(payloadKe.DiffieHellmanGroup, payloadKe.KeyData, out var publicKey, out var sharedSecret);
+        
+        
+        DHKeyExchange.DiffieHellman(payloadKe.DiffieHellmanGroup, payloadKe.KeyData /*Them public*/, out var publicKey, out var sharedSecret);
         CreateKeyAndCrypto(chosenProposal, sharedSecret, publicKey, null, payloadKe.KeyData);
 
         var saMessage = BuildResponse(ExchangeType.IKE_SA_INIT, sendZeroHeader, null,

@@ -153,8 +153,13 @@ public static class Bit
     /// <summary>
     /// Generate a description string in the same format as StrongSwan logs
     /// </summary>
-    public static string Describe(string name, byte[] bytes)
+    public static string Describe(string name, byte[]? bytes)
     {
+        if (bytes is null)
+        {
+            return $"{name} => 0 bytes (null)\r\n";
+        }
+
         var sb = new StringBuilder();
         
         sb.Append(name);

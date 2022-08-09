@@ -2,49 +2,77 @@
 using System.Globalization;
 using System.Numerics;
 using System.Security.Cryptography;
+using RawSocketTest.Helpers;
+using static System.Numerics.BigInteger;
 
 namespace RawSocketTest.Crypto;
 
 public class DHKeyExchange
 {
+    private static readonly byte[] _privateKey = new byte[32];
+    static DHKeyExchange()
+    {
+        RandomNumberGenerator.Fill(_privateKey);
+    }
+    
+    /// <summary>
+    /// `payloadKe.KeyData` -> the other side's public key
+    /// I then generate my private key randomly, figure out my public key, and send.
+    /// In parallel to that, I have enough details to form the key
+    ///
+    /// This is easiest to understand in modular DH, but everything has moved on to elliptic curves.
+    ///  
+    ///  ┌──────────────────────────┬──────────────────────────┐
+    ///  │            Them          │         Us               │
+    ///  ├──────────────────────────┴──────────────────────────┤
+    ///  │         Parameters: p, g  (from DH 'group')         │
+    ///  ├──────────────────────────┬──────────────────────────┤
+    ///  │  A = random()            │   B = random()           │
+    ///  │  a = (g^A) mod p         │   b = (g^b) mod p        │
+    ///  ├──────────────────────────┴──────────────────────────┤
+    ///  │                      Exchange                       │
+    ///  │           a ─────────►       ◄─────────── b         │
+    ///  ├──────────────────────────┬──────────────────────────┤
+    ///  │  K = (g^BA)%p = (b^A)%p  │  K = (g^AB)%p = (a^B)%p  │
+    ///  ├──────────────────────────┴──────────────────────────┤
+    ///  │  Now both sides can encrypt based on shared 'K'     │
+    ///  └─────────────────────────────────────────────────────┘
+    ///   Where 'a' and 'b' are the public keys,
+    ///   'A' and 'B' are the private keys,
+    ///   and 'K' is the shared secret.
+    /// 
+    /// We only need the shared secret to generate the other
+    /// keys, so the rest can be ignored once we have that.
+    /// </summary>
     public static void DiffieHellman(DhId group, byte[] peerData, out byte[] publicKey, out byte[] sharedSecret)
     {
-        if (group == DhId.DH_31)
-        {
-            Console.WriteLine("Using NaCl Ed25519");
-            Chaos.NaCl.Ed25519.KeyPairFromSeed(out publicKey, out sharedSecret, peerData);
-            
-            // need to pack sharedSecret back into 32 bytes (polynomial to binary?)
-            
-            return;
-        }
-        
-        
-        Console.WriteLine($"### DID NOT USE EXPECTED DH GROUP!!! {(int)group} => {group.ToString()}");
-
         // pvpn/crypto.py:213
         
         if (!_primes.ContainsKey(group)) throw new Exception($"Prime group {group.ToString()} is not supported");
         
-        var peer = new BigInteger(peerData, isBigEndian:true);
+        //var peer = new BigInteger(peerData, isBigEndian:true);
+        var peer = new BigInteger(peerData, isBigEndian:true, isUnsigned: true); // their public key
         var prime = _primes[group];
         
-        var p = prime.P;
-        var l = prime.L;
-        var a = NextBigInteger(p>>8, p);
+        var p = prime.P;                    // prime for modular forms, private key scale
+        var l = prime.L;                    // key length
+        var a = new BigInteger(_privateKey, isUnsigned: true); // private key
 
         BigInteger pub, shs;
 
         if (prime.G_Function is not null)
         {
+            Console.WriteLine($"Elliptic curve, l={l}, a={a}, p={p}, peer={peer}");
             publicKey = prime.G_Function(a, l);
             sharedSecret = prime.G_Function(a, peer);
+            
             return;
         }
         
         if (prime.G_Tuple is not null)
         {
             var g = prime.G_Tuple;
+            Console.WriteLine($"Elliptic curve, l={l}, g0={g[0]}, g1={g[1]}, a={a}, p={p}, peer={peer}");
             
             pub = ec_mul(g[0], l, a, p, g[1]);
             shs = ec_mul(peer, l, a, p, g[1]);
@@ -58,8 +86,10 @@ public class DHKeyExchange
         if (prime.G_Value is not null)
         {
             var g = prime.G_Value.Value;
-            pub = BigInteger.ModPow(g, a, p);
-            shs = BigInteger.ModPow(peer, a, p);
+            Console.WriteLine($"Modular form, l={l}, g={g}, a={a}, p={p}, peer={peer}");
+            
+            pub = ModPow(g, a, p);
+            shs = ModPow(peer, a, p);
             
             publicKey = ToBytesPadded(pub, l);
             sharedSecret = ToBytesPadded(shs, l);
@@ -72,7 +102,7 @@ public class DHKeyExchange
     [SuppressMessage("ReSharper", "InconsistentNaming")]
     private static BigInteger ec_mul(BigInteger P, int l, BigInteger i, BigInteger p, BigInteger a)
     {
-        var r = BigInteger.Zero;
+        var r = Zero;
         while (i > 0)
         {
             if ((i & 1) != 0)
@@ -92,80 +122,14 @@ public class DHKeyExchange
         if (P == 0) return Q;
         if (P == Q)
         {
-            z = (3 * (P >> l) * (P >> l) + a) * BigInteger.ModPow(2 * (P & (BigInteger.One << l) - 1), p - 2, p);
+            z = (3 * (P >> l) * (P >> l) + a) * ModPow(2 * (P & (One << l) - 1), p - 2, p);
         }
         else
         {
-            z = ((Q & (BigInteger.One << l) - 1) - (P & (BigInteger.One << l) - 1)) * BigInteger.ModPow((Q >> l) - (P >> l), p - 2, p); 
+            z = ((Q & (One << l) - 1) - (P & (One << l) - 1)) * ModPow((Q >> l) - (P >> l), p - 2, p); 
         }
         var x = (z * z - (P >> l) - (Q >> l)) % p;
         return x << l | (z * ((P >> l) - x) - (P & (1 << l) - 1)) % p;
-    }
-
-    /// <summary>
-    /// Generates a random BigInteger between start and end (non-inclusive).
-    /// </summary>
-    /// <param name="start">The lower bound.</param>
-    /// <param name="end">The upper bound (non-inclusive).</param>
-    /// <returns>A random BigInteger between start and end (non-inclusive)</returns>
-    /// <remarks>From https://gist.github.com/rharkanson/50fe61655e80488fcfec7d2ee8eff568</remarks>
-    private static BigInteger NextBigInteger(BigInteger start, BigInteger end)
-    {
-        if (start == end) return start;
-
-        var res = end;
-
-        // Swap start and end if given in reverse order.
-        if (start > end)
-        {
-            end = start;
-            start = res;
-            res = end - start;
-        }
-        else
-            // The distance between start and end to generate a random BigInteger between 0 and (end-start) (non-inclusive).
-            res -= start;
-
-        var bs = res.ToByteArray();
-
-        // Count the number of bits necessary for res.
-        var bits = 8;
-        byte mask = 0x7F;
-        while ((bs[^1] & mask) == bs[^1])
-        {
-            bits--;
-            mask >>= 1;
-        }
-        bits += 8 * bs.Length;
-
-        // Generate a random BigInteger that is the first power of 2 larger than res, 
-        // then scale the range down to the size of res,
-        // finally add start back on to shift back to the desired range and return.
-        return NextBigInteger(bits + 1) * res / BigInteger.Pow(2, bits + 1) + start;
-    }
-    
-    /// <summary>
-    /// Generates a random positive BigInteger between 0 and 2^bitLength (non-inclusive).
-    /// </summary>
-    /// <param name="bitLength">The number of random bits to generate.</param>
-    /// <returns>A random positive BigInteger between 0 and 2^bitLength (non-inclusive).</returns>
-    /// <remarks>From https://gist.github.com/rharkanson/50fe61655e80488fcfec7d2ee8eff568</remarks>
-    private static BigInteger NextBigInteger(int bitLength)
-    {
-        if (bitLength < 1) return BigInteger.Zero;
-
-        var bytes = bitLength / 8;
-        var bits = bitLength % 8;
-
-        // Generates enough random bytes to cover our bits.
-        var bs = new byte[bytes + 1];
-        RandomNumberGenerator.Fill(bs);
-
-        // Mask out the unnecessary bits.
-        var mask = (byte)(0xFF >> (8 - bits));
-        bs[^1] &= mask;
-
-        return new BigInteger(bs);
     }
 
     // pvpn/crypto.py:188
@@ -176,7 +140,10 @@ public class DHKeyExchange
         { DhId.DH_1, DhSrc.Exp(2, 96, "FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B139B22514A08798E3404DDEF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245E485B576625E7EC6F44C42E9A63A3620FFFFFFFFFFFFFFFF") },
         { DhId.DH_2, DhSrc.Exp(2, 128, "FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B139B22514A08798E3404DDEF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245E485B576625E7EC6F44C42E9A637ED6B0BFF5CB6F406B7EDEE386BFB5A899FA5AE9F24117C4B1FE649286651ECE65381FFFFFFFFFFFFFFFF") },
         { DhId.DH_5, DhSrc.Exp(2, 192, "FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B139B22514A08798E3404DDEF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245E485B576625E7EC6F44C42E9A637ED6B0BFF5CB6F406B7EDEE386BFB5A899FA5AE9F24117C4B1FE649286651ECE45B3DC2007CB8A163BF0598DA48361C55D39A69163FA8FD24CF5F83655D23DCA3AD961C62F356208552BB9ED529077096966D670C354E4ABC9804F1746C08CA237327FFFFFFFFFFFFFFFF") },
+        
+        // M-Pesa request this one:
         { DhId.DH_14, DhSrc.Exp(2, 256, "FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B139B22514A08798E3404DDEF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245E485B576625E7EC6F44C42E9A637ED6B0BFF5CB6F406B7EDEE386BFB5A899FA5AE9F24117C4B1FE649286651ECE45B3DC2007CB8A163BF0598DA48361C55D39A69163FA8FD24CF5F83655D23DCA3AD961C62F356208552BB9ED529077096966D670C354E4ABC9804F1746C08CA18217C32905E462E36CE3BE39E772C180E86039B2783A2EC07A28FB5C55DF06F4C52C9DE2BCBF6955817183995497CEA956AE515D2261898FA051015728E5A8AACAA68FFFFFFFFFFFFFFFF") },
+        
         { DhId.DH_15, DhSrc.Exp(2, 384, "FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B139B22514A08798E3404DDEF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245E485B576625E7EC6F44C42E9A637ED6B0BFF5CB6F406B7EDEE386BFB5A899FA5AE9F24117C4B1FE649286651ECE45B3DC2007CB8A163BF0598DA48361C55D39A69163FA8FD24CF5F83655D23DCA3AD961C62F356208552BB9ED529077096966D670C354E4ABC9804F1746C08CA18217C32905E462E36CE3BE39E772C180E86039B2783A2EC07A28FB5C55DF06F4C52C9DE2BCBF6955817183995497CEA956AE515D2261898FA051015728E5A8AAAC42DAD33170D04507A33A85521ABDF1CBA64ECFB850458DBEF0A8AEA71575D060C7DB3970F85A6E1E4C7ABF5AE8CDB0933D71E8C94E04A25619DCEE3D2261AD2EE6BF12FFA06D98A0864D87602733EC86A64521F2B18177B200CBBE117577A615D6C770988C0BAD946E208E24FA074E5AB3143DB5BFCE0FD108E4B82D120A93AD2CAFFFFFFFFFFFFFFFF") },
         { DhId.DH_16, DhSrc.Exp(2, 512, "FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B139B22514A08798E3404DDEF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245E485B576625E7EC6F44C42E9A637ED6B0BFF5CB6F406B7EDEE386BFB5A899FA5AE9F24117C4B1FE649286651ECE45B3DC2007CB8A163BF0598DA48361C55D39A69163FA8FD24CF5F83655D23DCA3AD961C62F356208552BB9ED529077096966D670C354E4ABC9804F1746C08CA18217C32905E462E36CE3BE39E772C180E86039B2783A2EC07A28FB5C55DF06F4C52C9DE2BCBF6955817183995497CEA956AE515D2261898FA051015728E5A8AAAC42DAD33170D04507A33A85521ABDF1CBA64ECFB850458DBEF0A8AEA71575D060C7DB3970F85A6E1E4C7ABF5AE8CDB0933D71E8C94E04A25619DCEE3D2261AD2EE6BF12FFA06D98A0864D87602733EC86A64521F2B18177B200CBBE117577A615D6C770988C0BAD946E208E24FA074E5AB3143DB5BFCE0FD108E4B82D120A92108011A723C12A787E6D788719A10BDBA5B2699C327186AF4E23C1A946834B6150BDA2583E9CA2AD44CE8DBBBC2DB04DE8EF92E8EFC141FBECAA6287C59474E6BC05D99B2964FA090C3A2233BA186515BE7ED1F612970CEE2D7AFB81BDD762170481CD0069127D5B05AA993B4EA988D8FDDC186FFB7DC90A6C08F4DF435C934063199FFFFFFFFFFFFFFFF") },
         { DhId.DH_17, DhSrc.Exp(2, 768, "FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B139B22514A08798E3404DDEF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245E485B576625E7EC6F44C42E9A637ED6B0BFF5CB6F406B7EDEE386BFB5A899FA5AE9F24117C4B1FE649286651ECE45B3DC2007CB8A163BF0598DA48361C55D39A69163FA8FD24CF5F83655D23DCA3AD961C62F356208552BB9ED529077096966D670C354E4ABC9804F1746C08CA18217C32905E462E36CE3BE39E772C180E86039B2783A2EC07A28FB5C55DF06F4C52C9DE2BCBF6955817183995497CEA956AE515D2261898FA051015728E5A8AAAC42DAD33170D04507A33A85521ABDF1CBA64ECFB850458DBEF0A8AEA71575D060C7DB3970F85A6E1E4C7ABF5AE8CDB0933D71E8C94E04A25619DCEE3D2261AD2EE6BF12FFA06D98A0864D87602733EC86A64521F2B18177B200CBBE117577A615D6C770988C0BAD946E208E24FA074E5AB3143DB5BFCE0FD108E4B82D120A92108011A723C12A787E6D788719A10BDBA5B2699C327186AF4E23C1A946834B6150BDA2583E9CA2AD44CE8DBBBC2DB04DE8EF92E8EFC141FBECAA6287C59474E6BC05D99B2964FA090C3A2233BA186515BE7ED1F612970CEE2D7AFB81BDD762170481CD0069127D5B05AA993B4EA988D8FDDC186FFB7DC90A6C08F4DF435C93402849236C3FAB4D27C7026C1D4DCB2602646DEC9751E763DBA37BDF8FF9406AD9E530EE5DB382F413001AEB06A53ED9027D831179727B0865A8918DA3EDBEBCF9B14ED44CE6CBACED4BB1BDB7F1447E6CC254B332051512BD7AF426FB8F401378CD2BF5983CA01C64B92ECF032EA15D1721D03F482D7CE6E74FEF6D55E702F46980C82B5A84031900B1C9E59E7C97FBEC7E8F323A97A7E36CC88BE0F1D45B7FF585AC54BD407B22B4154AACC8F6D7EBF48E1D814CC5ED20F8037E0A79715EEF29BE32806A1D58BB7C5DA76F550AA3D8A1FBFF0EB19CCB1A313D55CDA56C9EC2EF29632387FE8D76E3C0468043E8F663F4860EE12BF2D5B0B7474D6E694F91E6DCC4024FFFFFFFFFFFFFFFF") },
@@ -203,19 +170,19 @@ public class DHKeyExchange
         // All of the above are a bit old. Generally you'll only see these two:
         
         // complex curves
-        { DhId.DH_31, DhSrc.Complex(32, X25519, 9) }, // https://en.wikipedia.org/wiki/Curve25519
-        { DhId.DH_32, DhSrc.Complex(56, X448, 5) }    // https://en.wikipedia.org/wiki/Curve448
+        { DhId.DH_31, DhSrc.Complex(32 /* 1 << 32 */, X25519, 9) }, // https://en.wikipedia.org/wiki/Curve25519
+        { DhId.DH_32, DhSrc.Complex(56 /* 1 << 56 */, X448, 5) }    // https://en.wikipedia.org/wiki/Curve448
     };
 
     // Don't ask me how this works. Just pray.
     [SuppressMessage("ReSharper", "InconsistentNaming")]
-    private static BigInteger ecScalar(BigInteger k, BigInteger u, BigInteger p, int a24, int bits)
+    private static BigInteger ecScalar(BigInteger k, BigInteger u, BigInteger p, BigInteger a24, int bits)
     {
-        var x2 = BigInteger.One;
+        var x2 = One;
         var x3 = u;
-        var z2 = BigInteger.Zero;
-        var z3 = BigInteger.One;
-        var swap = BigInteger.Zero;
+        var z2 = Zero;
+        var z3 = One;
+        var swap = Zero;
 
         for (int t = bits-1; t >= 0; t--)
         {
@@ -239,8 +206,8 @@ public class DHKeyExchange
             var CB = C * B;
             
             var E = AA - BB;
-            x3 = BigInteger.ModPow(DA+CB, 2, p);
-            z3 = u * BigInteger.ModPow(DA - CB, 2, p) % p;
+            x3 = ModPow(DA+CB, 2, p);
+            z3 = u * ModPow(DA - CB, 2, p) % p;
             x2 = AA * BB % p;
             z2 = E * (AA + a24*E) % p;
         }
@@ -250,31 +217,31 @@ public class DHKeyExchange
             (x2, _/*x3*/, z2, _/*z3*/) = (x3, x2, z3, z2);
         }
         
-        return x2 * BigInteger.ModPow(z2, p-2, p) % p;
+        return x2 * ModPow(z2, p-2, p) % p;
     }
     
     private static byte[] X25519(BigInteger k, BigInteger u)
     {
-        var _1 = BigInteger.One;
-        
-        k = k & ((_1 << 256) - (_1 << 255) - 8) | (_1 << 254);
-        var exp = BigInteger.Pow(2, 255) - 19;
+        k = k & ((One << 256) - (One << 255) - 8) | (One << 254);
+        var exp = Pow(2, 255) - 19;
         return ToBytesPadded(ecScalar(k, u, exp, 121665, 255), 32);
     }
 
     private static byte[] X448(BigInteger k, BigInteger u)
     {
-        var _1 = BigInteger.One;
+        var _1 = One;
         
         k = k & (-4) | (_1 << 447);
-        var exp = BigInteger.Pow(2, 448) - BigInteger.Pow(2, 224) - 1;
+        var exp = Pow(2, 448) - Pow(2, 224) - 1;
         return ToBytesPadded(ecScalar(k,u, exp, 39081, 448), 56);
     }
     
     private static byte[] ToBytesPadded(BigInteger value, int len)
     {
-        var vb = value.ToByteArray(isBigEndian:true);
+        var vb = value.ToByteArray(isBigEndian:true, isUnsigned: true);
         var pad = len - vb.Length;
+        
+        Console.WriteLine($"Key needs {pad} bytes of padding");
         
         if (pad < 0) throw new Exception($"Could not represent value in {len} bytes, as it is {vb.Length} bytes long");
         if (pad == 0) return vb;
@@ -283,8 +250,11 @@ public class DHKeyExchange
         return padBytes.Concat(vb).ToArray();
     }
 
-    public static bool IsSupported(DhId transformId) => _primes.ContainsKey(transformId);
-   
+    public static bool IsSupported(DhId transformId) //=> _primes.ContainsKey(transformId);
+    {
+        return transformId == DhId.DH_14;
+    }
+
     internal class DhSrc
     {
         public BigInteger P;
@@ -297,7 +267,7 @@ public class DHKeyExchange
         {
             return new DhSrc
             {
-                P = new BigInteger(2) << ps,
+                P = One << ps,
                 G_Value = null,
                 G_Function = g,
                 G_Tuple = null,
@@ -309,7 +279,7 @@ public class DHKeyExchange
         {
             return new DhSrc
             {
-                P = BigInteger.Parse(p, NumberStyles.HexNumber),
+                P = Parse(p, NumberStyles.HexNumber),
                 G_Value = new BigInteger(gi),
                 G_Function = null,
                 G_Tuple = null,
@@ -321,8 +291,8 @@ public class DHKeyExchange
         {
             return new DhSrc
             {
-                P = BigInteger.Parse(p, NumberStyles.HexNumber),
-                G_Value = BigInteger.Parse(g, NumberStyles.HexNumber),
+                P = Parse(p, NumberStyles.HexNumber),
+                G_Value = Parse(g, NumberStyles.HexNumber),
                 G_Function = null,
                 G_Tuple = null,
                 L = l
@@ -333,10 +303,10 @@ public class DHKeyExchange
         {
             return new DhSrc
             {
-                P = BigInteger.Parse(p, NumberStyles.HexNumber),
+                P = Parse(p, NumberStyles.HexNumber),
                 G_Value = null,
                 G_Function = null,
-                G_Tuple = ge.Select(s => s.StartsWith('-') ? BigInteger.Parse(s, NumberStyles.Integer) : BigInteger.Parse(s, NumberStyles.HexNumber)).ToArray(),
+                G_Tuple = ge.Select(s => s.StartsWith('-') ? Parse(s, NumberStyles.Integer) : Parse(s, NumberStyles.HexNumber)).ToArray(),
                 L = l
             };
         }

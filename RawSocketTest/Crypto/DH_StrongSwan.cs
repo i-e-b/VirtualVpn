@@ -1,6 +1,6 @@
 ﻿namespace RawSocketTest.Crypto;
 
-public class DH_StrongSwan
+public static class DH_StrongSwan
 {
     /*
  * Copyright (C) 2015 Martin Willi
@@ -21,26 +21,15 @@ public class DH_StrongSwan
  */
 
     private const int CURVE25519_KEY_SIZE = 32;
-    private byte[] key = new byte[CURVE25519_KEY_SIZE];
 
-    public bool set_key(byte[] key)
-    {
-        memcpy(this.key, key);
-
-        this.key[0] &= 0xf8;
-        this.key[31] &= 0x7f;
-        this.key[31] |= 0x40;
-        return true;
-    }
-
-    private void memcpy(byte[] dst, byte[] src)
+    private static void memcpy(byte[] dst, byte[] src)
     {
         for (int i = 0; i < dst.Length; i++)
         {
             dst[i] = src[i];
         }
     }
-    private void memcpy(UInt32[] dst, UInt32[] src)
+    private static void memcpy(UInt32[] dst, UInt32[] src)
     {
         for (int i = 0; i < dst.Length; i++)
         {
@@ -51,7 +40,7 @@ public class DH_StrongSwan
 /**
  * OR a 32-bit integer to an unaligned little-endian
  */
-    public static void horule32(byte[] /*UInt32[]*/ p, int offset, UInt32 x)
+    private static void horule32(byte[] /*UInt32[]*/ p, int offset, UInt32 x)
     {
         UInt32 r = p[offset];
         r |= htole32(x);
@@ -665,7 +654,7 @@ public class DH_StrongSwan
         mul(outp, b, a);
     }
 
-    public bool curve25519 ( /*u_char**/ byte[] inp, /*u_char**/ byte[] outp)
+    public static bool curve25519 ( /*u_char**/ byte[] inp,  byte[] key, /*u_char**/ byte[] outp)
     {
         /*uint32_t nqpqx[10] =  {
             1
@@ -713,7 +702,7 @@ public class DH_StrongSwan
             add(zzz, zzz, qx);
             mul(nqz, nqz, zzz);
 
-            bit = (uint)((this.key[i / 8] >> (int)(i & 7)) & 1);
+            bit = (uint)((key[i >> 3] >> (int)(i & 7)) & 1);
             swap_conditional(nqx, nqpqx, bit ^ lastbit);
             swap_conditional(nqz, nqpqz, bit ^ lastbit);
             lastbit = bit;

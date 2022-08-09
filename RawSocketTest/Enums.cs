@@ -3,6 +3,8 @@
 // ReSharper disable UnusedMember.Global
 // ReSharper disable UnusedType.Global
 
+using System.Diagnostics.CodeAnalysis;
+
 namespace RawSocketTest;
 
 // Huge piles of enums are a sign of a bad design...
@@ -198,30 +200,59 @@ public enum IntegId
     AUTH_HMAC_SHA2_512_256 = 14
 }
 
+[SuppressMessage("ReSharper", "CommentTypo")]
 public enum DhId : byte
 {
     DH_NONE = 0,
+    /// <summary> MODP_768_BIT </summary>
     DH_1 = 1,
+    /// <summary> MODP_1024_BIT </summary>
     DH_2 = 2,
+    /// <summary> MODP_1536_BIT </summary>
     DH_5 = 5,
+    /// <summary> MODP_2048_BIT - best supported by M-Pesa</summary>
     DH_14 = 14,
+    /// <summary> MODP_3072_BIT </summary>
     DH_15 = 15,
+    /// <summary> MODP_4096_BIT </summary>
     DH_16 = 16,
+    /// <summary> MODP_6144_BIT </summary>
     DH_17 = 17,
+    /// <summary> MODP_8192_BIT </summary>
     DH_18 = 18,
+    /// <summary> ECP_256_BIT </summary>
     DH_19 = 19,
+    /// <summary> ECP_384_BIT </summary>
     DH_20 = 20,
+    /// <summary> ECP_521_BIT </summary>
     DH_21 = 21,
+    /// <summary> MODP_1024_160 </summary>
     DH_22 = 22,
+    /// <summary> MODP_2048_224 </summary>
     DH_23 = 23,
+    /// <summary> MODP_2048_256 </summary>
     DH_24 = 24,
+    /// <summary> ECP_192_BIT </summary>
     DH_25 = 25,
+    /// <summary> ECP_224_BIT </summary>
     DH_26 = 26,
+    /// <summary> ECP_224_BP </summary>
     DH_27 = 27,
+    /// <summary> ECP_256_BP </summary>
     DH_28 = 28,
+    /// <summary> ECP_384_BP </summary>
     DH_29 = 29,
+    /// <summary> ECP_512_BP </summary>
     DH_30 = 30,
+    
+    /// <summary>
+    /// CURVE_25519
+    /// </summary>
     DH_31 = 31,
+    
+    /// <summary>
+    /// CURVE_448
+    /// </summary>
     DH_32 = 32
 }
 

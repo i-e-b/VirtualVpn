@@ -18,6 +18,8 @@ https://security.stackexchange.com/questions/56434/understanding-the-details-of-
 
 http://unixwiz.net/techtips/iguide-ipsec.html
 
+https://www.secfu.net/2017/12/23/the-ikev2-header-and-the-security-association-payload/
+
 ## Current issues & work-face
 
 - Decryption and checksum on first SA payload from StrongSwan are not working.
