@@ -1,5 +1,6 @@
 ﻿using System.Net;
 using RawSocketTest.Crypto;
+using RawSocketTest.gmpDh;
 using RawSocketTest.Helpers;
 using RawSocketTest.Payloads;
 using SkinnyJson;
@@ -270,18 +271,27 @@ internal class VpnSession
                           $" Supplied length is {payloadKe.KeyData.Length} bytes");
         
         
-        var keys = new ModpDHKeyExchange(group: 14, n: 64); 
+        // kind 0 (original), fails
+        //DHKeyExchange.DiffieHellman(payloadKe.DiffieHellmanGroup, payloadKe.KeyData /*Them public*/, out var publicKey, out var sharedSecret);
+        
+        // kind 1, fails
+        /*var keys = new ModpDHKeyExchange(group: 14, n: 64); 
         var secret = keys.DeriveSecret(payloadKe.KeyData);
         var publicKey = keys.GetPublicKey();
         
         File.WriteAllText(@"C:\temp\zzzHashedSecrets.txt", 
             Bit.Describe("sha-1", Bit.HashSha1(secret))+
             Bit.Describe("sha256", Bit.HashSha256(secret))
-            );
-        
-        //DHKeyExchange.DiffieHellman(payloadKe.DiffieHellmanGroup, payloadKe.KeyData /*Them public*/, out var publicKey, out var sharedSecret);
-        CreateKeyAndCrypto(chosenProposal, secret, publicKey, null, payloadKe.KeyData);
+            );*/
 
+        var gmpDh = GmpDiffieHellman.gmp_diffie_hellman_create(DhId.DH_14) ?? throw new Exception($"Failed to create key exchange for group {payloadKe.DiffieHellmanGroup.ToString()}");
+        gmpDh.set_public_key(payloadKe.KeyData);
+        gmpDh.get_public_key(out var publicKey);
+        gmpDh.get_shared_secret(out var secret);
+        
+        // create keys from exchange result. If something went wrong, we will end up with a checksum failure
+        CreateKeyAndCrypto(chosenProposal, secret, publicKey, null, payloadKe.KeyData);
+        
         var saMessage = BuildResponse(ExchangeType.IKE_SA_INIT, sendZeroHeader, null,
             new PayloadSa(chosenProposal),
             new PayloadNonce(_localNonce),
