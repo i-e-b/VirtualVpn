@@ -1,6 +1,7 @@
 ﻿// ReSharper disable BuiltInTypeReferenceStyle
 
 using System.Globalization;
+using System.Security.Cryptography;
 using System.Text;
 
 namespace RawSocketTest.Helpers;
@@ -201,5 +202,17 @@ public static class Bit
         }
         
         return accum.ToArray();
+    }
+
+    public static byte[] HashSha1(byte[] secret)
+    {
+        var hash = SHA1.Create();
+        return hash.ComputeHash(secret);
+    }
+    
+    public static byte[] HashSha256(byte[] secret)
+    {
+        var hash = SHA256.Create();
+        return hash.ComputeHash(secret);
     }
 }

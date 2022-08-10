@@ -8,6 +8,7 @@
     </PropertyGroup>
 
     <ItemGroup>
+      <PackageReference Include="MathGmp.Native.ieb" Version="1.0.0" />
       <PackageReference Include="SkinnyJson" Version="2.1.1" />
       <PackageReference Include="System.Security.Cryptography.OpenSsl" Version="5.0.0" />
     </ItemGroup>

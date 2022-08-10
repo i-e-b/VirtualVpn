@@ -274,6 +274,11 @@ internal class VpnSession
         var secret = keys.DeriveSecret(payloadKe.KeyData);
         var publicKey = keys.GetPublicKey();
         
+        File.WriteAllText(@"C:\temp\zzzHashedSecrets.txt", 
+            Bit.Describe("sha-1", Bit.HashSha1(secret))+
+            Bit.Describe("sha256", Bit.HashSha256(secret))
+            );
+        
         //DHKeyExchange.DiffieHellman(payloadKe.DiffieHellmanGroup, payloadKe.KeyData /*Them public*/, out var publicKey, out var sharedSecret);
         CreateKeyAndCrypto(chosenProposal, secret, publicKey, null, payloadKe.KeyData);
 

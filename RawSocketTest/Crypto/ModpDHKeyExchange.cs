@@ -46,18 +46,9 @@ public class ModpDHKeyExchange
 
     private void GeneratePublicKey()
     {
-        for (int i = 0; i < 10; i++)
-        {
-            var prime = GetPrime(_group);
+        var prime = GetPrime(_group);
 
-            _publicKey = BigInteger.ModPow(_generator, _privateKey, prime);
-
-            // Make sure it's big enough
-        
-            var raw = BytesFromInt(_publicKey);
-            if (raw.Length >= 256) return;
-        }
-        throw new Exception("Failed to find a good sized key");
+        _publicKey = BigInteger.ModPow(_generator, _privateKey, prime);
     }
     
 
