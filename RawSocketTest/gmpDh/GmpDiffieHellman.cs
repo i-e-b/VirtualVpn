@@ -1,4 +1,5 @@
 ﻿using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using MathGmp.Native;
 using static MathGmp.Native.gmp_lib;
 // ReSharper disable InconsistentNaming
@@ -8,6 +9,8 @@ namespace RawSocketTest.gmpDh;
 // src/libstrongswan/crypto/key_exchange.h:156
 public struct diffie_hellman_params_t {
 
+	public DhId group = DhId.None;
+	
 	/**
 	 * The prime of the group
 	 */
@@ -16,7 +19,7 @@ public struct diffie_hellman_params_t {
 	/**
 	 * Generator of the group
 	 */
-	public byte[] generator = Array.Empty<byte>();;
+	public byte[] generator = Array.Empty<byte>();
 
 	/**
 	 * Exponent length to use
@@ -251,7 +254,8 @@ public bool get_shared_secret(out byte[] secret)
 		mpz_init(q);
 		mpz_init(one);
 
-		diffie_hellman_params_t dh_params = diffie_hellman_get_params(group);
+		var dh_params = GmpDhParameters.diffie_hellman_get_params(group) ?? throw new Exception($"DH group not supported: {group.ToString()}");
+		
 		if (dh_params.subgroup.Length <= 0)
 		{
 			mpz_init(p_min_1);
@@ -282,120 +286,105 @@ public bool get_shared_secret(out byte[] secret)
 	return true;
 }
 
-METHOD(key_exchange_t, get_method, key_exchange_method_t,
-	private_gmp_diffie_hellman_t *this)
+//METHOD(key_exchange_t, get_method, key_exchange_method_t, private_gmp_diffie_hellman_t *this)
+public DhId get_method()
 {
-	return this->group;
+	return group;
 }
 
-METHOD(key_exchange_t, destroy, void,
-	private_gmp_diffie_hellman_t *this)
+//METHOD(key_exchange_t, destroy, void, private_gmp_diffie_hellman_t *this)
+public void destroy()
 {
-	mpz_clear(this->p);
-	mpz_clear(this->xa);
-	mpz_clear(this->ya);
-	mpz_clear(this->yb);
-	mpz_clear(this->zz);
-	mpz_clear(this->g);
-	free(this);
+	mpz_clear(p);
+	mpz_clear(xa);
+	mpz_clear(ya);
+	mpz_clear(yb);
+	mpz_clear(zz);
+	mpz_clear(g);
 }
+
+public GmpDiffieHellman()
+{
+	group = DhId.None;
+	g = new mpz_t();
+	xa= new mpz_t();
+	ya = new mpz_t();
+	yb = new mpz_t();
+	zz = new mpz_t();
+	p = new mpz_t();
+	p_len = (size_t)0;
+}
+
 
 /**
  * Generic internal constructor
  */
-static gmp_diffie_hellman_t *create_generic(key_exchange_method_t group,
-											size_t exp_len, chunk_t g, chunk_t p)
+//static gmp_diffie_hellman_t *create_generic(key_exchange_method_t group, size_t exp_len, chunk_t g, chunk_t p)
+
+public GmpDiffieHellman(DhId group_, size_t exp_len_, byte[] g_, byte[] p_)
 {
-	private_gmp_diffie_hellman_t *this;
-	chunk_t random;
-	rng_t *rng;
+	group = group_;
+	p_len = (size_t)p_.Length;
+	
+	g = new mpz_t();
+	xa= new mpz_t();
+	ya = new mpz_t();
+	yb = new mpz_t();
+	zz = new mpz_t();
+	p = new mpz_t();
+	p_len = (size_t)0;
 
-	INIT(this,
-		.public = {
-			.ke = {
-				.get_shared_secret = _get_shared_secret,
-				.set_public_key = _set_public_key,
-				.get_public_key = _get_public_key,
-				.set_private_key = _set_private_key,
-				.get_method = _get_method,
-				.destroy = _destroy,
-			},
-		},
-		.group = group,
-		.p_len = p.len,
-	);
+	mpz_init(p);
+	mpz_init(yb);
+	mpz_init(ya);
+	mpz_init(xa);
+	mpz_init(zz);
+	mpz_init(g);
+	
+	//mpz_import(this->g, g.len, 1, 1, 1, 0, g.ptr);
+	//mpz_import(this->p, p.len, 1, 1, 1, 0, p.ptr);
+	import(ref g, g_);
+	import(ref p, p_);
 
-	mpz_init(this->p);
-	mpz_init(this->yb);
-	mpz_init(this->ya);
-	mpz_init(this->xa);
-	mpz_init(this->zz);
-	mpz_init(this->g);
-	mpz_import(this->g, g.len, 1, 1, 1, 0, g.ptr);
-	mpz_import(this->p, p.len, 1, 1, 1, 0, p.ptr);
-
-	rng = lib->crypto->create_rng(lib->crypto, RNG_STRONG);
-	if (!rng)
-	{
-		DBG1(DBG_LIB, "no RNG found for quality %N", rng_quality_names,
-			 RNG_STRONG);
-		destroy(this);
-		return NULL;
-	}
-	if (!rng->allocate_bytes(rng, exp_len, &random))
+	var random = new byte[exp_len_];
+	RandomNumberGenerator.Fill(random);
+	/*if (!rng->allocate_bytes(rng, exp_len, &random))
 	{
 		DBG1(DBG_LIB, "failed to allocate DH secret");
 		rng->destroy(rng);
 		destroy(this);
 		return NULL;
 	}
-	rng->destroy(rng);
+	rng->destroy(rng);*/
 
-	if (exp_len == this->p_len)
+	if (exp_len_ == p_len)
 	{
 		/* achieve bitsof(p)-1 by setting MSB to 0 */
-		*random.ptr &= 0x7F;
+		//*random.ptr &= 0x7F;
+		random[0] &= 0x7F;
 	}
-	mpz_import(this->xa, random.len, 1, 1, 1, 0, random.ptr);
-	chunk_clear(&random);
-	DBG2(DBG_LIB, "size of DH secret exponent: %u bits",
-		 mpz_sizeinbase(this->xa, 2));
+	//mpz_import(this->xa, random.len, 1, 1, 1, 0, random.ptr);
+	import(ref xa, random);
+	
+	//chunk_clear(&random);
+	for (int i = 0; i < random.Length; i++) { random[i]=0; }
+	
+	Log("size of DH secret exponent: %u bits", mpz_sizeinbase(xa, 2).ToString());
 
-	mpz_powm(this->ya, this->g, this->xa, this->p);
-
-	return &this->public;
+	mpz_powm(ya, g, xa, p);
 }
 
 /*
  * Described in header
  */
-gmp_diffie_hellman_t *gmp_diffie_hellman_create(key_exchange_method_t group)
+public static GmpDiffieHellman? gmp_diffie_hellman_create(DhId group)
 {
-	diffie_hellman_params_t *params;
-
-	params = diffie_hellman_get_params(group);
-	if (!params)
-	{
-		return NULL;
-	}
-	return create_generic(group, params->exp_len,
-						  params->generator, params->prime);
+	var parameters = GmpDhParameters.diffie_hellman_get_params(group);
+	if (parameters is null) { return null; }
+	
+	return new GmpDiffieHellman(group, parameters.Value.exp_len, parameters.Value.generator, parameters.Value.prime);
 }
 
-/*
- * Described in header
- */
-gmp_diffie_hellman_t *gmp_diffie_hellman_create_custom(
-											key_exchange_method_t group, ...)
-{
-	if (group == MODP_CUSTOM)
-	{
-		chunk_t g, p;
 
-		VA_ARGS_GET(group, g, p);
-		return create_generic(MODP_CUSTOM, p.len, g, p);
-	}
-	return NULL;
-}
 
 }

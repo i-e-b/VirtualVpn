@@ -203,7 +203,9 @@ public enum IntegId
 [SuppressMessage("ReSharper", "CommentTypo")]
 public enum DhId : byte
 {
+    /// <summary> Invalid value </summary>
     DH_NONE = 0,
+    
     /// <summary> MODP_768_BIT </summary>
     DH_1 = 1,
     /// <summary> MODP_1024_BIT </summary>
@@ -253,7 +255,8 @@ public enum DhId : byte
     /// <summary>
     /// CURVE_448
     /// </summary>
-    DH_32 = 32
+    DH_32 = 32,
+    None
 }
 
 public enum EsnId
