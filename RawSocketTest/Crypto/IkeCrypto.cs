@@ -136,6 +136,8 @@ public class IkeCrypto
         theirCrypto = new IkeCrypto(cipher, integ, prf, skEi, skAi, skPi, null);
         
         File.WriteAllText(@"C:\temp\zzzLastSessionKeys.txt",
+            Bit.Describe("peer nonce", theirNonce)+
+            Bit.Describe("local nonce", myNonce)+
             Bit.Describe("SK d", skD)+
             Bit.Describe("skAi", skAi)+
             Bit.Describe("skAr", skAr)+

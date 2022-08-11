@@ -212,8 +212,33 @@ internal class VpnSession
         
         var pskAuth = GeneratePskAuth(request.RawData, _localNonce, idi, peerSkp);
         if (Bit.AreDifferent(pskAuth, auth.AuthData))
-            throw new Exception($"PSK auth failed: initiator's hash did not match our expectations. Expected {Bit.HexString(pskAuth)}, but got {Bit.HexString(auth.AuthData)}");
-        
+        {
+            var psk = Encoding.ASCII.GetBytes("ThisIsForTestOnlyDontUse");
+            var pad = Encoding.ASCII.GetBytes(Prf.IKEv2_KeyPad);
+            var prfPskPad = _peerCrypto!.Prf!.Hash(psk, pad);
+            
+            Console.WriteLine(Bit.Describe("psk", psk));
+            Console.WriteLine(Bit.Describe("keypad", pad));
+            Console.WriteLine(Bit.Describe("prf(psk, keypad)", prfPskPad));
+            
+            /*
+             "identification_t *id"
+            ... 
+	chunk = chunk_alloca(4);
+	chunk.ptr[0] = id->get_type(id);
+	memcpy(chunk.ptr + 1, reserved, 3);
+	idx = chunk_cata("cc", chunk, id->get_encoding(id));
+	*/
+            
+            // IDx' => 8 bytes @ 0x7f9b1fee7850        01 00 00 00 9F 45 0D 7E    <-- this is not nonce, it's something else
+            // SK_p => 32 bytes @ 0x7f9af4007340       AF E8 1D 52 00 28 34 E6 2C 70 58 9B C2 D8 5F 1A B6 01 F2 05 EB 44 B1 BC 1A 66 B9 65 76 D4 6F DD
+
+            // octets = message + nonce + prf(Sk_px, IDx')
+            
+            throw new Exception("PSK auth failed: initiator's hash did not match our expectations.\r\n\t" +
+                                $"Expected {Bit.HexString(pskAuth)},\r\n\tbut got {Bit.HexString(auth.AuthData)}");
+        }
+
         // pvpn/server.py:298
         var chosenChildSa = sa.GetProposalFor(EncryptionTypeId.ENCR_AES_CBC);
         if (chosenChildSa is null)
