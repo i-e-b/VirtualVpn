@@ -250,6 +250,15 @@ public class IkeMessage
             case PayloadType.IDi:
                 return One(new PayloadIDi(srcData, ref idx, ref nextPayload));
             
+            case PayloadType.IDr:
+                return One(new PayloadIDr(srcData, ref idx, ref nextPayload));
+            
+            case PayloadType.TSi:
+                return One(new PayloadTsi(srcData, ref idx, ref nextPayload));
+            
+            case PayloadType.TSr:
+                return One(new PayloadTsr(srcData, ref idx, ref nextPayload));
+            
             case PayloadType.AUTH:
                 return One(new PayloadAuth(srcData, ref idx, ref nextPayload));
 
@@ -282,7 +291,7 @@ public class IkeMessage
                     var childIdx = 0;
                     var innerPayloads = ReadPayloadChainInternal(nextPayload, ikeCrypto, ref childIdx, expandedPayload.PlainBody, rawData).ToList();
                     
-                    Console.WriteLine($"    Got {innerPayloads.Count} inner payloads:\r\n{Json.Beautify(Json.Freeze(innerPayloads))}");
+                    //Console.WriteLine($"    Got {innerPayloads.Count} inner payloads:\r\n{Json.Beautify(Json.Freeze(innerPayloads))}");
                     
                     nextPayload = PayloadType.NONE; // end of internal run
                     return innerPayloads;

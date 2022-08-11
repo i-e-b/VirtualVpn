@@ -3,18 +3,35 @@ using RawSocketTest.Helpers;
 
 namespace RawSocketTest.Payloads;
 
-// pvpn/message.py:117
-public class PayloadIDi : MessagePayload
+/// <summary>
+/// Flip side of <see cref="PayloadIDi"/>.
+/// Todo: merge these? Like TS(i/r/x)
+/// </summary>
+public class PayloadIDr: MessagePayload
 {
-    public override PayloadType Type { get => PayloadType.IDi; set { } }
+    public override PayloadType Type { get => PayloadType.IDr; set { } }
     
-    public override int Size => HeaderSize + IdData.Length + 4;
+    public byte[] IdData { get; set; } = Array.Empty<byte>();
 
-    public PayloadIDi(byte[] data, ref int idx, ref PayloadType nextPayload)
+    public ushort Port { get; set; }
+
+    public IpProtocol Protocol { get; set; }
+
+    public IdType IdType { get; set; }
+    
+    // pvpn/message.py:329
+    public PayloadIDr(IdType idType, byte[] idData, int protocol, int port)
     {
-        // IDi is usually inside an SK message.
+        throw new NotImplementedException();
+    }
+
+    public PayloadIDr(byte[] data, ref int idx, ref PayloadType nextPayload)
+    {
+        // IDr is usually inside an SK message.
         ReadData(data, ref idx, ref nextPayload);
     }
+    
+    public override int Size => HeaderSize + IdData.Length + 4;
 
     protected override void Serialise()
     {
@@ -46,10 +63,10 @@ public class PayloadIDi : MessagePayload
         switch (IdType)
         {
             case IdType.ID_IPV4_ADDR:
-                return $"Payload=IDi; Type={IdType.ToString()}; Protocol={Protocol.ToString()}; Port={Port}; Address={IdData[0]}.{IdData[1]}.{IdData[2]}.{IdData[3]}";
+                return $"Payload=IDr; Type={IdType.ToString()}; Protocol={Protocol.ToString()}; Port={Port}; Address={IdData[0]}.{IdData[1]}.{IdData[2]}.{IdData[3]}";
                 
             case IdType.ID_FQDN:
-                return $"Payload=IDi; Type={IdType.ToString()}; Protocol={Protocol.ToString()}; Port={Port}; Address={Encoding.ASCII.GetString(IdData)}";
+                return $"Payload=IDr; Type={IdType.ToString()}; Protocol={Protocol.ToString()}; Port={Port}; Address={Encoding.ASCII.GetString(IdData)}";
                 
             case IdType.ID_RFC822_ADDR:
             case IdType.ID_IPV4_ADDR_SUBNET:
@@ -61,21 +78,13 @@ public class PayloadIDi : MessagePayload
             case IdType.ID_DER_ASN1_GN:
             case IdType.ID_KEY_ID:
             case IdType.ID_FC_NAME:
-                return $"Payload=IDi; Type={IdType.ToString()}; Protocol={Protocol.ToString()}; Port={Port}; Data={Bit.HexString(IdData)}";
+                return $"Payload=IDr; Type={IdType.ToString()}; Protocol={Protocol.ToString()}; Port={Port}; Data={Bit.HexString(IdData)}";
                 
             case IdType.ID_NULL:
-                return $"Payload=IDi; Type={IdType.ToString()}; Protocol={Protocol.ToString()}; Port={Port}; (null?) Data={Bit.HexString(IdData)}";
+                return $"Payload=IDr; Type={IdType.ToString()}; Protocol={Protocol.ToString()}; Port={Port}; (null?) Data={Bit.HexString(IdData)}";
                 
             default:
                 throw new ArgumentOutOfRangeException();
         }
     }
-
-    public byte[] IdData { get; set; } = Array.Empty<byte>();
-
-    public ushort Port { get; set; }
-
-    public IpProtocol Protocol { get; set; }
-
-    public IdType IdType { get; set; }
 }

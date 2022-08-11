@@ -1,6 +1,6 @@
 ﻿using RawSocketTest.Helpers;
 
-namespace RawSocketTest.Payloads;
+namespace RawSocketTest.Payloads.PayloadSubunits;
 
 public class Proposal
 {

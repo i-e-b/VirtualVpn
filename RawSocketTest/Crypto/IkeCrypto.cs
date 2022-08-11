@@ -22,6 +22,7 @@ public class IkeCrypto
     public Integrity? Integrity => _integrity;
     public Prf? Prf => _prf;
     public byte[] SkA => _skA ?? Array.Empty<byte>();
+    public byte[] SkP => _skP ?? Array.Empty<byte>();
 
     public override string ToString()
     {

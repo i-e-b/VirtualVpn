@@ -49,9 +49,11 @@ public abstract class MessagePayload
     {
         var size = Size;
         if (offset + size > dest.Length) throw new Exception($"Target buffer is not long enough for the payload. Require {size}, but have {dest.Length-offset} available");
-        Serialise(); // update Data if needed
-        if (Data.Length + HeaderSize != size) throw new Exception($"Internal error: {GetType()} miscalculated serialisation size. Declared {size}, but provided {Data.Length + HeaderSize}");
         
+        Serialise(); // update Data if needed
+        
+        if (Data.Length + HeaderSize != size) throw new Exception($"Internal error: {GetType()} miscalculated serialisation size. Declared {size}, but provided {Data.Length + HeaderSize}");
+
         Length = (ushort)Size; // measure size to write into header
         
         // write header
@@ -118,4 +120,16 @@ public abstract class MessagePayload
     protected abstract void Deserialise();
     
     public abstract string Describe();
+
+    /// <summary>
+    /// Serialise to a new byte array
+    /// </summary>
+    public byte[] ToBytes()
+    {
+        var result = new byte[Size];
+        
+        WriteBytes(result, 0);
+        
+        return result;
+    }
 }

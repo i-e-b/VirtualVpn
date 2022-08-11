@@ -235,4 +235,15 @@ public static class Bit
         if (authData is null) return "<null>";
         return string.Join("", authData.Select(b=>b.ToString("x2")));
     }
+
+    public static bool AreDifferent(byte[] bytes1, byte[] bytes2)
+    {
+        if (bytes1.Length != bytes2.Length) return false;
+        var same = true;
+        for (int i = 0; i < bytes1.Length; i++)
+        {
+            same &= bytes1[i] == bytes2[i];
+        }
+        return !same;
+    }
 }

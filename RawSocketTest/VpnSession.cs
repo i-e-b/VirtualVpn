@@ -1,8 +1,11 @@
 ﻿using System.Net;
+using System.Security.Cryptography;
+using System.Text;
 using RawSocketTest.Crypto;
 using RawSocketTest.gmpDh;
 using RawSocketTest.Helpers;
 using RawSocketTest.Payloads;
+using RawSocketTest.Payloads.PayloadSubunits;
 using SkinnyJson;
 
 namespace RawSocketTest;
@@ -34,14 +37,17 @@ internal class VpnSession
     //## Locked for session ##//
     
     private readonly UdpServer _server; // note: should increment _seqOut when sending
+    private readonly VpnServer _sessionHost;
     private readonly ulong _peerSpi;
     private readonly ulong _localSpi;
     private readonly byte[] _localNonce;
+    private readonly List<ChildSa> _thisSessionChildren = new();
 
-    public VpnSession(UdpServer server, ulong peerSpi)
+    public VpnSession(UdpServer server, VpnServer sessionHost, ulong peerSpi)
     {
         // pvpn/server.py:208
         _server = server;
+        _sessionHost = sessionHost;
         _peerSpi = peerSpi;
         LastTouchUtc = DateTime.UtcNow;
         _localSpi = Bit.RandomSpi();
@@ -190,9 +196,122 @@ internal class VpnSession
         {
             Console.WriteLine($"        {payload.Describe()}");
         }
+
+        var peerSkp = _peerCrypto?.SkP;
+        if (peerSkp is null) throw new Exception("Peer SK-p not established before IKE_AUTH received");
+        if (_peerNonce is null) throw new Exception("Peer N-once was not established before IKE_AUTH received");
         
+        // read traffic selectors
+        var tsi = request.GetPayload<PayloadTsi>()?? throw new Exception("IKE_AUTH did not have an Traffic Select initiator payload");
+        var tsr = request.GetPayload<PayloadTsr>()?? throw new Exception("IKE_AUTH did not have an Traffic Select responder payload");
+        
+        var sa = request.GetPayload<PayloadSa>() ?? throw new Exception("IKE_AUTH did not have an SA payload");
         var idi = request.GetPayload<PayloadIDi>() ?? throw new Exception("IKE_AUTH did not have an IDi payload");
-        var auth = request.GetPayload<PayloadAuth>() ?? throw new Exception("IKE_AUTH did not have an AUTH payload");
+        var auth = request.GetPayload<PayloadAuth>();
+        if (auth is null) throw new Exception("Peer requested EAP, which we don't support");
+        
+        var pskAuth = GeneratePskAuth(request.RawData, _localNonce, idi, peerSkp);
+        if (Bit.AreDifferent(pskAuth, auth.AuthData))
+            throw new Exception($"PSK auth failed: initiator's hash did not match our expectations. Expected {Bit.HexString(pskAuth)}, but got {Bit.HexString(auth.AuthData)}");
+        
+        // pvpn/server.py:298
+        var chosenChildSa = sa.GetProposalFor(EncryptionTypeId.ENCR_AES_CBC);
+        if (chosenChildSa is null)
+        {
+            Console.WriteLine("    FATAL: could not find a compatible Child SA");
+            // TODO: how do we reject?
+            return;
+        }
+        
+        var childKey = CreateChildKey(chosenChildSa, _peerNonce, _localNonce);
+        chosenChildSa.SpiData = Bit.UInt32ToBytes(childKey.SpiIn); // Used to refer to the child SA in ESP messages?
+        chosenChildSa.SpiSize = 4;
+        
+        if (_lastMessageBytes is null) throw new Exception("IKE_AUTH stage reached without recording a last sent message? Auth cannot proceed.");
+        
+        // pvpn/server.py:301
+        var responsePayloadIdr = new PayloadIDr(IdType.ID_FQDN, Encoding.ASCII.GetBytes("V_VPN-0_1"), 0, 0);
+        var mySkp = _myCrypto?.SkP;
+        if (mySkp is null) throw new Exception("Local SK-p not established before IKE_AUTH received");
+        var authData = GeneratePskAuth(_lastMessageBytes, _peerNonce, responsePayloadIdr, mySkp); // I think this is based on the last thing we sent
+        
+        // pvpn/server.py:309
+        // Send our Child-SA message back
+        var response = BuildResponse(ExchangeType.IKE_AUTH, sendZeroHeader, _myCrypto, 
+            new PayloadSa(chosenChildSa),
+            tsi, tsr, // just accept whatever traffic selectors. We're virtual.
+            responsePayloadIdr,
+            new PayloadAuth(AuthMethod.PSK, authData)
+        );
+        // todo: above will break because we haven't done the crypto stuff yet. See pvpn/message.py:555
+        
+        // deliberately ignoring 'CP' for now
+        
+        // Send reply.
+        Reply(to: sender, response);
+        
+        _state = SessionState.ESTABLISHED; // Should now have a full Child SA
+    }
+
+    private byte[] GeneratePskAuth(byte[] messageData, byte[] nonce, MessagePayload payload, byte[] skP)
+    {
+        // pvpn/server.py:250
+        var prf = _peerCrypto?.Prf;
+        if (prf is null) throw new Exception("Tried to generate PSK auth before key exchange completed");
+        
+        var psk = Encoding.ASCII.GetBytes("ThisIsForTestOnlyDontUse");
+        var pad = Encoding.ASCII.GetBytes(Prf.IKEv2_KeyPad);
+        var prfPskPad = prf.Hash(psk, pad);
+        
+        var bulk = messageData.Concat(nonce).Concat(payload.ToBytes()).ToArray();
+        
+        return prf.Hash(prfPskPad, bulk);
+    }
+
+    private ChildSa CreateChildKey(Proposal childProposal, byte[] peerNonce, byte[] localNonce)
+    {
+        // pvpn/server.py:237
+        
+        if (_skD is null) throw new Exception("SK-d was not initialised before trying to create a CHILD-SA. Key exchange failed?");
+        if (_myCrypto?.Prf is null) throw new Exception("Crypto was not initialised before trying to create a CHILD SA.");
+        
+        // Gather up selected protocol, and check all results are valid
+        var integId = childProposal.GetTransform(TransformType.INTEG)?.Id;
+        if (integId is null) throw new Exception("Chosen proposal has no INTEG section");
+        var cipherInfo = childProposal.GetTransform(TransformType.ENCR);
+        if (cipherInfo is null) throw new Exception("Chosen proposal has no ENCR section");
+        var keyLength = GetKeyLength(cipherInfo);
+        if (keyLength is null) throw new Exception("Chosen proposal ENCR section has no KEY_LENGTH attribute");
+        
+        var seed = peerNonce.Concat(localNonce).ToArray();
+        var cipher = new Cipher((EncryptionTypeId)cipherInfo.Id, keyLength.Value);
+        var check = new Integrity((IntegId)integId);
+        
+        var totalSize = 2*check.KeySize + 2*cipher.KeySize;
+        var keySource = _myCrypto.Prf.PrfPlus(_skD, seed, totalSize);
+        
+        var idx = 0;
+        var skEi = Bit.Subset(cipher.KeySize, keySource, ref idx);
+        var skAi = Bit.Subset(check.KeySize, keySource, ref idx);
+        var skEr = Bit.Subset(cipher.KeySize, keySource, ref idx);
+        var skAr = Bit.Subset(check.KeySize, keySource, ref idx);
+        
+        var cryptoIn = new IkeCrypto(cipher, check, null, skEi, skAi, null, null);
+        var cryptoOut = new IkeCrypto(cipher, check, null, skEr, skAr, null, null);
+        
+        
+        //self.child_sa.append(child_sa)
+        //self.sessions[child_sa.spi_in] = child_sa
+
+        byte[] randomSpi = new byte[4];
+        RandomNumberGenerator.Fill(randomSpi);
+        
+        var childSa = new ChildSa(randomSpi, childProposal.SpiData, cryptoIn, cryptoOut);
+        
+        _sessionHost.AddChildSession(childSa); // this gets us the 32-bit SA used for ESA, not the 64-bit used for key exchange
+        _thisSessionChildren.Add(childSa);
+        
+        return childSa;
     }
 
     /// <summary>

@@ -22,6 +22,6 @@ public class PayloadUnknown : MessagePayload
 
     public override string Describe()
     {
-        return "Unknown payload type";
+        return $"Unknown payload type: {Type.ToString()}";
     }
 }

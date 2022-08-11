@@ -1,6 +1,8 @@
 ﻿using NUnit.Framework;
 using RawSocketTest;
 using RawSocketTest.Payloads;
+using RawSocketTest.Payloads.PayloadSubunits;
+
 #pragma warning disable CS8602
 
 namespace ProtocolTests;

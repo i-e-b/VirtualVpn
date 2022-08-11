@@ -1,6 +1,7 @@
 ﻿using System.Net;
 using RawSocketTest.Helpers;
 using SkinnyJson;
+// ReSharper disable BuiltInTypeReferenceStyle
 
 namespace RawSocketTest;
 
@@ -10,7 +11,8 @@ public class VpnServer : IDisposable
     
     private int _messageCount;
     private readonly UdpServer _server;
-    private readonly Dictionary<ulong, VpnSession> _sessions = new();
+    private readonly Dictionary<UInt64, VpnSession> _sessions = new();
+    private readonly Dictionary<UInt32, ChildSa> _childSessions = new();
 
     public VpnServer()
     {
@@ -93,7 +95,7 @@ public class VpnServer : IDisposable
         Console.WriteLine($"    it's for a new session?  {ikeMessage.SpiI:x16} => {ikeMessage.SpiR:x16}");
             
         // Start a new session and store it, keyed by the initiator id
-        var newSession = new VpnSession(_server, ikeMessage.SpiI);
+        var newSession = new VpnSession(_server, this, ikeMessage.SpiI);
         _sessions.Add(ikeMessage.SpiI, newSession);
             
         // Pass message to new session
@@ -183,5 +185,10 @@ public class VpnServer : IDisposable
     {
         _server.Dispose();
         GC.SuppressFinalize(this);
+    }
+
+    public void AddChildSession(ChildSa childSa)
+    {
+        _childSessions.Add(childSa.SpiIn, childSa);
     }
 }
