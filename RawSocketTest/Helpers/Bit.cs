@@ -246,4 +246,16 @@ public static class Bit
         }
         return !same;
     }
+
+    /// <summary>
+    /// Copy the entirety of 'src' on top of 'dst', at a given offset into dst.
+    /// Will stop if either array is exhausted.
+    /// </summary>
+    public static void CopyOver(byte[] src, byte[] dst, ref int dstOffset)
+    {
+        for (int i = 0; i < src.Length && dstOffset < dst.Length; i++)
+        {
+            dst[dstOffset++] = src[i];
+        }
+    }
 }

@@ -35,6 +35,9 @@ public class PayloadSecured : MessagePayload
 
     public byte[]? PlainBody { get; private set; }
 
+    /// <summary>
+    /// Create an SK payload from existing (incoming) payload data
+    /// </summary>
     public PayloadSecured(byte[] data, IkeCrypto? ikeCrypto, ref int idx, ref PayloadType nextPayload)
     {
         if (ikeCrypto is null) throw new Exception("Can't decrypt secured payload: crypto not provided");
@@ -47,8 +50,16 @@ public class PayloadSecured : MessagePayload
         
         ReadData(data, ref idx, ref nextPayload);
         
-        PlainBody = ikeCrypto.Decrypt(Data, out _);
+        PlainBody = ikeCrypto.Decrypt(Data);
         _firstHeader = null; // not sure if this is at all correct
+    }
+
+    /// <summary>
+    /// Create an SK wrapper around data encrypted on this side
+    /// </summary>
+    public PayloadSecured(byte[] encryptedData)
+    {
+        Data = encryptedData;
     }
     
     protected override void Serialise()

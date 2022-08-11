@@ -100,6 +100,9 @@ public class PayloadIDr: PayloadIDx
     public PayloadIDr(IdType type, byte[] idData, int port, int protocol)
     {
         // like pvpn/message.py:118
-        throw new NotImplementedException();
+        IdType=type;
+        IdData=idData;
+        Port = (ushort)port;
+        Protocol = (IpProtocol)protocol;
     }
 }

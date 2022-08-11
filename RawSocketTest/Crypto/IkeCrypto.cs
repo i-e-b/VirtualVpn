@@ -155,7 +155,7 @@ public class IkeCrypto
     /// <summary>
     /// Recover encrypted data, and the chain byte used
     /// </summary>
-    public byte[] Decrypt(byte[] encrypted, out byte chainByte)
+    public byte[] Decrypt(byte[] encrypted)
     {
         /*
                                1                   2                   3
@@ -199,15 +199,7 @@ public class IkeCrypto
             Console.WriteLine($"Failed to decrypt: {ex}");
             throw;
         }
-
-        /*var maybe = decrypted[^1]; // last element
-        nextHeader = (IpProtocol)decrypted[^1]; // last element
-        var padLength = decrypted[^2]; // second-last element
-        var messageBytes = decrypted.Length - padLength - 1;
-        Console.WriteLine($"    Decryption: result={messageBytes}, total={decrypted.Length} bytes, pad={padLength} or pad={maybe}?");
-        */
         
-        chainByte = 0; // is this really meant to be here?
         var padLength = decrypted[^1]; // last byte
         var messageBytes = decrypted.Length - padLength - 1;
 
@@ -215,16 +207,16 @@ public class IkeCrypto
     }
 
     /// <summary>
-    /// Encrypt plain data, using a chain byte
+    /// Encrypt plain data, adding padding for a checksum
     /// </summary>
-    public byte[] Encrypt(IpProtocol nextHeader, byte[] plain)
+    public byte[] Encrypt(byte[] plain)
     {
         var blockSize = _cipher.BlockSize;
         var iv = _cipher.GenerateIv();
-        var padLength = blockSize - ((plain.Length + 1) % blockSize) - 1;
+        var padLength = blockSize - ((plain.Length) % blockSize) - 1;
 
         var pad = new byte[padLength];
-        var tail = new[] { (byte)padLength, (byte)nextHeader };
+        var tail = new[] { (byte)padLength };
         var checksumPad = (_integrity is null) ? Array.Empty<byte>() : new byte[_integrity.HashSize];
 
         var payload = plain.Concat(pad).Concat(tail).ToArray();
@@ -367,5 +359,8 @@ public class IkeCrypto
         }
     }
 
-    // TODO: move this stuff into its own class? ...
+    public byte[] DecryptEsp(byte[] data, out IpProtocol protocol)
+    {
+        throw new NotImplementedException();
+    }
 }

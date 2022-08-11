@@ -15,6 +15,7 @@ namespace RawSocketTest;
 /// </summary>
 internal class VpnSession
 {
+    private const string PreSharedKeyString = "ThisIsForTestOnlyDontUse";
     //## State machine vars ##//
     
     private SessionState _state;
@@ -249,13 +250,21 @@ internal class VpnSession
             responsePayloadIdr,
             new PayloadAuth(AuthMethod.PSK, authData)
         );
-        // todo: above will break because we haven't done the crypto stuff yet. See pvpn/message.py:555
         
         // deliberately ignoring 'CP' for now
         
+        // IEB: continue from here. I'm probably serialising something badly.
+        /*
+Aug 11 15:48:24 Gertrud charon: 16[NET] sending packet: from 159.69.13.126[4500] to 185.81.252.44[4500] (480 bytes)
+Aug 11 15:48:24 Gertrud charon: 06[ENC] no message rules specified for this message type
+Aug 11 15:48:24 Gertrud charon: 06[NET] received unsupported IKE version 7.10 from 185.81.252.44, sending INVALID_MAJOR_VERSION
+         */
+        
         // Send reply.
+        Console.WriteLine("    Sending IKE_AUTH response to peer");
         Reply(to: sender, response);
         
+        Console.WriteLine("    Setting state to established");
         _state = SessionState.ESTABLISHED; // Should now have a full Child SA
     }
 
@@ -268,35 +277,21 @@ internal class VpnSession
         var prf = _peerCrypto?.Prf;
         if (prf is null) throw new Exception("Tried to generate PSK auth before key exchange completed");
         
-        // 01 -> some kind of type? IdType.ID_IPV4_ADDR == 01 AuthId_1.PSK == 01     <-- guessing IdType.ID_IPV4_ADDR, as this goes with the data
-        // 3 zero bytes,
-        // 9F 45 0D 7E -> 159.69.13.126 ... this is the initiator's IP address
-            
-        // IDx' seems to be fairly constant:       01 00 00 00 9F 45 0D 7E
-        // IDx' => 8 bytes @ 0x7f9b1fee7850        01 00 00 00 9F 45 0D 7E    <-- this is not nonce, it's something else
-        // SK_p => 32 bytes @ 0x7f9af4007340       AF E8 1D 52 00 28 34 E6 2C 70 58 9B C2 D8 5F 1A B6 01 F2 05 EB 44 B1 BC 1A 66 B9 65 76 D4 6F DD
+        //Console.WriteLine($"PSK message: {payload.Describe()}");
 
-        // octets = message + nonce + prf(Sk_px, IDx')
-        // AUTH = prf(prf(secret, keypad), octets)
-        
-        Console.WriteLine($"PSK message: {payload.Describe()}");
-        
-        // IEB: temporarily hard coding. Debug and find the data we need
-
-        var prefix = new byte[] { (byte)payload.IdType, 0, 0, 0 };//new byte[] { (byte)IdType.ID_IPV4_ADDR, 0, 0, 0 };
-        var peerId = payload.IdData; //new byte[] { 0x9F, 0x45, 0x0D, 0x7E };
+        var prefix = new byte[] { (byte)payload.IdType, 0, 0, 0 };
+        var peerId = payload.IdData;
         var idxTick = prefix.Concat(peerId).ToArray();
         var octetPad = prf.Hash(skP, idxTick);
         
         var bulk = messageData.Concat(nonce).Concat(octetPad).ToArray();
         
-        Console.WriteLine($"#### {Bit.Describe("IDx'", idxTick)}");
-        Console.WriteLine($"#### {Bit.Describe("SK_p", skP)}");
-        Console.WriteLine($"#### {Bit.Describe("prf(Sk_px, IDx')", octetPad)}");
-        Console.WriteLine($"#### {Bit.Describe("octets =  message + nonce + prf(Sk_px, IDx') ", messageData)}"); // expect ~ 1192 bytes
+        //Console.WriteLine($"#### {Bit.Describe("IDx'", idxTick)}");
+        //Console.WriteLine($"#### {Bit.Describe("SK_p", skP)}");
+        //Console.WriteLine($"#### {Bit.Describe("prf(Sk_px, IDx')", octetPad)}");
+        //Console.WriteLine($"#### {Bit.Describe("octets =  message + nonce + prf(Sk_px, IDx') ", messageData)}"); // expect ~ 1192 bytes
         
-        
-        var psk = Encoding.ASCII.GetBytes("ThisIsForTestOnlyDontUse");
+        var psk = Encoding.ASCII.GetBytes(PreSharedKeyString);
         var pad = Encoding.ASCII.GetBytes(Prf.IKEv2_KeyPad);
         var prfPskPad = prf.Hash(psk, pad);
         
@@ -511,11 +506,9 @@ internal class VpnSession
         // the session should have a cryptography method selected
         if (_myCrypto is null) throw new Exception("No incoming crypto method agreed");
         
-        // IEB: pretty sure the 'nextHeader' thing is wrong here. Find in RFCs
-        var rawMessage = _myCrypto.Decrypt(data, out var nextHeader);
+        var rawMessage = _myCrypto.DecryptEsp(data, out var nextHeader);
 
-        var header = (IpProtocol)nextHeader;
-        switch (header)
+        switch (nextHeader)
         {
             case IpProtocol.IPV4:
                 // pvpn/ip.py:402

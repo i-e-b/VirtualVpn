@@ -86,7 +86,6 @@ public class IkeMessage
     {
         // TODO: crypto, checksums
         
-        ExpectedLength = PayloadLength + HeaderLength;
         var offset = 0;
         if (sendZeroHeader)
         {
@@ -95,28 +94,34 @@ public class IkeMessage
         }
 
         FirstPayload = Payloads.Count > 0 ? Payloads[0].Type : PayloadType.NONE;
+        
+        var payloadData = EncodePayloads();
 
         if (ikeCrypto is not null)
         {
-            // TODO: implement. See pvpn/message.py:555
-            throw new Exception("Building crypto packets isn't implemented yet");
+            // pvpn/message.py:555
+            var sk = new PayloadSecured(ikeCrypto.Encrypt(payloadData));
+            var skData = sk.ToBytes();
+            
+            var subHeader = new byte[4];
+            var subIdx = 0;
+            subHeader[subIdx++] = (byte)FirstPayload;
+            subIdx++;// not used
+            Bit.WriteUInt16((ushort)(skData.Length + 4), subHeader, ref subIdx);
+            
+            payloadData = subHeader.Concat(skData).ToArray();
+            FirstPayload = PayloadType.SK;
         }
-
+        
+        ExpectedLength = (uint)(payloadData.Length + HeaderLength);
         var bytes = new byte[ExpectedLength];
-        WriteHeader(bytes, offset);
-
-        offset += 28;
-        for (int i = 0; i < Payloads.Count; i++)
-        {
-            // ensure chain is correct
-            Payloads[i].NextPayload = (i+1 < Payloads.Count) ? Payloads[i+1].Type : PayloadType.NONE;
-            offset = Payloads[i].WriteBytes(bytes, offset);
-        }
-
+        WriteHeader(bytes, ref offset);
+        Bit.CopyOver(src: payloadData, dst: bytes, ref offset);
 
         if (ikeCrypto is not null)
         {
-            // TODO: write checksum
+            // pvpn/message.py:571
+            ikeCrypto.AddChecksum(bytes);
         }
 
         if (offset != ExpectedLength) throw new Exception($"Unexpected write length. Expected {ExpectedLength}, but got {offset}");
@@ -124,7 +129,26 @@ public class IkeMessage
         return bytes;
     }
 
-    private void WriteHeader(byte[] bytes, int offset)
+    private byte[] EncodePayloads()
+    {
+        var result = new byte[PayloadLength];
+        var idx = 0;
+        for (int i = 0; i < Payloads.Count; i++)
+        {
+            // ensure chain is correct
+            Payloads[i].NextPayload = (i + 1 < Payloads.Count) ? Payloads[i + 1].Type : PayloadType.NONE;
+            idx = Payloads[i].WriteBytes(result, idx);
+        }
+
+        if (idx != result.Length)
+        {
+            Console.WriteLine($"    WARNING: EncodePayloads unexpected length. Expected {result.Length}, but got {idx}.");
+        }
+
+        return result;
+    }
+
+    private void WriteHeader(byte[] bytes, ref int offset)
     {
         Bit.WriteUInt64(SpiI, bytes, ref offset);
         Bit.WriteUInt64(SpiR, bytes, ref offset);
