@@ -193,10 +193,24 @@ public class IkeMessage
     {
         var payloads = new List<MessagePayload>();
         var nextPayload = first;
+        Console.WriteLine($"    Reading chain: {srcData.Length} bytes starting at {idx} (from raw data of {rawData?.Length.ToString() ?? "n/a"})");
+
+        if (idx >= srcData.Length)
+        {
+            Console.WriteLine("    WARNING: start index was already at end of data");
+            return payloads;
+        }
+
         while (idx < srcData.Length && nextPayload != PayloadType.NONE)
         {
             var payload = ReadSinglePayload(srcData, encryption, ref idx, ref nextPayload, rawData);
+            Console.WriteLine($"        Next payload: {nextPayload.ToString()}, ended at {idx}");
             payloads.AddRange(payload);
+        }
+
+        if (nextPayload != PayloadType.NONE)
+        {
+            Console.WriteLine("    WARNING: got to the end of data without finding a PayloadType.NONE");
         }
 
         return payloads;
@@ -208,6 +222,7 @@ public class IkeMessage
     /// </summary>
     public static IEnumerable<MessagePayload> ReadSinglePayload(byte[] srcData, IkeCrypto? ikeCrypto, ref int idx, ref PayloadType nextPayload, byte[]? rawData = null)
     {
+        Console.WriteLine($"    Reading payload {nextPayload.ToString()} from source ({srcData.Length} bytes starting at {idx})");
         var thisType = nextPayload;
         // TODO: continue to fill out
         switch (thisType)
@@ -246,6 +261,7 @@ public class IkeMessage
                 if (!ok) Console.WriteLine("CHECKSUM FAILED! We will continue, but result might be unreliable (in RawSocketTest.IkeMessage.ReadSinglePayload)");
                 else Console.WriteLine("Checksum passed in RawSocketTest.IkeMessage.ReadSinglePayload");
                 
+                // SK must be last, as it's 'next payload' field is actually the first of the encrypted contents
                 var expandedPayload = new PayloadSecured(srcData, ikeCrypto, ref idx, ref nextPayload);
                 // read the 'plain' as a new set of payloads
                 
@@ -254,12 +270,13 @@ public class IkeMessage
                 {
                     Console.WriteLine($"    Reading inner payload, starting with {nextPayload.ToString()}");
                     File.WriteAllBytes(@"C:\temp\SK_Plain.bin", expandedPayload.PlainBody);
-    
+
                     var childIdx = 0;
                     var innerPayloads = ReadPayloadChainInternal(nextPayload, ikeCrypto, ref childIdx, expandedPayload.PlainBody, rawData).ToList();
                     
                     Console.WriteLine($"    Got {innerPayloads.Count} inner payloads:\r\n{Json.Beautify(Json.Freeze(innerPayloads))}");
                     
+                    nextPayload = PayloadType.NONE; // end of internal run
                     return innerPayloads;
                 }
 

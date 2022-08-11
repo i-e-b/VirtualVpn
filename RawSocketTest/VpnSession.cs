@@ -342,9 +342,11 @@ internal class VpnSession
         // the session should have a cryptography method selected
         if (_myCrypto is null) throw new Exception("No incoming crypto method agreed");
         
+        // IEB: pretty sure the 'nextHeader' thing is wrong here. Find in RFCs
         var rawMessage = _myCrypto.Decrypt(data, out var nextHeader);
 
-        switch (nextHeader)
+        var header = (IpProtocol)nextHeader;
+        switch (header)
         {
             case IpProtocol.IPV4:
                 // pvpn/ip.py:402

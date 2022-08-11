@@ -383,7 +383,7 @@ public class GmpDiffieHellman : IDisposable
             random[i] = 0;
         }
 
-        Log("size of DH secret exponent: %u bits", mpz_sizeinbase(xa, 2).ToString());
+        Log("        size of DH secret exponent (bits): ", mpz_sizeinbase(xa, 2).ToString());
 
         mpz_powm(ya, g, xa, p);
     }

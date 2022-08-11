@@ -41,16 +41,14 @@ public class PayloadSecured : MessagePayload
         
         Console.WriteLine($"    Incoming secured payload. Offset is {idx}bytes. Encrypted data is {data.Length} bytes.");
         
-        var ok = ikeCrypto.VerifyChecksum(data); // is this getting chopped too much?
+        var ok = ikeCrypto.VerifyChecksum(data);
         if (!ok) Console.WriteLine("CHECKSUM FAILED in RawSocketTest.Payloads.PayloadSecured.PayloadSecured");
         else  Console.WriteLine("Checksum passed in RawSocketTest.Payloads.PayloadSecured.PayloadSecured");
         
         ReadData(data, ref idx, ref nextPayload);
         
-        
-        
-        PlainBody = ikeCrypto.Decrypt(Data, out var nextHeader);
-        _firstHeader = nextHeader;
+        PlainBody = ikeCrypto.Decrypt(Data, out _);
+        _firstHeader = null; // not sure if this is at all correct
     }
     
     protected override void Serialise()

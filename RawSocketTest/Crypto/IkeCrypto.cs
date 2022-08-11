@@ -152,7 +152,7 @@ public class IkeCrypto
     /// <summary>
     /// Recover encrypted data, and the chain byte used
     /// </summary>
-    public byte[] Decrypt(byte[] encrypted, out IpProtocol nextHeader)
+    public byte[] Decrypt(byte[] encrypted, out byte chainByte)
     {
         /*
                                1                   2                   3
@@ -197,9 +197,16 @@ public class IkeCrypto
             throw;
         }
 
+        /*var maybe = decrypted[^1]; // last element
         nextHeader = (IpProtocol)decrypted[^1]; // last element
         var padLength = decrypted[^2]; // second-last element
-        var messageBytes = decrypted.Length - padLength - 2;
+        var messageBytes = decrypted.Length - padLength - 1;
+        Console.WriteLine($"    Decryption: result={messageBytes}, total={decrypted.Length} bytes, pad={padLength} or pad={maybe}?");
+        */
+        
+        chainByte = 0; // is this really meant to be here?
+        var padLength = decrypted[^1]; // last byte
+        var messageBytes = decrypted.Length - padLength - 1;
 
         return decrypted.Take(messageBytes).ToArray();
     }
