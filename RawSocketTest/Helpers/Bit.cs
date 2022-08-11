@@ -12,15 +12,6 @@ namespace RawSocketTest.Helpers;
 public static class Bit
 {
     /// <summary>
-    /// Read a byte from a larger integer
-    /// </summary>
-    public static byte PickByte(int byteIndex, ulong data)
-    {
-        var s = 8 * (byteIndex - 1);
-        return (byte)((data >> s) & 0xff);
-    }
-
-    /// <summary>
     /// Read bytes from start to end (inclusive) into long, in network order
     /// </summary>
     public static UInt64 Unpack(byte[] source, int startIdx, int endIdx)
@@ -122,6 +113,27 @@ public static class Bit
         data[2] = (byte)((value >>  8) & 0xff);
         data[3] = (byte)((value >>  0) & 0xff);
         return data;
+    }
+    
+    public static void WriteUInt32(uint value, byte[] data, ref int idx)
+    {
+        data[idx++] = (byte)((value >> 24) & 0xff);
+        data[idx++] = (byte)((value >> 16) & 0xff);
+        data[idx++] = (byte)((value >>  8) & 0xff);
+        data[idx++] = (byte)((value >>  0) & 0xff);
+    }
+
+    public static void WriteUInt64(ulong value, byte[] data, ref int idx)
+    {
+        data[idx++] = (byte)((value >> 56) & 0xff);
+        data[idx++] = (byte)((value >> 48) & 0xff);
+        data[idx++] = (byte)((value >> 40) & 0xff);
+        data[idx++] = (byte)((value >> 32) & 0xff);
+        
+        data[idx++] = (byte)((value >> 24) & 0xff);
+        data[idx++] = (byte)((value >> 16) & 0xff);
+        data[idx++] = (byte)((value >>  8) & 0xff);
+        data[idx++] = (byte)((value >>  0) & 0xff);
     }
 
     public static byte[] UInt64ToBytes(ulong value)

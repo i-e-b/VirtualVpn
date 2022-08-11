@@ -256,7 +256,7 @@ internal class VpnSession
         gmpDh.get_shared_secret(out var secret);
         
         // create keys from exchange result. If something went wrong, we will end up with a checksum failure
-        CreateKeyAndCrypto(chosenProposal, secret, publicKey, null, payloadKe.KeyData);
+        CreateKeyAndCrypto(chosenProposal, secret, null);
         
         var saMessage = BuildResponse(ExchangeType.IKE_SA_INIT, sendZeroHeader, null,
             new PayloadSa(chosenProposal),
@@ -276,9 +276,8 @@ internal class VpnSession
     /// <summary>
     /// Generate key from DH exchange, build crypto protocols.
     /// </summary>
-    private void CreateKeyAndCrypto(Proposal proposal, byte[] sharedSecret, byte[] publicKey, byte[]? oldSkD, byte[] payloadKeData)
+    private void CreateKeyAndCrypto(Proposal proposal, byte[] sharedSecret, byte[]? oldSkD)
     {
-        // pvpn/server.py:223
         // Check the state is ok
         if (_peerNonce is null) throw new Exception("Did not receive N-once from peer");
         
@@ -292,58 +291,15 @@ internal class VpnSession
         var keyLength = GetKeyLength(cipherInfo);
         if (keyLength is null) throw new Exception("Chosen proposal ENCR section has no KEY_LENGTH attribute");
         
-        // Build protocols
-        var prf = new Prf((PrfId)prfId);
-        var integ = new Integrity((IntegId)integId);
-        var cipher = new Cipher((EncryptionTypeId)cipherInfo.Id, keyLength.Value);
-        
-        byte[] sKeySeed;
-        if (oldSkD is null)
-        {
-            sKeySeed = prf.Hash(_peerNonce.Concat(_localNonce).ToArray(), sharedSecret);
-        }
-        else
-        {
-            sKeySeed = prf.Hash(oldSkD, sharedSecret.Concat(_peerNonce).Concat(_localNonce).ToArray());
-        }
-        
-        // Generate crypto bases
-        
-        var totalSize = 3*prf.KeySize + 2*integ.KeySize + 2*cipher.KeySize;
-        var seed = _peerNonce.Concat(_localNonce).Concat(Bit.UInt64ToBytes(_peerSpi)).Concat(Bit.UInt64ToBytes(_localSpi)).ToArray();
-        var keySource = prf.PrfPlus(sKeySeed, seed, totalSize);
-        
-        var idx = 0;
-        _skD = Bit.Subset(prf.KeySize, keySource, ref idx);
-        var skAi = Bit.Subset(integ.KeySize, keySource, ref idx);
-        var skAr = Bit.Subset(integ.KeySize, keySource, ref idx);
-        var skEi = Bit.Subset(cipher.KeySize, keySource, ref idx);
-        var skEr = Bit.Subset(cipher.KeySize, keySource, ref idx);
-        var skPi = Bit.Subset(prf.KeySize, keySource, ref idx);
-        var skPr = Bit.Subset(prf.KeySize, keySource, ref idx);
-        
-        if (idx != keySource.Length) throw new Exception($"Unexpected key set length in {nameof(CreateKeyAndCrypto)}. Expected {keySource.Length} but got {idx}");
-        
-        // build crypto for both sides
-        _myCrypto = new IkeCrypto(cipher, integ, prf, skEr, skAr, skPr, null);
-        _peerCrypto = new IkeCrypto(cipher, integ, prf, skEi, skAi, skPi, null);
-        
-        File.WriteAllText(@"C:\temp\zzzLastSessionKeys.txt",
-            Bit.Describe("SK d", _skD)+
-            Bit.Describe("skAi", skAi)+
-            Bit.Describe("skAr", skAr)+
-            Bit.Describe("skEi", skEi)+
-            Bit.Describe("skEr", skEr)+
-            Bit.Describe("skPi", skPi)+
-            Bit.Describe("skPr", skPr)+
-            Bit.Describe("keySource", keySource)+
-            Bit.Describe("seed", seed)+
-            Bit.Describe("secret", sharedSecret)+
-            Bit.Describe("sKeySeed", sKeySeed)+
-            Bit.Describe("publicKey", publicKey)+
-            Bit.Describe("payloadKe", payloadKeData)
+        IkeCrypto.CreateKeysAndCryptoInstances(
+            _peerNonce, _localNonce, sharedSecret,
+            Bit.UInt64ToBytes(_peerSpi), Bit.UInt64ToBytes(_localSpi),
+            (PrfId)prfId, (IntegId)integId, (EncryptionTypeId)cipherInfo.Id, keyLength.Value, oldSkD,
+            
+            out _skD, out _myCrypto, out _peerCrypto
             );
     }
+    
 
     /// <summary>
     /// Find a transform attribute with type of key-length,

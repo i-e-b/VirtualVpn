@@ -126,38 +126,16 @@ public class IkeMessage
 
     private void WriteHeader(byte[] bytes, int offset)
     {
-        bytes[offset+0] = Bit.PickByte(8, SpiI);
-        bytes[offset+1] = Bit.PickByte(7, SpiI);
-        bytes[offset+2] = Bit.PickByte(6, SpiI);
-        bytes[offset+3] = Bit.PickByte(5, SpiI);
-        bytes[offset+4] = Bit.PickByte(4, SpiI);
-        bytes[offset+5] = Bit.PickByte(3, SpiI);
-        bytes[offset+6] = Bit.PickByte(2, SpiI);
-        bytes[offset+7] = Bit.PickByte(1, SpiI);
+        Bit.WriteUInt64(SpiI, bytes, ref offset);
+        Bit.WriteUInt64(SpiR, bytes, ref offset);
 
-        bytes[offset+8] = Bit.PickByte(8, SpiR);
-        bytes[offset+9] = Bit.PickByte(7, SpiR);
-        bytes[offset+10] = Bit.PickByte(6, SpiR);
-        bytes[offset+11] = Bit.PickByte(5, SpiR);
-        bytes[offset+12] = Bit.PickByte(4, SpiR);
-        bytes[offset+13] = Bit.PickByte(3, SpiR);
-        bytes[offset+14] = Bit.PickByte(2, SpiR);
-        bytes[offset+15] = Bit.PickByte(1, SpiR);
+        bytes[offset++] = (byte)FirstPayload;
+        bytes[offset++] = (byte)Version;
+        bytes[offset++] = (byte)Exchange;
+        bytes[offset++] = (byte)MessageFlag;
 
-        bytes[offset+16] = (byte)FirstPayload;
-        bytes[offset+17] = (byte)Version;
-        bytes[offset+18] = (byte)Exchange;
-        bytes[offset+19] = (byte)MessageFlag;
-
-        bytes[offset+20] = Bit.PickByte(4, MessageId);
-        bytes[offset+21] = Bit.PickByte(3, MessageId);
-        bytes[offset+22] = Bit.PickByte(2, MessageId);
-        bytes[offset+23] = Bit.PickByte(1, MessageId);
-
-        bytes[offset+24] = Bit.PickByte(4, ExpectedLength);
-        bytes[offset+25] = Bit.PickByte(3, ExpectedLength);
-        bytes[offset+26] = Bit.PickByte(2, ExpectedLength);
-        bytes[offset+27] = Bit.PickByte(1, ExpectedLength);
+        Bit.WriteUInt32(MessageId, bytes, ref offset);
+        Bit.WriteUInt32(ExpectedLength, bytes, ref offset);
     }
 
     public static IkeMessage FromBytes(byte[] rawData, int offset)
@@ -194,7 +172,7 @@ public class IkeMessage
         if (MessageFlag.HasFlag(MessageFlag.Encryption))
         {
             if (encryption is null) throw new Exception("Message is flagged as encrypted, but no crypto was supplied");
-            
+            Console.WriteLine("    Message is fully encrypted");
             
             // make sure we have just the target data
             if (offset != 0) srcData = srcData.Skip(offset).ToArray();
@@ -206,18 +184,18 @@ public class IkeMessage
 
         // read payload chain
         var idx = offset+28;
-        var payloads = ReadPayloadChainInternal(FirstPayload, encryption, ref idx, srcData);
+        var payloads = ReadPayloadChainInternal(FirstPayload, encryption, ref idx, srcData, RawData);
 
         Payloads.AddRange(payloads);
     }
 
-    private static IEnumerable<MessagePayload> ReadPayloadChainInternal(PayloadType first, IkeCrypto? encryption, ref int idx, byte[] srcData)
+    private static IEnumerable<MessagePayload> ReadPayloadChainInternal(PayloadType first, IkeCrypto? encryption, ref int idx, byte[] srcData, byte[]? rawData)
     {
         var payloads = new List<MessagePayload>();
         var nextPayload = first;
         while (idx < srcData.Length && nextPayload != PayloadType.NONE)
         {
-            var payload = ReadSinglePayload(srcData, encryption, ref idx, ref nextPayload);
+            var payload = ReadSinglePayload(srcData, encryption, ref idx, ref nextPayload, rawData);
             payloads.AddRange(payload);
         }
 
@@ -274,7 +252,7 @@ public class IkeMessage
                     File.WriteAllBytes(@"C:\temp\SK_Plain.bin", expandedPayload.PlainBody);
     
                     var childIdx = 0;
-                    var innerPayloads = ReadPayloadChainInternal(nextPayload, ikeCrypto, ref childIdx, expandedPayload.PlainBody).ToList();
+                    var innerPayloads = ReadPayloadChainInternal(nextPayload, ikeCrypto, ref childIdx, expandedPayload.PlainBody, rawData).ToList();
                     
                     Console.WriteLine($"    Got {innerPayloads.Count} inner payloads:\r\n{Json.Beautify(Json.Freeze(innerPayloads))}");
                     

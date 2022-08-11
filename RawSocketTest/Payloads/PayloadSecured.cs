@@ -2,6 +2,10 @@
 
 namespace RawSocketTest.Payloads;
 
+/// <summary>
+/// Represents an 'SK' message (type 46).
+/// This is an encrypted container for further payloads
+/// </summary>
 public class PayloadSecured : MessagePayload
 {
     /*

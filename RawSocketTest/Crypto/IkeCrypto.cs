@@ -70,6 +70,80 @@ public class IkeCrypto
 
         _lastIv = null;
     }
+    
+    /// <summary>
+    /// Generate a set of crypto classes given the required data from an IKEv2 session
+    /// </summary>
+    public static void CreateKeysAndCryptoInstances(
+        byte[] theirNonce, byte[] myNonce, byte[] sharedSecret,
+        byte[] theirSpi, byte[] mySpi,
+        PrfId prfId, IntegId integId, EncryptionTypeId cipherId, int keyLength, byte[]? oldSkD,
+        
+        out byte[] skD, out IkeCrypto myCrypto, out IkeCrypto theirCrypto
+        ){
+        // pvpn/server.py:223
+        
+        
+        File.WriteAllText(@"C:\temp\zzzLastSessionKeysSources.txt",
+            $"prfId={prfId}, integId={integId}, cipherId={cipherId}, keyLength={keyLength}\r\n"+
+            Bit.Describe("theirNonce", theirNonce)+
+            Bit.Describe("myNonce", myNonce)+
+            Bit.Describe("sharedSecret", sharedSecret)+
+            Bit.Describe("theirSpi", theirSpi)+
+            Bit.Describe("mySpi", mySpi)+
+            Bit.Describe("oldSkD", oldSkD)
+        );
+        
+        // Build protocols
+        var prf = new Prf(prfId);
+        var integ = new Integrity(integId);
+        var cipher = new Cipher(cipherId, keyLength);
+        
+        byte[] sKeySeed;
+        if (oldSkD is null)
+        {
+            sKeySeed = prf.Hash(theirNonce.Concat(myNonce).ToArray(), sharedSecret);
+        }
+        else
+        {
+            sKeySeed = prf.Hash(oldSkD, sharedSecret.Concat(theirNonce).Concat(myNonce).ToArray());
+        }
+        
+        // Generate crypto bases
+        
+        var totalSize = 3*prf.KeySize + 2*integ.KeySize + 2*cipher.KeySize;
+        var seed = theirNonce.Concat(myNonce).Concat(theirSpi).Concat(mySpi).ToArray();
+        var keySource = prf.PrfPlus(sKeySeed, seed, totalSize);
+        
+        var idx = 0;
+        skD = Bit.Subset(prf.KeySize, keySource, ref idx);
+        var skAi = Bit.Subset(integ.KeySize, keySource, ref idx);
+        var skAr = Bit.Subset(integ.KeySize, keySource, ref idx);
+        var skEi = Bit.Subset(cipher.KeySize, keySource, ref idx);
+        var skEr = Bit.Subset(cipher.KeySize, keySource, ref idx);
+        var skPi = Bit.Subset(prf.KeySize, keySource, ref idx);
+        var skPr = Bit.Subset(prf.KeySize, keySource, ref idx);
+        
+        if (idx != keySource.Length) throw new Exception($"Unexpected key set length. Expected {keySource.Length} but got {idx}");
+        
+        // build crypto for both sides
+        myCrypto = new IkeCrypto(cipher, integ, prf, skEr, skAr, skPr, null);
+        theirCrypto = new IkeCrypto(cipher, integ, prf, skEi, skAi, skPi, null);
+        
+        File.WriteAllText(@"C:\temp\zzzLastSessionKeys.txt",
+            Bit.Describe("SK d", skD)+
+            Bit.Describe("skAi", skAi)+
+            Bit.Describe("skAr", skAr)+
+            Bit.Describe("skEi", skEi)+
+            Bit.Describe("skEr", skEr)+
+            Bit.Describe("skPi", skPi)+
+            Bit.Describe("skPr", skPr)+
+            Bit.Describe("keySource", keySource)+
+            Bit.Describe("seed", seed)+
+            Bit.Describe("secret", sharedSecret)+
+            Bit.Describe("sKeySeed", sKeySeed)
+            );
+    }
 
     /// <summary>
     /// Recover encrypted data, and the chain byte used

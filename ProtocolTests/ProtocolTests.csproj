@@ -27,6 +27,9 @@
       <None Update="SampleData\IKEv2-Reply_-1_Port-500_IKE.bin">
         <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       </None>
+      <None Update="SampleData\SK-raw.bin">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </None>
     </ItemGroup>
 
     <ItemGroup>

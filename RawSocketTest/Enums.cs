@@ -13,11 +13,29 @@ namespace RawSocketTest;
 public enum MessageFlag : byte
 {
     NONE = 0x00,
+    
+    /// <summary>
+    /// Entire message after headers is encrypted
+    /// using parameters of security association
+    /// </summary>
     Encryption = 0x01,
+    
     Commit = 0x02,
     Authentication = 0x04,
+    
+    /// <summary>
+    /// This message comes from the session initiator
+    /// (otherwise comes from session responder)
+    /// </summary>
     Initiator = 0x08,
+    
+    /// <summary> Not used </summary>
     CanUseHigherVersion = 0x10,
+    
+    /// <summary>
+    /// This message is a reply
+    /// (otherwise is a request)
+    /// </summary>
     Response = 0x20
 }
 
@@ -90,6 +108,13 @@ public enum PayloadType : byte
     TSi = 44,
     /// <summary> Traffic Selector - Responder (45) </summary>
     TSr = 45,
+    /// <summary>
+    /// Secured and encrypted (46)
+    /// <para></para>
+    /// This MUST be the last payload in a message. It SHOULD be the only one.
+    /// The body of this payload is encrypted, and will normally represent
+    /// multiple child payloads.
+    /// </summary>
     SK = 46,
     CP = 47,
     /// <summary> Extensible Authentication (48) </summary>
