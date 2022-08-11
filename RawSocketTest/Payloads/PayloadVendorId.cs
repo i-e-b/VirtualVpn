@@ -37,4 +37,9 @@ public class PayloadVendorId : MessagePayload
     {
         Description = Encoding.UTF8.GetString(Data);
     }
+
+    public override string Describe()
+    {
+        return $"Payload=VendorId; Message={Description}";
+    }
 }

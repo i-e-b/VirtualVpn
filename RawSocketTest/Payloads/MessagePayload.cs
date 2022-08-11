@@ -116,4 +116,6 @@ public abstract class MessagePayload
     /// Called after copying bytes locally. Sub-classes should fill <see cref="Data"/>
     /// </summary>
     protected abstract void Deserialise();
+    
+    public abstract string Describe();
 }

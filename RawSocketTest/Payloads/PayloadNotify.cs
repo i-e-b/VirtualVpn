@@ -76,4 +76,13 @@ public class PayloadNotify : MessagePayload
         }
     }
 
+    public override string Describe()
+    {
+        if (NotificationType == NotifyId.ADDITIONAL_IP4_ADDRESS)
+        {
+            return $"Payload=Notification; ProtocolType={ProtocolType.ToString()}; NotificationType={NotificationType.ToString()}; Address={InfoData[0]}.{InfoData[1]}.{InfoData[2]}.{InfoData[3]};";
+        }
+
+        return $"Payload=Notification; ProtocolType={ProtocolType.ToString()}; NotificationType={NotificationType.ToString()}; Spi={Bit.HexString(SpiData)}; InfoData={Bit.HexString(InfoData)};";
+    }
 }

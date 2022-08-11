@@ -60,4 +60,9 @@ public class PayloadKeyExchange : MessagePayload
             KeyData[i] = Data[idx++];
         }
     }
+
+    public override string Describe()
+    {
+        return $"Payload=KeyExchange; Group={DiffieHellmanGroup.ToString()}; Data={Bit.HexString(KeyData)}";
+    }
 }

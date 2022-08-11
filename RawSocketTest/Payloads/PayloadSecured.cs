@@ -58,4 +58,9 @@ public class PayloadSecured : MessagePayload
     protected override void Deserialise()
     {
     }
+
+    public override string Describe()
+    {
+        return $"Payload=SK; PlainBytes={PlainBody?.Length ?? 0}; EncryptedBytes={Data.Length};";
+    }
 }

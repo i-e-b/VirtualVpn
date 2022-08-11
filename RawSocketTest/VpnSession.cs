@@ -165,6 +165,7 @@ internal class VpnSession
             case ExchangeType.IKE_AUTH: // pvpn/server.py:287
                 AssertState(SessionState.SA_SENT, request);
                 Console.WriteLine("IKE_AUTH received");
+                HandleAuth(request, sender, sendZeroHeader);
                 //Console.WriteLine($"This session has Crypto.\r\n  Me-> {_myCrypto}\r\nThem-> {_peerCrypto}\r\n");
                 //Console.WriteLine(Json.Beautify(Json.Freeze(request)));
                 break;
@@ -181,6 +182,17 @@ internal class VpnSession
             default:
                throw new Exception($"Unexpected request: {request.Exchange.ToString()}");
         }
+    }
+
+    private void HandleAuth(IkeMessage request, IPEndPoint sender, bool sendZeroHeader)
+    {
+        foreach (var payload in request.Payloads)
+        {
+            Console.WriteLine($"        {payload.Describe()}");
+        }
+        
+        var idi = request.GetPayload<PayloadIDi>() ?? throw new Exception("IKE_AUTH did not have an IDi payload");
+        var auth = request.GetPayload<PayloadAuth>() ?? throw new Exception("IKE_AUTH did not have an AUTH payload");
     }
 
     /// <summary>

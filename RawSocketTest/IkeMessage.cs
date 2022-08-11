@@ -210,7 +210,12 @@ public class IkeMessage
 
         if (nextPayload != PayloadType.NONE)
         {
-            Console.WriteLine("    WARNING: got to the end of data without finding a PayloadType.NONE");
+            Console.WriteLine("    WARNING: got to the end of payload data without finding a PayloadType.NONE");
+        }
+
+        if (idx != srcData.Length)
+        {
+            Console.WriteLine($"    WARNING: got to the end of payload data without reaching data end (ended at {idx}, length={srcData.Length})");
         }
 
         return payloads;
@@ -244,6 +249,9 @@ public class IkeMessage
             
             case PayloadType.IDi:
                 return One(new PayloadIDi(srcData, ref idx, ref nextPayload));
+            
+            case PayloadType.AUTH:
+                return One(new PayloadAuth(srcData, ref idx, ref nextPayload));
 
             case PayloadType.SKF:{
                 Console.WriteLine("FOUND AN SKF PAYLOAD! #################");
@@ -255,7 +263,7 @@ public class IkeMessage
                 // https://www.rfc-editor.org/rfc/rfc7296#section-3
                 if (ikeCrypto is null) throw new Exception("Received an encrypted packet without agreeing on session crypto");
                 
-                if (rawData is not null) File.WriteAllBytes(@"C:\temp\zzzSK-raw.bin", rawData); // log the entire message
+                //if (rawData is not null) File.WriteAllBytes(@"C:\temp\zzzSK-raw.bin", rawData); // log the entire message
                 
                 var ok = ikeCrypto.VerifyChecksum(srcData);
                 if (!ok) Console.WriteLine("CHECKSUM FAILED! We will continue, but result might be unreliable (in RawSocketTest.IkeMessage.ReadSinglePayload)");
@@ -269,7 +277,7 @@ public class IkeMessage
                 if (expandedPayload.PlainBody?.Length > 0)
                 {
                     Console.WriteLine($"    Reading inner payload, starting with {nextPayload.ToString()}");
-                    File.WriteAllBytes(@"C:\temp\SK_Plain.bin", expandedPayload.PlainBody);
+                    //File.WriteAllBytes(@"C:\temp\SK_Plain.bin", expandedPayload.PlainBody);
 
                     var childIdx = 0;
                     var innerPayloads = ReadPayloadChainInternal(nextPayload, ikeCrypto, ref childIdx, expandedPayload.PlainBody, rawData).ToList();

@@ -229,4 +229,10 @@ public static class Bit
         var hash = SHA256.Create();
         return hash.ComputeHash(secret);
     }
+
+    public static string HexString(byte[]? authData)
+    {
+        if (authData is null) return "<null>";
+        return string.Join("", authData.Select(b=>b.ToString("x2")));
+    }
 }

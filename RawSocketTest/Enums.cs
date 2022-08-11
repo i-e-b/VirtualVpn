@@ -415,7 +415,7 @@ public enum IdType
     ID_NULL = 13
 }
 
-public enum AuthMethod
+public enum AuthMethod:byte
 {
     RSA = 1,
     

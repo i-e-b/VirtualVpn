@@ -1,4 +1,6 @@
-﻿namespace RawSocketTest.Payloads;
+﻿using RawSocketTest.Helpers;
+
+namespace RawSocketTest.Payloads;
 
 public class PayloadNonce : MessagePayload
 {
@@ -22,5 +24,10 @@ public class PayloadNonce : MessagePayload
     
     protected override void Deserialise()
     {
+    }
+
+    public override string Describe()
+    {
+        return $"Payload=N-once; Data={Bit.HexString(Data)}";
     }
 }

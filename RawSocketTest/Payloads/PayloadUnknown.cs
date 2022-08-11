@@ -19,4 +19,9 @@ public class PayloadUnknown : MessagePayload
     protected override void Deserialise()
     {
     }
+
+    public override string Describe()
+    {
+        return "Unknown payload type";
+    }
 }

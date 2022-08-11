@@ -24,6 +24,13 @@ public class PayloadSa : MessagePayload
 
     public List<Proposal> Proposals { get; set; } = new();
     
+    
+
+    public override string Describe()
+    {
+        return $"Payload=SA; ProposalCount={Proposals.Count};";
+    }
+    
     protected override void Serialise()
     {
         // chain proposals
