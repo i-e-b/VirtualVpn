@@ -85,7 +85,8 @@ public abstract class MessagePayload
         // Copy body locally
         var dataLen = Length - 4;
         var remains = data.Length - idx;
-        if (remains < dataLen) throw new Exception($"Message payload data was truncated. Other side declared {dataLen}, but received {remains}. This may be a cryptographic error.");
+        //if (remains < dataLen) throw new Exception($"Message payload data was truncated. Other side declared {dataLen}, but received {remains}. This may be a cryptographic error.");
+        if (remains < dataLen) Console.WriteLine($"I have {remains} bytes out of a declared {dataLen}. There may be more packets to come?");
         if (dataLen > 0 && dataLen <= remains)
         {
             Data = new byte[dataLen];

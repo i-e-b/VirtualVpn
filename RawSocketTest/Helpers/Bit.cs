@@ -154,11 +154,13 @@ public static class Bit
     }
 
     /// <summary>
-    /// Read an subset of bytes into a new array
+    /// Read an subset of bytes into a new array.
+    /// `size = -1` means: to the end of source
     /// </summary>
     public static byte [] Subset(int size, byte[] source, ref int idx)
     {
-        if (size < 0) throw new Exception("Invalid subset size: must be zero or greater");
+        if (idx < 0) idx = source.Length - idx;
+        if (size < 0) size = source.Length - idx;
         if (size == 0) return Array.Empty<byte>();
         if (idx + size > source.Length) throw new Exception("Invalid subset size: tried to read off the end of source");
         

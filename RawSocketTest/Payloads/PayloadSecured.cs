@@ -37,13 +37,17 @@ public class PayloadSecured : MessagePayload
 
     public PayloadSecured(byte[] data, IkeCrypto? ikeCrypto, ref int idx, ref PayloadType nextPayload)
     {
-        ReadData(data, ref idx, ref nextPayload);
+        if (ikeCrypto is null) throw new Exception("Can't decrypt secured payload: crypto not provided");
         
-        if (ikeCrypto is null) return; // can't decrypt
+        Console.WriteLine($"    Incoming secured payload. Offset is {idx}bytes. Encrypted data is {data.Length} bytes.");
         
-        var ok = ikeCrypto.VerifyChecksum(Data);
+        var ok = ikeCrypto.VerifyChecksum(data); // is this getting chopped too much?
         if (!ok) Console.WriteLine("CHECKSUM FAILED in RawSocketTest.Payloads.PayloadSecured.PayloadSecured");
         else  Console.WriteLine("Checksum passed in RawSocketTest.Payloads.PayloadSecured.PayloadSecured");
+        
+        ReadData(data, ref idx, ref nextPayload);
+        
+        
         
         PlainBody = ikeCrypto.Decrypt(Data, out var nextHeader);
         _firstHeader = nextHeader;

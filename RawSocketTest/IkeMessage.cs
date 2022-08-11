@@ -230,15 +230,19 @@ public class IkeMessage
             case PayloadType.IDi:
                 return One(new PayloadIDi(srcData, ref idx, ref nextPayload));
 
+            case PayloadType.SKF:{
+                Console.WriteLine("FOUND AN SKF PAYLOAD! #################");
+                return Array.Empty<MessagePayload>();
+            }
+            
             case PayloadType.SK: // encrypted body. TODO: This should be pumped back around to read contents?
             {
+                // https://www.rfc-editor.org/rfc/rfc7296#section-3
                 if (ikeCrypto is null) throw new Exception("Received an encrypted packet without agreeing on session crypto");
                 
                 if (rawData is not null) File.WriteAllBytes(@"C:\temp\zzzSK-raw.bin", rawData); // log the entire message
                 
-                // IEB: I think the 'PSK' might be used to scramble the data more?
-                
-                var ok = ikeCrypto.VerifyChecksum(srcData); // IEB: currently failing, even with correct crypto keys
+                var ok = ikeCrypto.VerifyChecksum(srcData);
                 if (!ok) Console.WriteLine("CHECKSUM FAILED! We will continue, but result might be unreliable (in RawSocketTest.IkeMessage.ReadSinglePayload)");
                 else Console.WriteLine("Checksum passed in RawSocketTest.IkeMessage.ReadSinglePayload");
                 

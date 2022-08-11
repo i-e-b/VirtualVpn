@@ -48,15 +48,15 @@ public class VpnServer : IDisposable
     /// <summary>
     /// Responds to port 500 traffic
     /// </summary>
-    private void IkeResponder(byte[] rawData, IPEndPoint sender)
+    private void IkeResponder(byte[] data, IPEndPoint sender)
     {
         // write capture to file for easy testing
         _messageCount++;
         var name = @$"C:\temp\IKEv2-{_messageCount}_Port-{sender.Port}_IKE.bin";
-        File.WriteAllBytes(name, rawData);
-        Console.WriteLine($"Got a 500 packet -- {name}");
+        File.WriteAllBytes(name, data);
+        Console.WriteLine($"Got a 500 packet, {data.Length} bytes -- {name}");
         
-        IkeSessionResponder(rawData, sender, sendZeroHeader: false);
+        IkeSessionResponder(data, sender, sendZeroHeader: false);
     }
 
     private void IkeSessionResponder(byte[] data, IPEndPoint sender, bool sendZeroHeader)
@@ -64,7 +64,7 @@ public class VpnServer : IDisposable
         // read the message to figure out session data
         var ikeMessage = IkeMessage.FromBytes(data, 0);
 
-        Console.WriteLine($"Got a 500 packet ex={ikeMessage.Exchange}");
+        Console.WriteLine($"Got a 500 packet, {data.Length} bytes, ex={ikeMessage.Exchange}");
 
         if (ikeMessage.Exchange == ExchangeType.IDENTITY_1) // start of an IkeV1 session
         {
@@ -109,7 +109,7 @@ public class VpnServer : IDisposable
         _messageCount++;
         var name = @$"C:\temp\IKEv2-{_messageCount}_Port-{sender.Port}_SPE.bin";
         File.WriteAllBytes(name, data);
-        Console.WriteLine($"Got a 4500 packet -- {name}");
+        Console.WriteLine($"Got a 4500 packet, {data.Length} bytes -- {name}");
         
         // Check for keep-alive ping?
         if (data.Length < 4 && data[0] == 0xff)
