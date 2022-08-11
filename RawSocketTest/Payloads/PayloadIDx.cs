@@ -3,14 +3,22 @@ using RawSocketTest.Helpers;
 
 namespace RawSocketTest.Payloads;
 
-// pvpn/message.py:117
-public class PayloadIDi : MessagePayload
+/// <summary>
+/// Flip side of <see cref="PayloadIDr"/>.
+/// </summary>
+public class PayloadIDi : PayloadIDx
 {
-    public override PayloadType Type { get => PayloadType.IDi; set { } }
-    
+    public PayloadIDi(byte[] data, ref int idx, ref PayloadType nextPayload) : base(data, ref idx, ref nextPayload) { }
+}
+
+// pvpn/message.py:117
+public class PayloadIDx : MessagePayload
+{
     public override int Size => HeaderSize + IdData.Length + 4;
 
-    public PayloadIDi(byte[] data, ref int idx, ref PayloadType nextPayload)
+    protected PayloadIDx() { }
+    
+    protected PayloadIDx(byte[] data, ref int idx, ref PayloadType nextPayload)
     {
         // IDi is usually inside an SK message.
         ReadData(data, ref idx, ref nextPayload);
@@ -78,4 +86,20 @@ public class PayloadIDi : MessagePayload
     public IpProtocol Protocol { get; set; }
 
     public IdType IdType { get; set; }
+}
+
+/// <summary>
+/// Flip side of <see cref="PayloadIDi"/>.
+/// </summary>
+public class PayloadIDr: PayloadIDx
+{
+    public PayloadIDr(byte[] data, ref int idx, ref PayloadType nextPayload) : base(data, ref idx, ref nextPayload)
+    {
+    }
+
+    public PayloadIDr(IdType type, byte[] idData, int port, int protocol)
+    {
+        // like pvpn/message.py:118
+        throw new NotImplementedException();
+    }
 }

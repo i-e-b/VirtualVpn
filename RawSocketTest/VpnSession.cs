@@ -42,6 +42,7 @@ internal class VpnSession
     private readonly ulong _localSpi;
     private readonly byte[] _localNonce;
     private readonly List<ChildSa> _thisSessionChildren = new();
+    private byte[]? _previousRequestRawData;
 
     public VpnSession(UdpServer server, VpnServer sessionHost, ulong peerSpi)
     {
@@ -118,6 +119,8 @@ internal class VpnSession
         {
             HandleIkeInternal(request, sender, sendZeroHeader);
             _peerMsgId++;
+            
+            _previousRequestRawData = request.RawData; // needed to do PSK auth
         }
         catch (Exception ex)
         {
@@ -192,14 +195,13 @@ internal class VpnSession
 
     private void HandleAuth(IkeMessage request, IPEndPoint sender, bool sendZeroHeader)
     {
-        foreach (var payload in request.Payloads)
-        {
-            Console.WriteLine($"        {payload.Describe()}");
-        }
+        Console.WriteLine("        HandleAuth():: payloads:");
+        foreach (var payload in request.Payloads) Console.WriteLine($"            {payload.Describe()}");
 
         var peerSkp = _peerCrypto?.SkP;
         if (peerSkp is null) throw new Exception("Peer SK-p not established before IKE_AUTH received");
         if (_peerNonce is null) throw new Exception("Peer N-once was not established before IKE_AUTH received");
+        if (_previousRequestRawData is null) throw new Exception("Peer's previous raw request not stored during IKE_INIT_SA to use in IKE_AUTH");
         
         // read traffic selectors
         var tsi = request.GetPayload<PayloadTsi>()?? throw new Exception("IKE_AUTH did not have an Traffic Select initiator payload");
@@ -210,35 +212,14 @@ internal class VpnSession
         var auth = request.GetPayload<PayloadAuth>();
         if (auth is null) throw new Exception("Peer requested EAP, which we don't support");
         
-        var pskAuth = GeneratePskAuth(request.RawData, _localNonce, idi, peerSkp);
+        var pskAuth = GeneratePskAuth(_previousRequestRawData, _localNonce, idi, peerSkp);
         if (Bit.AreDifferent(pskAuth, auth.AuthData))
         {
-            var psk = Encoding.ASCII.GetBytes("ThisIsForTestOnlyDontUse");
-            var pad = Encoding.ASCII.GetBytes(Prf.IKEv2_KeyPad);
-            var prfPskPad = _peerCrypto!.Prf!.Hash(psk, pad);
-            
-            Console.WriteLine(Bit.Describe("psk", psk));
-            Console.WriteLine(Bit.Describe("keypad", pad));
-            Console.WriteLine(Bit.Describe("prf(psk, keypad)", prfPskPad));
-            
-            /*
-             "identification_t *id"
-            ... 
-	chunk = chunk_alloca(4);
-	chunk.ptr[0] = id->get_type(id);
-	memcpy(chunk.ptr + 1, reserved, 3);
-	idx = chunk_cata("cc", chunk, id->get_encoding(id));
-	*/
-            
-            // IDx' => 8 bytes @ 0x7f9b1fee7850        01 00 00 00 9F 45 0D 7E    <-- this is not nonce, it's something else
-            // SK_p => 32 bytes @ 0x7f9af4007340       AF E8 1D 52 00 28 34 E6 2C 70 58 9B C2 D8 5F 1A B6 01 F2 05 EB 44 B1 BC 1A 66 B9 65 76 D4 6F DD
-
-            // octets = message + nonce + prf(Sk_px, IDx')
-            
             throw new Exception("PSK auth failed: initiator's hash did not match our expectations.\r\n\t" +
                                 $"Expected {Bit.HexString(pskAuth)},\r\n\tbut got {Bit.HexString(auth.AuthData)}");
         }
-
+        Console.WriteLine("    PSK auth agreed from this side");
+        
         // pvpn/server.py:298
         var chosenChildSa = sa.GetProposalFor(EncryptionTypeId.ENCR_AES_CBC);
         if (chosenChildSa is null)
@@ -278,17 +259,47 @@ internal class VpnSession
         _state = SessionState.ESTABLISHED; // Should now have a full Child SA
     }
 
-    private byte[] GeneratePskAuth(byte[] messageData, byte[] nonce, MessagePayload payload, byte[] skP)
+    /// <summary>
+    /// PSK auth that matches what StrongSwan seems to do
+    /// See src/libcharon/sa/ikev2/keymat_v2.c:659
+    /// </summary>
+    private byte[] GeneratePskAuth(byte[] messageData, byte[] nonce, PayloadIDx payload, byte[] skP)
     {
-        // pvpn/server.py:250
         var prf = _peerCrypto?.Prf;
         if (prf is null) throw new Exception("Tried to generate PSK auth before key exchange completed");
+        
+        // 01 -> some kind of type? IdType.ID_IPV4_ADDR == 01 AuthId_1.PSK == 01     <-- guessing IdType.ID_IPV4_ADDR, as this goes with the data
+        // 3 zero bytes,
+        // 9F 45 0D 7E -> 159.69.13.126 ... this is the initiator's IP address
+            
+        // IDx' seems to be fairly constant:       01 00 00 00 9F 45 0D 7E
+        // IDx' => 8 bytes @ 0x7f9b1fee7850        01 00 00 00 9F 45 0D 7E    <-- this is not nonce, it's something else
+        // SK_p => 32 bytes @ 0x7f9af4007340       AF E8 1D 52 00 28 34 E6 2C 70 58 9B C2 D8 5F 1A B6 01 F2 05 EB 44 B1 BC 1A 66 B9 65 76 D4 6F DD
+
+        // octets = message + nonce + prf(Sk_px, IDx')
+        // AUTH = prf(prf(secret, keypad), octets)
+        
+        Console.WriteLine($"PSK message: {payload.Describe()}");
+        
+        // IEB: temporarily hard coding. Debug and find the data we need
+
+        var prefix = new byte[] { (byte)payload.IdType, 0, 0, 0 };//new byte[] { (byte)IdType.ID_IPV4_ADDR, 0, 0, 0 };
+        var peerId = payload.IdData; //new byte[] { 0x9F, 0x45, 0x0D, 0x7E };
+        var idxTick = prefix.Concat(peerId).ToArray();
+        var octetPad = prf.Hash(skP, idxTick);
+        
+        var bulk = messageData.Concat(nonce).Concat(octetPad).ToArray();
+        
+        Console.WriteLine($"#### {Bit.Describe("IDx'", idxTick)}");
+        Console.WriteLine($"#### {Bit.Describe("SK_p", skP)}");
+        Console.WriteLine($"#### {Bit.Describe("prf(Sk_px, IDx')", octetPad)}");
+        Console.WriteLine($"#### {Bit.Describe("octets =  message + nonce + prf(Sk_px, IDx') ", messageData)}"); // expect ~ 1192 bytes
+        
         
         var psk = Encoding.ASCII.GetBytes("ThisIsForTestOnlyDontUse");
         var pad = Encoding.ASCII.GetBytes(Prf.IKEv2_KeyPad);
         var prfPskPad = prf.Hash(psk, pad);
         
-        var bulk = messageData.Concat(nonce).Concat(payload.ToBytes()).ToArray();
         
         return prf.Hash(prfPskPad, bulk);
     }
@@ -363,6 +374,8 @@ internal class VpnSession
     private void HandleSaInit(IkeMessage request, IPEndPoint sender, bool sendZeroHeader)
     {
         Console.WriteLine("        Session: IKE_SA_INIT received");
+        Console.WriteLine("        HandleSaInit():: payloads:");
+        foreach (var payload in request.Payloads) Console.WriteLine($"            {payload.Describe()}");
 
         _peerNonce = request.GetPayload<PayloadNonce>()?.Data;
 
