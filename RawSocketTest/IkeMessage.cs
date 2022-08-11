@@ -228,7 +228,7 @@ public class IkeMessage
     /// Read one payload's bytes, and interpret into the appropriate class types.
     /// The SK payload contains potentially many child payloads, so we return enumerable
     /// </summary>
-    public static IEnumerable<MessagePayload> ReadSinglePayload(byte[] srcData, IkeCrypto? ikeCrypto, ref int idx, ref PayloadType nextPayload)
+    public static IEnumerable<MessagePayload> ReadSinglePayload(byte[] srcData, IkeCrypto? ikeCrypto, ref int idx, ref PayloadType nextPayload, byte[]? rawData = null)
     {
         var thisType = nextPayload;
         // TODO: continue to fill out
@@ -256,12 +256,16 @@ public class IkeMessage
             {
                 if (ikeCrypto is null) throw new Exception("Received an encrypted packet without agreeing on session crypto");
                 
-                var ok = ikeCrypto.VerifyChecksum(srcData); // IEB: currently failing? Crypto results also look wrong
-                //if (!ok) Console.WriteLine("CHECKSUM FAILED! We will continue, but result might be unreliable");
-                if (!ok) throw new Exception("CHECKSUM FAILED!");
+                if (rawData is not null) File.WriteAllBytes(@"C:\temp\zzzSK-raw.bin", rawData); // log the entire message
+                
+                // IEB: I think the 'PSK' might be used to scramble the data more?
+                
+                var ok = ikeCrypto.VerifyChecksum(srcData); // IEB: currently failing, even with correct crypto keys
+                if (!ok) Console.WriteLine("CHECKSUM FAILED! We will continue, but result might be unreliable");
+                //if (!ok) throw new Exception("CHECKSUM FAILED!");
                 
                 var expandedPayload = new PayloadSecured(srcData, ikeCrypto, ref idx, ref nextPayload);
-                // TODO: read the 'plain' as a new set of payloads
+                // read the 'plain' as a new set of payloads
                 
                 Console.WriteLine($"    Plain body has {expandedPayload.PlainBody?.Length.ToString() ?? "no"} bytes");
                 if (expandedPayload.PlainBody?.Length > 0)

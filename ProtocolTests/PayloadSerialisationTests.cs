@@ -27,7 +27,7 @@ public class PayloadSerialisationTests
         // deserialise
         var idx = 0;
         var nextType = original.Type; // must be correct, or will get wrong wrapper
-        var raw = IkeMessage.ReadSinglePayload(buffer, null, ref idx, ref nextType);
+        var raw = IkeMessage.ReadSinglePayload(buffer, null, ref idx, ref nextType).Single();
         var restored = raw as PayloadKeyExchange;
         
         Assert.That(restored, Is.Not.Null, $"Did not read payload correctly -- type was {raw.GetType()}");
@@ -62,7 +62,7 @@ public class PayloadSerialisationTests
         // deserialise
         var idx = 0;
         var nextType = original.Type; // must be correct, or will get wrong wrapper
-        var raw = IkeMessage.ReadSinglePayload(buffer, null, ref idx, ref nextType);
+        var raw = IkeMessage.ReadSinglePayload(buffer, null, ref idx, ref nextType).Single();
         var restored = raw as PayloadNonce;
         
         Assert.That(restored, Is.Not.Null, $"Did not read payload correctly -- type was {raw.GetType()}");
@@ -96,7 +96,7 @@ public class PayloadSerialisationTests
         // deserialise
         var idx = 0;
         var nextType = original.Type; // must be correct, or will get wrong wrapper
-        var raw = IkeMessage.ReadSinglePayload(buffer, null, ref idx, ref nextType);
+        var raw = IkeMessage.ReadSinglePayload(buffer, null, ref idx, ref nextType).Single();
         var restored = raw as PayloadNotify;
         
         Assert.That(restored, Is.Not.Null, $"Did not read payload correctly -- type was {raw.GetType()}");
@@ -162,7 +162,7 @@ public class PayloadSerialisationTests
         // deserialise
         var idx = 0;
         var nextType = original.Type; // must be correct, or will get wrong wrapper
-        var raw = IkeMessage.ReadSinglePayload(buffer, null, ref idx, ref nextType);
+        var raw = IkeMessage.ReadSinglePayload(buffer, null, ref idx, ref nextType).Single();
         var restored = raw as PayloadSa;
         
         Assert.That(restored, Is.Not.Null, $"Did not read payload correctly -- type was {raw.GetType()}");
@@ -235,7 +235,7 @@ public class PayloadSerialisationTests
         // deserialise
         var idx = 0;
         var nextType = original.Type; // must be correct, or will get wrong wrapper
-        var raw = IkeMessage.ReadSinglePayload(buffer, null, ref idx, ref nextType);
+        var raw = IkeMessage.ReadSinglePayload(buffer, null, ref idx, ref nextType).Single();
         var restored = raw as PayloadVendorId;
         
         Assert.That(restored, Is.Not.Null, $"Did not read payload correctly -- type was {raw.GetType()}");

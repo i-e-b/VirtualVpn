@@ -1,4 +1,5 @@
-﻿namespace RawSocketTest.Crypto;
+﻿// ReSharper disable InconsistentNaming
+namespace RawSocketTest.Crypto;
 
 using System.Security.Cryptography;
 
@@ -8,6 +9,16 @@ using System.Security.Cryptography;
 /// </summary>
 public class Prf
 {
+    /// <summary>
+    /// This should be ASCII encoded for the pad bytes.
+    /// <para></para>
+    /// AUTH [32 bytes] = prf(prf( PSK, "Key Pad for IKEv2" ), {msg bytes})
+    /// </summary>
+    /// <remarks>
+    /// Due to rotating keys, this should be different for each session
+    /// </remarks>
+    public const string IKEv2_KeyPad = "Key Pad for IKEv2"; // someone had an inventive day.
+    
     private readonly PrfId _transform;
     public int KeySize { get; }
     

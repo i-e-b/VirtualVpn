@@ -107,7 +107,7 @@ public class GmpDiffieHellman : IDisposable
     bool computed;
 
 //METHOD(key_exchange_t, set_public_key, bool, private_gmp_diffie_hellman_t *this, chunk_t value)
-    public bool set_public_key(byte[] value)
+    public bool set_their_public_key(byte[] value)
     {
         mpz_t p_min_1 = new mpz_t();
 
@@ -199,7 +199,7 @@ public class GmpDiffieHellman : IDisposable
     }
 
 //METHOD(key_exchange_t, get_public_key, bool, private_gmp_diffie_hellman_t *this,chunk_t *value)
-    public bool get_public_key(out byte[] result)
+    public bool get_our_public_key(out byte[] result)
     {
         result = export(ya);
         return true;

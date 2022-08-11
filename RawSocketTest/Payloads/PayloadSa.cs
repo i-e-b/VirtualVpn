@@ -106,7 +106,7 @@ public class PayloadSa : MessagePayload
             TransformType.ENCR => Cipher.IsSupported((EncryptionTypeId)transform.Id),
             TransformType.PRF => Prf.IsSupported((PrfId)transform.Id),
             TransformType.INTEG => Integrity.IsSupported((IntegId)transform.Id),
-            TransformType.DH => DHKeyExchange.IsSupported((DhId)transform.Id),
+            TransformType.DH => gmpDh.GmpDhParameters.IsSupported((DhId)transform.Id),
             TransformType.ESN => false // ??
             ,
             _ => false

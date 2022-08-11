@@ -387,7 +387,7 @@ public class GmpDhParameters
 
     //src/libstrongswan/crypto/key_exchange.c:506
     public static diffie_hellman_params_t? diffie_hellman_get_params(DhId group)
-    {
-        return dh_params.FirstOrDefault(p=>p.group == group);
-    }
+        => dh_params.FirstOrDefault(p=>p.group == group);
+
+    public static bool IsSupported(DhId group) => dh_params.Any(p=>p.group == group);
 }

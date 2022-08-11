@@ -22,10 +22,16 @@ public class IkeCrypto
     public override string ToString()
     {
         var sb = new StringBuilder();
-
+        
         sb.Append("Cipher: ");
         sb.Append(_cipher);
+        sb.AppendLine();
 
+        sb.Append(Bit.Describe("SK_e", _skE));
+        sb.Append(Bit.Describe("SK_a", _skA));
+        sb.Append(Bit.Describe("SK_p", _skP));
+        sb.Append(Bit.Describe("last IV", _lastIv));
+        
         if (_integrity is null)
         {
             sb.Append(" no checksum present.");
