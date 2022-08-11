@@ -344,6 +344,9 @@ Aug  8 14:21:58 Gertrud charon: 01[IKE]   16: 85 FE DB D6 52 1D F5 B3 BC 0E E8 4
         var myNonce = new byte[] { 0xFF, 0x80, 0x0E, 0x9C, 0x85, 0x1D, 0xB2, 0x2E, 0x6C, 0x3C, 0x0D, 0x4C, 0x8C, 0x8E, 0xA8, 0x79, 0x80, 0xFC, 0xBD, 0x5A, 0xA8, 0x35, 0x19, 0x30, 0xE4, 0xC3, 0xAE, 0x9C, 0x4B, 0xE0, 0xBA, 0x91 };
         var theirSpi = new byte[]{0xAE, 0xB8, 0x98, 0x45, 0x5D, 0xBF, 0xB7, 0xBE};
         var mySpi =    new byte[]{0x43, 0x51, 0x2C, 0xB0, 0x70, 0x5D, 0x9B, 0xA6};
+        var pskPad = Encoding.ASCII.GetBytes("ThisIsForTestOnlyDontUse" + Prf.IKEv2_KeyPad);
+        var pad = Encoding.ASCII.GetBytes(Prf.IKEv2_KeyPad);
+        var psk = Encoding.ASCII.GetBytes("ThisIsForTestOnlyDontUse");
 
         IkeCrypto.CreateKeysAndCryptoInstances(
             theirNonce, myNonce, sharedSecret, theirSpi, mySpi,
@@ -351,10 +354,17 @@ Aug  8 14:21:58 Gertrud charon: 01[IKE]   16: 85 FE DB D6 52 1D F5 B3 BC 0E E8 4
             null, out var skD, out var myCrypto, out var theirCrypto
         );
         
+        // NOTE: this is how the PSK is calculated:
+        Console.WriteLine(Bit.Describe("SkA", theirCrypto.SkA));
+        var y = theirCrypto.Prf!.Hash(psk, pad);
+        Console.WriteLine(Bit.Describe("prf(secret, keypad) ALT", y));
+        
+        
         var whole_their = theirCrypto.VerifyChecksum(encrypted);
         var whole_mine = myCrypto.VerifyChecksum(encrypted);
         
         var skData = encrypted.Skip(28).ToArray();
+        Console.WriteLine(Bit.Describe("Data less header", skData));
         var sk_their = theirCrypto.VerifyChecksum(skData);
         var sk_mine = myCrypto.VerifyChecksum(skData);
         

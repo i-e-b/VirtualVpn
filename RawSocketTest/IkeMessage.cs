@@ -239,8 +239,8 @@ public class IkeMessage
                 // IEB: I think the 'PSK' might be used to scramble the data more?
                 
                 var ok = ikeCrypto.VerifyChecksum(srcData); // IEB: currently failing, even with correct crypto keys
-                if (!ok) Console.WriteLine("CHECKSUM FAILED! We will continue, but result might be unreliable");
-                //if (!ok) throw new Exception("CHECKSUM FAILED!");
+                if (!ok) Console.WriteLine("CHECKSUM FAILED! We will continue, but result might be unreliable (in RawSocketTest.IkeMessage.ReadSinglePayload)");
+                else Console.WriteLine("Checksum passed in RawSocketTest.IkeMessage.ReadSinglePayload");
                 
                 var expandedPayload = new PayloadSecured(srcData, ikeCrypto, ref idx, ref nextPayload);
                 // read the 'plain' as a new set of payloads

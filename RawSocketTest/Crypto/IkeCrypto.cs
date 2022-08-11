@@ -18,6 +18,10 @@ public class IkeCrypto
     private readonly byte[]? _lastIv;
     private readonly Dictionary<uint, byte[]> _vectors;
 
+    public Cipher Cipher => _cipher;
+    public Integrity? Integrity => _integrity;
+    public Prf? Prf => _prf;
+    public byte[] SkA => _skA ?? Array.Empty<byte>();
 
     public override string ToString()
     {
@@ -233,13 +237,9 @@ public class IkeCrypto
         var target = Bit.Subset(_integrity.HashSize, encrypted, ref cxBase);
 
         var idx = 0;
-        var shorter = Bit.Subset(encrypted.Length - cxBase, encrypted, ref idx);
-        var longer = new byte[4].Concat(shorter).ToArray();
+        var shorter = Bit.Subset(encrypted.Length - _integrity.HashSize, encrypted, ref idx);
 
-        var result = VerifyChecksumInternal(shorter, target);
-        result    |= VerifyChecksumInternal(longer,  target);
-        
-        return result;
+        return VerifyChecksumInternal(shorter, target);
     }
 
     private bool VerifyChecksumInternal(byte[] encrypted, byte[] target)

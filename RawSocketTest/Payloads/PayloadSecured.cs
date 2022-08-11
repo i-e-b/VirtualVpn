@@ -41,8 +41,9 @@ public class PayloadSecured : MessagePayload
         
         if (ikeCrypto is null) return; // can't decrypt
         
-        var ok = ikeCrypto.VerifyChecksum(Data); // IEB: currently failing?
-        //if (!ok) return;
+        var ok = ikeCrypto.VerifyChecksum(Data);
+        if (!ok) Console.WriteLine("CHECKSUM FAILED in RawSocketTest.Payloads.PayloadSecured.PayloadSecured");
+        else  Console.WriteLine("Checksum passed in RawSocketTest.Payloads.PayloadSecured.PayloadSecured");
         
         PlainBody = ikeCrypto.Decrypt(Data, out var nextHeader);
         _firstHeader = nextHeader;
