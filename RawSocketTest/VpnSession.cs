@@ -11,7 +11,8 @@ using SkinnyJson;
 namespace RawSocketTest;
 
 /// <summary>
-/// Negotiates and handles a single VPN session between self and one peer
+/// Negotiates and handles a single VPN session between self and one peer.
+/// Most of this is covered by RFC 5996: https://datatracker.ietf.org/doc/html/rfc5996
 /// </summary>
 internal class VpnSession
 {
@@ -26,7 +27,7 @@ internal class VpnSession
     private readonly long _seqOut;
     
     private long _peerMsgId;
-    private byte[]? _lastMessageBytes;
+    private byte[]? _lastSentMessageBytes;
     private byte[]? _peerNonce;
     private byte[]? _skD;
     
@@ -118,8 +119,8 @@ internal class VpnSession
     {
         try
         {
+            Console.WriteLine($"    Incoming IKE message {request.Exchange.ToString()} {request.MessageId}");
             HandleIkeInternal(request, sender, sendZeroHeader);
-            _peerMsgId++;
             
             _previousRequestRawData = request.RawData; // needed to do PSK auth
         }
@@ -137,31 +138,26 @@ internal class VpnSession
         // Check for peer requesting a repeat of last message
         if (request.MessageId == _peerMsgId - 1) 
         {
-            if (_lastMessageBytes is null)
+            if (_lastSentMessageBytes is null)
             {
-                Console.WriteLine("Asked to repeat a message we didn't send? This session has faulted");
+                Console.WriteLine("    Asked to repeat a message we didn't send? This session has faulted");
                 // TODO: kill the session? respond with a failure message?
                 return;
             }
 
-            _server.SendRaw(_lastMessageBytes, sender, out _); // don't add zero pad again?
+            Console.WriteLine("    Asked to repeat a message we sent. Directly re-sending.");
+            _server.SendRaw(_lastSentMessageBytes, sender, out _); // don't add zero pad again?
             return;
         }
 
         // make sure we're in sequence
         if (request.MessageId != _peerMsgId)
         {
-            Console.WriteLine($"Request is out of sequence. Expected {_peerMsgId}, but got {request.MessageId}. Ignoring.");
+            //Console.WriteLine($"Request is out of sequence. Expected {_peerMsgId}, but got {request.MessageId}. Will respond anyway.");
+            Console.WriteLine($"Request is out of sequence. Expected {_peerMsgId}, but got {request.MessageId}. Not responding");
             return;
         }
 
-        if (request.Exchange == ExchangeType.IKE_AUTH)
-        {
-            File.WriteAllText(@"C:\temp\zzzFullIkeAuth.txt", Bit.Describe("Full message", request.RawData));
-        }
-
-        //if (_myCrypto is not null) Console.WriteLine($"This session has Crypto.\r\n  Me-> {_myCrypto}\r\nThem-> {_peerCrypto}\r\n");
-        
         // We should have crypto now, as long as we're out of IKE_SA_INIT phase
         request.ReadPayloadChain(_peerCrypto); // pvpn/server.py:266
 
@@ -176,15 +172,15 @@ internal class VpnSession
                 AssertState(SessionState.SA_SENT, request);
                 Console.WriteLine("IKE_AUTH received");
                 HandleAuth(request, sender, sendZeroHeader);
-                //Console.WriteLine($"This session has Crypto.\r\n  Me-> {_myCrypto}\r\nThem-> {_peerCrypto}\r\n");
-                //Console.WriteLine(Json.Beautify(Json.Freeze(request)));
                 break;
 
             case ExchangeType.INFORMATIONAL: // pvpn/server.py:315
+                AssertState(SessionState.ESTABLISHED, request);
                 Console.WriteLine("INFORMATIONAL received");
                 break;
 
             case ExchangeType.CREATE_CHILD_SA: // pvpn/server.py:340
+                AssertState(SessionState.ESTABLISHED, request);
                 Console.WriteLine("CREATE_CHILD_SA received");
                 break;
 
@@ -222,46 +218,82 @@ internal class VpnSession
         Console.WriteLine("    PSK auth agreed from this side");
         
         // pvpn/server.py:298
-        var chosenChildSa = sa.GetProposalFor(EncryptionTypeId.ENCR_AES_CBC);
-        if (chosenChildSa is null)
+        var chosenChildProposal = sa.GetProposalFor(EncryptionTypeId.ENCR_AES_CBC);
+        if (chosenChildProposal is null)
         {
             Console.WriteLine("    FATAL: could not find a compatible Child SA");
             // TODO: how do we reject?
             return;
         }
         
-        var childKey = CreateChildKey(chosenChildSa, _peerNonce, _localNonce);
-        chosenChildSa.SpiData = Bit.UInt32ToBytes(childKey.SpiIn); // Used to refer to the child SA in ESP messages?
-        chosenChildSa.SpiSize = 4;
+        var childKey = CreateChildKey(chosenChildProposal, _peerNonce, _localNonce);
+        Console.WriteLine($"    New ESP SPI = {childKey.SpiIn:x8}");
+        chosenChildProposal.SpiData = Bit.UInt32ToBytes(childKey.SpiIn); // Used to refer to the child SA in ESP messages?
+        chosenChildProposal.SpiSize = 4;
         
-        if (_lastMessageBytes is null) throw new Exception("IKE_AUTH stage reached without recording a last sent message? Auth cannot proceed.");
+        if (_lastSentMessageBytes is null) throw new Exception("IKE_AUTH stage reached without recording a last sent message? Auth cannot proceed.");
         
         // pvpn/server.py:301
-        var responsePayloadIdr = new PayloadIDr(IdType.ID_FQDN, Encoding.ASCII.GetBytes("V_VPN-0_1"), 0, 0);
+        var responsePayloadIdr = new PayloadIDr(IdType.ID_IPV4_ADDR, new byte[]{185,81,252,44}, 0, 0); // should be configured
         var mySkp = _myCrypto?.SkP;
         if (mySkp is null) throw new Exception("Local SK-p not established before IKE_AUTH received");
-        var authData = GeneratePskAuth(_lastMessageBytes, _peerNonce, responsePayloadIdr, mySkp); // I think this is based on the last thing we sent
+        var authData = GeneratePskAuth(_lastSentMessageBytes, _peerNonce, responsePayloadIdr, mySkp); // I think this is based on the last thing we sent
         
         // pvpn/server.py:309
         // Send our Child-SA message back
-        var response = BuildResponse(ExchangeType.IKE_AUTH, sendZeroHeader, _myCrypto, 
-            new PayloadSa(chosenChildSa),
+        var response = BuildResponse(ExchangeType.CREATE_CHILD_SA, /*sendZeroHeader*/ false, _myCrypto, 
+            new PayloadSa(chosenChildProposal),
             tsi, tsr, // just accept whatever traffic selectors. We're virtual.
             responsePayloadIdr,
             new PayloadAuth(AuthMethod.PSK, authData)
         );
         
-        // deliberately ignoring 'CP' for now
+        var cpPayload = request.GetPayload<PayloadCp>();
+        if (cpPayload is null) Console.WriteLine("    No Configuration (CP) payload");
+        else Console.WriteLine("    Configuration (CP) payload present");
+        // deliberately ignoring 'CP' for now, but it probably is required
         
         // IEB: continue from here. I'm probably serialising something badly.
+        // If I don't send the 0000 header, it goes quiet. Looks like it's 4 or 6 bytes off though?
+        // is my header wrong? Spi lengths? 
         /*
 Aug 11 15:48:24 Gertrud charon: 16[NET] sending packet: from 159.69.13.126[4500] to 185.81.252.44[4500] (480 bytes)
 Aug 11 15:48:24 Gertrud charon: 06[ENC] no message rules specified for this message type
-Aug 11 15:48:24 Gertrud charon: 06[NET] received unsupported IKE version 7.10 from 185.81.252.44, sending INVALID_MAJOR_VERSION
+Aug 11 15:48:24 Gertrud charon: 06[NET] received unsupported IKE version 7.10 from 185.81.252.44, sending INVALID_MAJOR_VERSION  <--- this is about 4 bytes prev to where it should be.
          */
         
+        // Experimental: patch in the new 4 byte SPI instead of the old 8 byte one
+        /*var hackedResponse = response.Take(4+4).Concat(response.Skip(12)).ToArray();
+        var spiBytes = Bit.UInt32ToBytes(childKey.SpiIn);
+        hackedResponse[4] = spiBytes[0];
+        hackedResponse[5] = spiBytes[1];
+        hackedResponse[6] = spiBytes[2];
+        hackedResponse[7] = spiBytes[3];
+        Console.WriteLine(Bit.Describe("chopped 4 bytes from spi", hackedResponse));*/
+        
+        // Completely fake from MPesa session, but still fails.
+        // IEB: Am I sending this from a bad connection (it thinks I'm on port 500 still?)
+        response = new byte[]{ // zero, spi,spi, exchange, version...
+     0x00,    0x00,    0x00,    0x00,/**/0x47,    0x24,    0xB6,    0x6A,    0x2C,    0x74,    0xC9,    0x13,/**/0xD3,    0x67,    0x90,    0x4C
+,    0x1E,    0xA9,    0x3C,    0xB5,/**/0x2E,/**/0x20,/**/0x23,    0x20,    0x00,    0x00,    0x00,    0x01,    0x00,    0x00,    0x00,    0xFC
+,    0x2B,    0x00,    0x00,    0xE0,    0xC9,    0x58,    0x36,    0x4A,    0xC7,    0x9C,    0x2C,    0xE7,    0x2F,    0x4E,    0x6A,    0x35
+,    0xB3,    0x7D,    0xC3,    0x77,    0x03,    0xDD,    0x05,    0x8D,    0xB3,    0x65,    0x20,    0xE1,    0xA4,    0xB5,    0x11,    0x1A
+,    0x3B,    0xEA,    0x70,    0x0D,    0xD0,    0xE2,    0x7E,    0xCC,    0x35,    0x44,    0xA0,    0x8A,    0xD6,    0x61,    0x64,    0x4A
+,    0x4C,    0x8C,    0xAF,    0x5B,    0xB4,    0x61,    0xB4,    0x54,    0xDA,    0x2B,    0x75,    0x69,    0x3F,    0x3F,    0x28,    0xA2
+,    0x1A,    0xC7,    0xC9,    0x31,    0xF6,    0x12,    0x93,    0xBD,    0x4F,    0x9A,    0xE7,    0x99,    0x09,    0x37,    0xA5,    0x68
+,    0xE4,    0x51,    0x6D,    0x49,    0x96,    0xA2,    0x24,    0xF6,    0x1D,    0x1D,    0x66,    0xBC,    0x32,    0x20,    0x36,    0xD2
+,    0xDE,    0x01,    0xBB,    0x06,    0x6B,    0xB9,    0x83,    0xD4,    0x06,    0x56,    0x2C,    0x14,    0xA9,    0x7D,    0x00,    0xA3
+,    0xAB,    0xBC,    0x6C,    0xBF,    0x15,    0x5E,    0x82,    0xB7,    0x9C,    0x16,    0x02,    0xB9,    0x68,    0xE5,    0xDD,    0x9A
+,    0x46,    0x39,    0x91,    0xAC,    0xF5,    0x5C,    0xFE,    0x0F,    0xEA,    0x9A,    0x0A,    0x1D,    0x53,    0xD0,    0x74,    0x90
+,    0x37,    0x98,    0x56,    0x10,    0x4D,    0xCF,    0x70,    0x2F,    0x34,    0x72,    0x2D,    0xA9,    0x97,    0x06,    0x8D,    0x6E
+,    0xB8,    0xD0,    0x0D,    0xE9,    0xE6,    0xDA,    0xE7,    0x63,    0x46,    0x46,    0xB1,    0xF5,    0x04,    0xBD,    0x23,    0x4A
+,    0x97,    0xA2,    0x83,    0xC8,    0x73,    0xD1,    0xB6,    0x63,    0x60,    0xCA,    0x3A,    0x18,    0x65,    0x4A,    0x6A,    0xD7
+,    0x0A,    0xE7,    0x10,    0x33,    0xCF,    0x96,    0x1B,    0x05,    0xB8,    0xF1,    0x10,    0xE7,    0x02,    0x8F,    0x22,    0x2A
+,    0xC4,    0xD3,    0xA6,    0xA6,    0xEF,    0xEB,    0xB2,    0xA1,    0x61,    0x65,    0x0A,    0xCD,    0x4C,    0xE5,    0xBA,    0x40
+        };
+        
         // Send reply.
-        Console.WriteLine("    Sending IKE_AUTH response to peer");
+        Console.WriteLine($"    Sending IKE_AUTH response to peer {sender.Address} : {sender.Port}");
         Reply(to: sender, response);
         
         Console.WriteLine("    Setting state to established");
@@ -476,10 +508,11 @@ Aug 11 15:48:24 Gertrud charon: 06[NET] received unsupported IKE version 7.10 fr
 
     private void Reply(IPEndPoint to, byte[] message)
     {
-        _lastMessageBytes = message;
+        _lastSentMessageBytes = message;
         _server.SendRaw(message, to, out _);
+        _peerMsgId++;
         
-        var name = @$"C:\temp\IKEv2-Reply_{_maxSeq}_Port-{to.Port}_IKE.bin";
+        var name = @$"C:\temp\IKEv2-Reply_{_peerMsgId}_Port-{to.Port}_IKE.bin";
         File.WriteAllBytes(name, message);
     }
 

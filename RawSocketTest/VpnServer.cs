@@ -139,6 +139,8 @@ public class VpnServer : IDisposable
         // This is 32 bits, and not the 64 bits of the IKE SPI?
         // (see https://docs.strongswan.org/docs/5.9/features/natTraversal.html , https://en.wikipedia.org/wiki/Security_Parameter_Index )
         // "The SPI (as per RFC 2401) is a required part of an IPsec Security Association (SA)"
+        // https://en.wikipedia.org/wiki/IPsec has notes and diagrams of the ESP headers
+        // ESP uses different encryption modes compared to IKEv2
         idx = 0;
         var spi = Bit.ReadUInt64(data, ref idx);
         
@@ -156,8 +158,9 @@ public class VpnServer : IDisposable
         Console.WriteLine($"    Packet has sequence #{seq}");
         if (session.OutOfSequence(seq))
         {
-            Console.WriteLine($"    Received out of sequence packet: {seq} -- not replying");
-            return;
+            Console.WriteLine($"    Received out of sequence packet: {seq} -- ignoring");
+            //Console.WriteLine($"    Received out of sequence packet: {seq} -- not replying");
+            //return;
         }
         
         // TODO: HMAC-SHA2-256-96 fix ?  See pvpn/server.py:411

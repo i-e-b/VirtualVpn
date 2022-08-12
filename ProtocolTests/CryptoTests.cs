@@ -29,8 +29,8 @@ public class CryptoTests
         var h2 = IpProtocol.IPV4;
         var plain2 = Encoding.ASCII.GetBytes("This is a private message. Lorem Ipsum is simply dummy text of the printing and typesetting industry.");
         
-        var msg1 = subject.Encrypt(h1, plain1);
-        var msg2 = subject.Encrypt(h2, plain2);
+        var msg1 = subject.Encrypt(plain1);
+        var msg2 = subject.Encrypt(plain2);
         
         // Visual inspection that it was transformed
         Console.WriteLine(Convert.ToBase64String(plain1));
@@ -39,11 +39,8 @@ public class CryptoTests
         Console.WriteLine(Convert.ToBase64String(plain2));
         Console.WriteLine(Convert.ToBase64String(msg2));
         
-        var recovered1 = subject.Decrypt(msg1, out var rh1);
-        var recovered2 = subject.Decrypt(msg2, out var rh2);
-        
-        Assert.That(rh1, Is.EqualTo(h1), "header 1 not recovered correctly");
-        Assert.That(rh2, Is.EqualTo(h2), "header 2 not recovered correctly");
+        var recovered1 = subject.Decrypt(msg1);
+        var recovered2 = subject.Decrypt(msg2);
         
         
         var expected1 = Encoding.ASCII.GetString(plain1);
@@ -108,14 +105,14 @@ public class CryptoTests
         
         var plain = Encoding.ASCII.GetBytes("This is a private message, you should not see it in the encrypted text.");
         
-        var msg = subject.Encrypt(0, plain);
+        var msg = subject.Encrypt(plain);
         subject.AddChecksum(msg);
         
         var ok = subject.VerifyChecksum(msg);
         
         Assert.That(ok, Is.True, "checksum");
         
-        var recovered = subject.Decrypt(msg, out _);
+        var recovered = subject.Decrypt(msg);
         
         var expected = Encoding.ASCII.GetString(plain);
         var actual = Encoding.ASCII.GetString(recovered);
@@ -135,14 +132,14 @@ public class CryptoTests
         
         var plain = Encoding.ASCII.GetBytes("This is a private message, you should not see it in the encrypted text.");
         
-        var msg = subject.Encrypt(0, plain);
+        var msg = subject.Encrypt(plain);
         subject.AddChecksum(msg);
         
         var ok = subject.VerifyChecksum(msg);
         
         Assert.That(ok, Is.True, "checksum");
         
-        var recovered = subject.Decrypt(msg, out _);
+        var recovered = subject.Decrypt(msg);
         
         var expected = Encoding.ASCII.GetString(plain);
         var actual = Encoding.ASCII.GetString(recovered);
@@ -162,7 +159,7 @@ public class CryptoTests
         
         var plain = Encoding.ASCII.GetBytes("This is a private message, you should not see it in the encrypted text.");
         
-        var msg = subject.Encrypt(0, plain);
+        var msg = subject.Encrypt(plain);
         subject.AddChecksum(msg);
         
         // do some damage
@@ -411,9 +408,9 @@ Aug  8 14:21:58 Gertrud charon: 01[IKE]   16: 85 FE DB D6 52 1D F5 B3 BC 0E E8 4
         var idx = 28; // IKE message header size
         // chop off head and tail
         var body = Bit.Subset(encrypted.Length - 28 - theirCrypto.Integrity!.HashSize, encrypted, ref idx);
-        var bytes = theirCrypto.Decrypt(encrypted, out var next);
+        var bytes = theirCrypto.Decrypt(encrypted);
 
-        Console.WriteLine($"Next={next} ({next.ToString()})" + Bit.Describe("decrypted:", bytes));
+        Console.WriteLine(Bit.Describe("decrypted:", bytes));
         
         idx = 0;
         var nextPayload = PayloadType.IDi;

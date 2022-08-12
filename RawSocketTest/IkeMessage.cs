@@ -84,12 +84,10 @@ public class IkeMessage
     /// <param name="ikeCrypto"></param>
     public byte[] ToBytes(bool sendZeroHeader = false, IkeCrypto? ikeCrypto = null)
     {
-        // TODO: crypto, checksums
-        
-        var offset = 0;
+        var idx = 0;
         if (sendZeroHeader)
         {
-            offset = 4;
+            idx = 4;
             ExpectedLength += 4;
         }
 
@@ -115,8 +113,8 @@ public class IkeMessage
         
         ExpectedLength = (uint)(payloadData.Length + HeaderLength);
         var bytes = new byte[ExpectedLength];
-        WriteHeader(bytes, ref offset);
-        Bit.CopyOver(src: payloadData, dst: bytes, ref offset);
+        WriteHeader(bytes, ref idx);
+        Bit.CopyOver(src: payloadData, dst: bytes, ref idx);
 
         if (ikeCrypto is not null)
         {
@@ -124,7 +122,7 @@ public class IkeMessage
             ikeCrypto.AddChecksum(bytes);
         }
 
-        if (offset != ExpectedLength) throw new Exception($"Unexpected write length. Expected {ExpectedLength}, but got {offset}");
+        if (idx != ExpectedLength) throw new Exception($"Unexpected write length. Expected {ExpectedLength}, but got {idx}");
 
         return bytes;
     }

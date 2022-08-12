@@ -116,6 +116,9 @@ public enum PayloadType : byte
     /// multiple child payloads.
     /// </summary>
     SK = 46,
+    /// <summary>
+    /// Configuration (47)
+    /// </summary>
     CP = 47,
     /// <summary> Extensible Authentication (48) </summary>
     EAP = 48,
