@@ -99,15 +99,12 @@ public class IkeMessage
             };
             payloadData = sk.ToBytes();
             
-            //ikeCrypto.AddChecksum(payloadData);// here or below?
-            
             FirstPayload = PayloadType.SK;
         }
         
-        ExpectedLength = (uint)(payloadData.Length + HeaderLength/* + speHeaderLength*/);
-        var totalMessageLength = ExpectedLength ;//+ (ikeCrypto?.Integrity?.HashSize ?? 0);
+        ExpectedLength = (uint)(payloadData.Length + HeaderLength);
 
-        var bytes = new byte[totalMessageLength];
+        var bytes = new byte[ExpectedLength];
         WriteHeader(bytes, ref idx);
         Bit.CopyOver(src: payloadData, dst: bytes, ref idx);
 

@@ -202,14 +202,13 @@ public class GmpDiffieHellman : IDisposable
     public bool get_our_public_key(out byte[] result)
     {
         result = export(ya);
+        
+        var pad = 256 - result.Length;
+        
+        if (pad < 1) return true;
+        
+        result = (new byte[pad]).Concat(result).ToArray();
         return true;
-        /*value->len = this->p_len;
-        value->ptr = mpz_export(NULL, NULL, 1, value->len, 1, 0, this->ya);
-        if (value->ptr == NULL)
-        {
-            value->len = 0;
-        }
-        return TRUE;*/
     }
 
     private static byte[] export(mpz_t src)

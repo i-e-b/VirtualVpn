@@ -6,10 +6,10 @@ public class PayloadAuth : MessagePayload
 {
     public override PayloadType Type { get => PayloadType.AUTH; set { } }
     
-    public override int Size => HeaderSize + Data.Length;
+    public override int Size => HeaderSize + AuthData.Length + 4;
 
     public AuthMethod AuthMethod { get; set; }
-    public byte[] AuthData { get; set; }
+    public byte[] AuthData { get; set; } = Array.Empty<byte>();
 
     public PayloadAuth(byte[] data, ref int idx, ref PayloadType nextPayload)
     {
@@ -24,6 +24,13 @@ public class PayloadAuth : MessagePayload
 
     protected override void Serialise()
     {
+        var idx = 0;
+        Data = new byte[AuthData.Length + 4];
+        
+        Data[idx++] = (byte)AuthMethod;
+        idx += 3; // unused
+        
+        Bit.CopyOver(AuthData, Data, ref idx);
     }
     
     protected override void Deserialise()

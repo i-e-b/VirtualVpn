@@ -253,6 +253,7 @@ public class VpnSession
         var mySkp = _myCrypto?.SkP;
         if (mySkp is null) throw new Exception("Local SK-p not established before IKE_AUTH received");
         var authData = GeneratePskAuth(_lastSentMessageBytes, _peerNonce, responsePayloadIdr, mySkp); // I think this is based on the last thing we sent
+        Console.WriteLine($"    Auth data ({authData.Length} bytes) = {Bit.HexString(authData)}");
 
         // pvpn/server.py:309
         // Send our IKE_AUTH message back
@@ -266,25 +267,7 @@ public class VpnSession
         var cpPayload = request.GetPayload<PayloadCp>();
         if (cpPayload is null) Console.WriteLine("    No Configuration (CP) payload");
         else Console.WriteLine("    Configuration (CP) payload present");
-        // deliberately ignoring 'CP' for now, but it probably is required
 
-        // IEB: continue from here. I'm probably serialising something badly.
-        /*
-
-received packet: from 185.81.252.44[4500] to 159.69.13.126[4500] (176 bytes)
-  not enough input to parse rule 10 U_INT_8
-could not decrypt payloads
-message parsing failed
-IKE_AUTH response with message ID 1 processing failed
-
-----
-
-parsing AUTH payload, 4 bytes left IEB: <----- not enough!!!
-Aug 12 13:29:53 Gertrud charon: 14[ENC] parsing payload from => 4 bytes @ 0x7f10bc004230
-
-         */
-
-        Console.WriteLine(Bit.Describe("auth response", response));
         // Send reply.
         Console.WriteLine($"    Sending IKE_AUTH response to peer {sender.Address} : {sender.Port}");
 
@@ -292,6 +275,7 @@ Aug 12 13:29:53 Gertrud charon: 14[ENC] parsing payload from => 4 bytes @ 0x7f10
 
         Console.WriteLine("    Setting state to established");
         _state = SessionState.ESTABLISHED; // Should now have a full Child SA
+        // Should now get INFORMATIONAL messages, possibly with some `IKE_DELETE` payloads to tell me about expired sessions.
     }
 
     /// <summary>
