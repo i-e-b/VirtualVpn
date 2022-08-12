@@ -270,10 +270,18 @@ public class VpnSession
 
         // IEB: continue from here. I'm probably serialising something badly.
         /*
-parsed IKE_AUTH response 1 [ SA TSi TSr ]
-IDr payload missing
-generating INFORMATIONAL request 2 [ N(AUTH_FAILED) ]
-sending packet: from 159.69.13.126[4500] to 185.81.252.44[4500] (80 bytes)
+
+received packet: from 185.81.252.44[4500] to 159.69.13.126[4500] (176 bytes)
+  not enough input to parse rule 10 U_INT_8
+could not decrypt payloads
+message parsing failed
+IKE_AUTH response with message ID 1 processing failed
+
+----
+
+parsing AUTH payload, 4 bytes left IEB: <----- not enough!!!
+Aug 12 13:29:53 Gertrud charon: 14[ENC] parsing payload from => 4 bytes @ 0x7f10bc004230
+
          */
 
         Console.WriteLine(Bit.Describe("auth response", response));

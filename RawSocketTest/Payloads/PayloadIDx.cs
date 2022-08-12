@@ -8,7 +8,30 @@ namespace RawSocketTest.Payloads;
 /// </summary>
 public class PayloadIDi : PayloadIDx
 {
+    public override PayloadType Type => PayloadType.IDi;
+    
     public PayloadIDi(byte[] data, ref int idx, ref PayloadType nextPayload) : base(data, ref idx, ref nextPayload) { }
+}
+
+/// <summary>
+/// Flip side of <see cref="PayloadIDi"/>.
+/// </summary>
+public class PayloadIDr: PayloadIDx
+{
+    public override PayloadType Type => PayloadType.IDr;
+
+    public PayloadIDr(byte[] data, ref int idx, ref PayloadType nextPayload) : base(data, ref idx, ref nextPayload)
+    {
+    }
+
+    public PayloadIDr(IdType type, byte[] idData, int port, int protocol)
+    {
+        // like pvpn/message.py:118
+        IdType=type;
+        IdData=idData;
+        Port = (ushort)port;
+        Protocol = (IpProtocol)protocol;
+    }
 }
 
 // pvpn/message.py:117
@@ -86,23 +109,4 @@ public class PayloadIDx : MessagePayload
     public IpProtocol Protocol { get; set; }
 
     public IdType IdType { get; set; }
-}
-
-/// <summary>
-/// Flip side of <see cref="PayloadIDi"/>.
-/// </summary>
-public class PayloadIDr: PayloadIDx
-{
-    public PayloadIDr(byte[] data, ref int idx, ref PayloadType nextPayload) : base(data, ref idx, ref nextPayload)
-    {
-    }
-
-    public PayloadIDr(IdType type, byte[] idData, int port, int protocol)
-    {
-        // like pvpn/message.py:118
-        IdType=type;
-        IdData=idData;
-        Port = (ushort)port;
-        Protocol = (IpProtocol)protocol;
-    }
 }
