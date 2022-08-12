@@ -1,7 +1,7 @@
 ﻿using System.Net;
 using System.Net.Sockets;
 
-namespace RawSocketTest;
+namespace RawSocketTest.Helpers;
 
 public class UdpServer : IDisposable
 {
@@ -59,11 +59,31 @@ public class UdpServer : IDisposable
         }
     }
 
+    /// <summary>
+    /// Send bytes to a target, matching the target port if 500 or 4500
+    /// </summary>
     public void SendRaw(byte[] data, IPEndPoint target, out int bytesSent)
     {
-        bytesSent = _ikeClient.Send(data, data.Length, target);
-        // this seems to cause 500 port to be used on the way back too
+        // `UdpClient.Send()` seems to cause 500 port to be used on the way back,
         // unlike `Socket.SendTo(buf,flags,target)` which gives an ephemeral port
+        
+        if (target.Port == 4500)
+        {
+            var addr = _speClient.Client.LocalEndPoint as IPEndPoint;
+            Console.WriteLine($"    Sending from {addr?.Address}[{addr?.Port}] to {target.Address}[{target.Port}] ({data.Length} bytes)");
+            bytesSent = _speClient.Send(data, data.Length, target);
+        }
+        else if (target.Port == 500)
+        {
+            var addr = _ikeClient.Client.LocalEndPoint as IPEndPoint;
+            Console.WriteLine($"    Sending from {addr?.Address}[{addr?.Port}] to {target.Address}[{target.Port}] ({data.Length} bytes)");
+            bytesSent = _ikeClient.Send(data, data.Length, target);
+        }
+        else
+        {
+            Console.WriteLine($"WARNING: target port of {target.Port} is not recognised! Will send from source port of 500");
+            bytesSent = _ikeClient.Send(data, data.Length, target);
+        }
     }
 
     public void Dispose()
