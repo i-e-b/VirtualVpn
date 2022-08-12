@@ -85,11 +85,6 @@ public class IkeMessage
     public byte[] ToBytes(bool sendZeroHeader = false, IkeCrypto? ikeCrypto = null)
     {
         var idx = 0;
-        if (sendZeroHeader)
-        {
-            idx = 4;
-            ExpectedLength += 4;
-        }
 
         FirstPayload = Payloads.Count > 0 ? Payloads[0].Type : PayloadType.NONE;
         
@@ -98,33 +93,35 @@ public class IkeMessage
         if (ikeCrypto is not null)
         {
             // pvpn/message.py:555
-            var sk = new PayloadSecured(ikeCrypto.Encrypt(payloadData));
-            var skData = sk.ToBytes();
+            var sk = new PayloadSecured(ikeCrypto.Encrypt(payloadData))
+            {
+                NextPayload = FirstPayload
+            };
+            payloadData = sk.ToBytes();
             
-            var subHeader = new byte[4];
-            var subIdx = 0;
-            subHeader[subIdx++] = (byte)FirstPayload;
-            subIdx++;// not used
-            Bit.WriteUInt16((ushort)(skData.Length + 4), subHeader, ref subIdx);
+            //ikeCrypto.AddChecksum(payloadData);// here or below?
             
-            payloadData = subHeader.Concat(skData).ToArray();
             FirstPayload = PayloadType.SK;
         }
         
-        ExpectedLength = (uint)(payloadData.Length + HeaderLength);
-        var bytes = new byte[ExpectedLength];
+        ExpectedLength = (uint)(payloadData.Length + HeaderLength/* + speHeaderLength*/);
+        var totalMessageLength = ExpectedLength ;//+ (ikeCrypto?.Integrity?.HashSize ?? 0);
+
+        var bytes = new byte[totalMessageLength];
         WriteHeader(bytes, ref idx);
         Bit.CopyOver(src: payloadData, dst: bytes, ref idx);
 
-        if (ikeCrypto is not null)
+        if (ikeCrypto?.Integrity is not null)
         {
             // pvpn/message.py:571
-            ikeCrypto.AddChecksum(bytes);
+            var asl = 0;
+            var assoc = Bit.Subset(32, bytes, ref asl);
+            ikeCrypto.AddChecksum(bytes, assoc);
         }
 
         if (idx != ExpectedLength) throw new Exception($"Unexpected write length. Expected {ExpectedLength}, but got {idx}");
-
-        return bytes;
+        
+        return sendZeroHeader ? new byte[4].Concat(bytes).ToArray() : bytes;
     }
 
     private byte[] EncodePayloads()

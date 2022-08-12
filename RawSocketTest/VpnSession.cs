@@ -14,7 +14,7 @@ namespace RawSocketTest;
 /// Negotiates and handles a single VPN session between self and one peer.
 /// Most of this is covered by RFC 5996: https://datatracker.ietf.org/doc/html/rfc5996
 /// </summary>
-internal class VpnSession
+public class VpnSession
 {
     private const string PreSharedKeyString = "ThisIsForTestOnlyDontUse";
     //## State machine vars ##//
@@ -101,13 +101,20 @@ internal class VpnSession
     // pvpn/server.py:253
     private byte[] BuildResponse(ExchangeType exchange, bool sendZeroHeader, IkeCrypto? crypto, params MessagePayload[] payloads)
     {
+        return BuildSerialResponse(exchange, sendZeroHeader, crypto, _peerSpi, _localSpi, _peerMsgId, payloads);
+    }
+    
+    public static byte[] BuildSerialResponse(ExchangeType exchange, bool sendZeroHeader, IkeCrypto? crypto,
+        ulong peerSpi, ulong localSpi, long peerMsgId, params MessagePayload[] payloads)
+    {
+        // pvpn/server.py:253
         var resp = new IkeMessage
         {
             Exchange = exchange,
-            SpiI = _peerSpi,
-            SpiR = _localSpi,
+            SpiI = peerSpi,
+            SpiR = localSpi,
             MessageFlag = MessageFlag.Response,
-            MessageId = (uint)_peerMsgId,
+            MessageId = (uint)peerMsgId,
             Version = IkeVersion.IkeV2,
         };
         resp.Payloads.AddRange(payloads);
@@ -248,8 +255,8 @@ internal class VpnSession
         var authData = GeneratePskAuth(_lastSentMessageBytes, _peerNonce, responsePayloadIdr, mySkp); // I think this is based on the last thing we sent
 
         // pvpn/server.py:309
-        // Send our Child-SA message back
-        var response = BuildResponse(ExchangeType.CREATE_CHILD_SA, sendZeroHeader, _myCrypto,
+        // Send our IKE_AUTH message back
+        var response = BuildResponse(ExchangeType.IKE_AUTH, sendZeroHeader, _myCrypto,
             new PayloadSa(chosenChildProposal),
             tsi, tsr, // just accept whatever traffic selectors. We're virtual.
             responsePayloadIdr,
@@ -263,16 +270,16 @@ internal class VpnSession
 
         // IEB: continue from here. I'm probably serialising something badly.
         /*
-received packet: from 185.81.252.44[4500] to 159.69.13.126[4500] (176 bytes)
-  not enough input to parse rule 3 CHUNK_DATA
-payload type ENCRYPTED could not be parsed
-message parsing failed
-CREATE_CHILD_SA response with message ID 1 processing failed
-
+parsed IKE_AUTH response 1 [ SA TSi TSr ]
+IDr payload missing
+generating INFORMATIONAL request 2 [ N(AUTH_FAILED) ]
+sending packet: from 159.69.13.126[4500] to 185.81.252.44[4500] (80 bytes)
          */
 
+        Console.WriteLine(Bit.Describe("auth response", response));
         // Send reply.
         Console.WriteLine($"    Sending IKE_AUTH response to peer {sender.Address} : {sender.Port}");
+
         Reply(to: sender, response);
 
         Console.WriteLine("    Setting state to established");

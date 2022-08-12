@@ -1,4 +1,5 @@
 ﻿using System.Security.Cryptography;
+using RawSocketTest.Helpers;
 
 namespace RawSocketTest.Crypto;
 
@@ -76,7 +77,8 @@ public class Integrity
 
     public byte[] Compute(byte[] key, byte[] data)
     {
-        var full = _algo(key,data);
+        var full = _algo(key, data);
+        Console.WriteLine("------HASH----->\r\n" + Bit.Describe("key", key) + Bit.Describe("data", data) + Bit.Describe("ICV (hash)", full));
         if (full.Length <= HashSize) return full;
         return full.Take(HashSize).ToArray();
     }

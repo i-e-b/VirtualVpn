@@ -263,10 +263,25 @@ public class IkeCrypto
     private static string Hex(IEnumerable<byte> expected) => string.Join("", expected.Select(v=>v.ToString("x2")));
 
     /// <summary>
-    /// Calculate and inject a checksum into an encrypted message
+    /// Calculate and inject a checksum into an encrypted message.
+    /// "assoc" comes from the header of the IkeMessage, not including encrypted data or SPE zero padding
     /// </summary>
-    public void AddChecksum(byte[] encrypted)
-    {
+    public void AddChecksum(byte[] encrypted, byte[] assoc)
+    { 
+/* prepare data to authenticate-decrypt:
+ * | IV | plain | padding | ICV |
+ *       \____crypt______/   ^
+ *              |           /
+ *              v          /
+ *     assoc -> + ------->/
+ *
+ * "assoc" looks like
+ *    0: A1 33 E4 06 B4 C3 17 10 33 52 09 94 0F 58 36 87
+ *   16: 2E 20 23 20 00 00 00 01 00 00 00 B0 21 00 00 94
+ */
+
+        Console.WriteLine(Bit.Describe("HASH ASSOC", assoc));
+        
         if (_integrity is null) return;
         if (_skA is null) throw new Exception($"Checksum is present, but no checksum key was given ({nameof(_skA)})");
 
@@ -282,6 +297,22 @@ public class IkeCrypto
         {
             encrypted[i + payloadLength] = sum[i];
         }
+    }
+
+    /// <summary>
+    /// Calculate a checksum, return checksum bytes without changing incoming data
+    /// </summary>
+    public byte[] CalculateChecksum(byte[] message)
+    {
+        if (_integrity is null) return Array.Empty<byte>();
+        if (_skA is null) throw new Exception($"Checksum is present, but no checksum key was given ({nameof(_skA)})");
+
+        // read just the main body
+        var payloadLength = message.Length - _integrity.HashSize;
+        var mainPayload = message.Take(payloadLength).ToArray();
+
+        // compute
+        return _integrity.Compute(_skA, mainPayload);
     }
 
     /// <summary>
