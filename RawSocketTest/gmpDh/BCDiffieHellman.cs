@@ -1,15 +1,14 @@
-﻿using System.Numerics;
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using System.Security.Cryptography;
-using RawSocketTest.gmpDh;
-using static System.Numerics.BigInteger;
+using RawSocketTest.Crypto;
 
-namespace RawSocketTest.Crypto;
+// ReSharper disable InconsistentNaming
 
-public class ModpDiffieHellman
+namespace RawSocketTest.gmpDh;
+
+public class BCDiffieHellman : IDisposable
 {
-    
-/*
+    /*
  * Copyright (C) 1998-2002  D. Hugh Redelmeier.
  * Copyright (C) 1999, 2000, 2001  Henry Spencer.
  * Copyright (C) 2010 Tobias Brunner
@@ -27,6 +26,10 @@ public class ModpDiffieHellman
  * for more details.
  */
 
+
+//typedef struct private_gmp_diffie_hellman_t private_gmp_diffie_hellman_t;
+
+
     /**
 	 * Diffie Hellman group number.
 	 */
@@ -35,32 +38,32 @@ public class ModpDiffieHellman
     /*
      * Generator value.
      */
-    BigInteger g;
+    BigInt g;
 
     /**
 	 * My private value.
 	 */
-    BigInteger xa;
+    BigInt xa;
 
     /**
 	 * My public value.
 	 */
-    BigInteger ya;
+    BigInt ya;
 
     /**
 	 * Other public value.
 	 */
-    BigInteger yb;
+    BigInt yb;
 
     /**
 	 * Shared secret.
 	 */
-    BigInteger zz;
+    BigInt zz;
 
     /**
 	 * Modulus.
 	 */
-    BigInteger p;
+    BigInt p;
 
     /**
 	 * Modulus length.
@@ -72,9 +75,10 @@ public class ModpDiffieHellman
 	 */
     bool computed;
 
+//METHOD(key_exchange_t, set_public_key, bool, private_gmp_diffie_hellman_t *this, chunk_t value)
     public bool set_their_public_key(byte[] value)
     {
-        BigInteger p_min_1 = p - 1;
+        BigInt p_min_1 = BigInt.ZERO;//new BigInt();
 
         if (!key_exchange_verify_pubkey(group, value)) // check the length is valid
         {
@@ -82,6 +86,7 @@ public class ModpDiffieHellman
         }
 
         //mpz_init(p_min_1);
+        p_min_1 = p.subtract(1);
         //mpz_sub_ui(p_min_1, this.p, 1);
 
         /* this->computed is not reset in order to prevent reuse of this DH
@@ -100,12 +105,14 @@ public class ModpDiffieHellman
          * safe-prime groups.
          */
         //if (mpz_cmp_ui(yb, 1) <= 0 || mpz_cmp(yb, p_min_1) >= 0)
-        if (yb < 1 || p_min_1 < yb)
+        if (yb.compareTo(1) <= 0 || yb.compareTo(p_min_1) >= 0)
         {
             DebugLog("public DH value verification failed: ", "y <= 1 || y >= p - 1");
+            //mpz_clear(p_min_1);
             return false;
         }
 
+        //mpz_clear(p_min_1);
         return true;
     }
 
@@ -155,6 +162,7 @@ public class ModpDiffieHellman
         }
     }
 
+//METHOD(key_exchange_t, get_public_key, bool, private_gmp_diffie_hellman_t *this,chunk_t *value)
     public bool get_our_public_key(out byte[] result)
     {
         result = export(ya);
@@ -167,9 +175,27 @@ public class ModpDiffieHellman
         return true;
     }
 
-    private static byte[] export(BigInteger src)
+    private static byte[] export(BigInt src)
     {
-        return src.ToByteArray(isUnsigned: false, isBigEndian: true);
+        var tmp = src.toByteArray(); // this can leave a zero byte at the top
+        
+        if (tmp[0] == 0) return tmp.Skip(1).ToArray();
+        return tmp;
+        
+        /*
+        var expectedSize = mpz_sizeinbase(src, 2);
+        var allocSize = (size_t)((long)expectedSize * 2);
+
+        var data = allocate(allocSize);
+        size_t size = (size_t)0;
+        size_t oneByte = (size_t)1;
+        mpz_export(data, ref size, 1, oneByte, 1, 0, src);
+
+        var realSize = (int)size;
+        var result = new byte[realSize];
+        Marshal.Copy(data.ToIntPtr(), result, 0, realSize);
+        free(data);
+        return result;*/
     }
 
 //METHOD(key_exchange_t, set_private_key, bool, private_gmp_diffie_hellman_t *this, chunk_t value)
@@ -177,19 +203,16 @@ public class ModpDiffieHellman
     {
         //mpz_import(xa, value.len, 1, 1, 1, 0, value.ptr);
         import(ref xa, value);
-        
-        ya = ModPow(g, xa, p);
-        
         //mpz_powm(ya, g, xa, p);
+        ya = g.modPow(xa, p);
         computed = false;
         return true;
     }
 
-    private static void import(ref BigInteger target, byte[] value)
+    private static void import(ref BigInt target, byte[] value)
     {
-        target = new BigInteger(value, isUnsigned: false, isBigEndian:true);
-        /*
-        var data = allocate((size_t)value.Length);
+        target = new BigInt(value);
+        /*var data = allocate((size_t)value.Length);
         Marshal.Copy(value, 0, data.ToIntPtr(), value.Length);
         mpz_import(target, (size_t)value.Length, 1, 1, 1, 0, data);
         free(data);*/
@@ -205,9 +228,9 @@ public class ModpDiffieHellman
              * the subgroup.  as noted above, this check is not really necessary as
              * the plugin does not reuse private keys */
 
-            var one = One;//new mpz_t();
-            var q = Zero;//new mpz_t();
-            var p_min_1 = Zero;//new mpz_t();
+            var one = (BigInt)1;//new mpz_t();
+            var q = (BigInt)0;//new mpz_t();
+            var p_min_1 = (BigInt)0;//new mpz_t();
             //mpz_init(q);
             //mpz_init(one);
 
@@ -216,15 +239,11 @@ public class ModpDiffieHellman
             if (dh_params.subgroup.Length <= 0)
             {
                 //mpz_init(p_min_1);
+                p_min_1 = p.subtract(1);
                 //mpz_sub_ui(p_min_1, p, 1);
-                p_min_1 = p - 1;
-                
+                q = p_min_1.divide(2); // ???
                 //mpz_fdiv_q_2exp(q, p_min_1, 1);
-                // var d = BigInteger.Pow(2, 1); // technically, this is what the '2exp' is doing?
-                q = p_min_1 / 2;
-                
                 //mpz_clear(p_min_1);
-                p_min_1 = Zero;
             }
             else
             {
@@ -232,10 +251,11 @@ public class ModpDiffieHellman
                 //mpz_import(q, params->subgroup.len, 1, 1, 1, 0, params->subgroup.ptr);
             }
 
-            one = ModPow(yb, q, p);
             //mpz_powm(one, yb, q, p);
+            one = yb.modPow(q, p);
             //mpz_clear(q);
-            if (one != 1)
+            //if (mpz_cmp_ui(one, 1) != 0)
+            if (one.compareTo(1) != 0)
             {
                 DebugLog("public DH value verification failed: ", "y ^ q mod p != 1");
                 //mpz_clear(one);
@@ -245,7 +265,7 @@ public class ModpDiffieHellman
             //mpz_clear(one);
 
             //mpz_powm(zz, yb, xa, p);
-            zz = ModPow(yb,xa,p);
+            zz = yb.modPow(xa,p);
             computed = true;
         }
 
@@ -262,24 +282,25 @@ public class ModpDiffieHellman
 //METHOD(key_exchange_t, destroy, void, private_gmp_diffie_hellman_t *this)
     public void destroy()
     {
-        //mpz_clear(p);
-        //mpz_clear(xa);
-        //mpz_clear(ya);
-        //mpz_clear(yb);
-        //mpz_clear(zz);
-        //mpz_clear(g);
+        /*
+        mpz_clear(p);
+        mpz_clear(xa);
+        mpz_clear(ya);
+        mpz_clear(yb);
+        mpz_clear(zz);
+        mpz_clear(g);*/
     }
 
-    public ModpDiffieHellman()
+    public BCDiffieHellman()
     {
         group = DhId.None;
-        g = Zero;//new mpz_t();
-        xa = Zero;//new mpz_t();
-        ya = Zero;//new mpz_t();
-        yb = Zero;//new mpz_t();
-        zz = Zero;//new mpz_t();
-        p = Zero;//new mpz_t();
-        p_len = 0;//(size_t)0;
+        g = 0;//new mpz_t();
+        xa = 0;//new mpz_t();
+        ya = 0;//new mpz_t();
+        yb = 0;//new mpz_t();
+        zz = 0;//new mpz_t();
+        p = 0;//new mpz_t();
+        p_len = 0;
     }
 
 
@@ -287,25 +308,25 @@ public class ModpDiffieHellman
  * Generic internal constructor
  */
 //static gmp_diffie_hellman_t *create_generic(key_exchange_method_t group, size_t exp_len, chunk_t g, chunk_t p)
-    public ModpDiffieHellman(DhId group_, int exp_len_, byte[] g_, byte[] p_)
+    public BCDiffieHellman(DhId group_, int exp_len_, byte[] g_, byte[] p_)
     {
         group = group_;
         p_len = p_.Length;
 
-        g = Zero;//new mpz_t();
-        xa = Zero;//new mpz_t();
-        ya = Zero;//new mpz_t();
-        yb = Zero;//new mpz_t();
-        zz = Zero;//new mpz_t();
-        p = Zero;//new mpz_t();
-        p_len = 0;//(size_t)0;
+        g = 0;//new mpz_t();
+        xa = 0;//new mpz_t();
+        ya = 0;//new mpz_t();
+        yb = 0;//new mpz_t();
+        zz = 0;//new mpz_t();
+        p = 0;//new mpz_t();
+        p_len = 0;
 
-        //mpz_init(p);
-        //mpz_init(yb);
-        //mpz_init(ya);
-        //mpz_init(xa);
-        //mpz_init(zz);
-        //mpz_init(g);
+        /*mpz_init(p);
+        mpz_init(yb);
+        mpz_init(ya);
+        mpz_init(xa);
+        mpz_init(zz);
+        mpz_init(g);*/
 
         //mpz_import(this->g, g.len, 1, 1, 1, 0, g.ptr);
         //mpz_import(this->p, p.len, 1, 1, 1, 0, p.ptr);
@@ -339,17 +360,16 @@ public class ModpDiffieHellman
             random[i] = 0;
         }
 
-        DebugLog("        size of DH secret exponent (bits): ", xa.GetBitLength().ToString());
+        DebugLog("        size of DH secret exponent (bits): ", xa.bitCount().ToString());
 
-        if (p < 0) p = Negate(p);
-        ya = ModPow(g,xa,p);
         //mpz_powm(ya, g, xa, p);
+        ya = g.modPow(xa,p);
     }
 
     /// <summary>
     /// Create a new key exchanger based on standard parameters
     /// </summary>
-    public static ModpDiffieHellman? CreateForGroup(DhId group)
+    public static BCDiffieHellman? CreateForGroup(DhId group)
     {
         var parameters = GmpDhParameters.diffie_hellman_get_params(group);
         if (parameters is null)
@@ -357,13 +377,20 @@ public class ModpDiffieHellman
             return null;
         }
 
-        return new ModpDiffieHellman(group, (int)parameters.Value.exp_len, parameters.Value.generator, parameters.Value.prime);
+        return new BCDiffieHellman(group, (int)parameters.Value.exp_len, parameters.Value.generator, parameters.Value.prime);
     }
 
 
     public void Dispose()
     {
         destroy();
+        /*g.Dispose();
+        xa.Dispose();
+        ya.Dispose();
+        yb.Dispose();
+        zz.Dispose();
+        p.Dispose();
+        */
         GC.SuppressFinalize(this);
     }
 }
