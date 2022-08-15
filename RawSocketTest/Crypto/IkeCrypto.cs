@@ -279,8 +279,6 @@ public class IkeCrypto
  *    0: A1 33 E4 06 B4 C3 17 10 33 52 09 94 0F 58 36 87
  *   16: 2E 20 23 20 00 00 00 01 00 00 00 B0 21 00 00 94
  */
-
-        Console.WriteLine(Bit.Describe("HASH ASSOC", assoc));
         
         if (_integrity is null) return;
         if (_skA is null) throw new Exception($"Checksum is present, but no checksum key was given ({nameof(_skA)})");

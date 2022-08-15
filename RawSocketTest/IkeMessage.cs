@@ -220,7 +220,7 @@ public class IkeMessage
         while (idx < srcData.Length && nextPayload != PayloadType.NONE)
         {
             var payload = ReadSinglePayload(srcData, encryption, ref idx, ref nextPayload, rawData);
-            Console.WriteLine($"        Next payload: {nextPayload.ToString()}, ended at {idx}");
+            //Console.WriteLine($"        Next payload: {nextPayload.ToString()}, ended at {idx}");
             payloads.AddRange(payload);
         }
 
@@ -243,7 +243,7 @@ public class IkeMessage
     /// </summary>
     public static IEnumerable<MessagePayload> ReadSinglePayload(byte[] srcData, IkeCrypto? ikeCrypto, ref int idx, ref PayloadType nextPayload, byte[]? rawData = null)
     {
-        Console.WriteLine($"    Reading payload {nextPayload.ToString()} from source ({srcData.Length} bytes starting at {idx})");
+        //Console.WriteLine($"    Reading payload {nextPayload.ToString()} from source ({srcData.Length} bytes starting at {idx})");
         var thisType = nextPayload;
         // TODO: continue to fill out
         switch (thisType)
@@ -301,7 +301,7 @@ public class IkeMessage
                 Console.WriteLine($"    Plain body has {expandedPayload.PlainBody?.Length.ToString() ?? "no"} bytes");
                 if (expandedPayload.PlainBody?.Length > 0)
                 {
-                    Console.WriteLine($"    Reading inner payload, starting with {nextPayload.ToString()}");
+                    //Console.WriteLine($"    Reading inner payload, starting with {nextPayload.ToString()}");
                     //File.WriteAllBytes(@"C:\temp\SK_Plain.bin", expandedPayload.PlainBody);
 
                     var childIdx = 0;

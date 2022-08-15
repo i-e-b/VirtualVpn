@@ -194,4 +194,14 @@ public class VpnServer : IDisposable
     {
         _childSessions.Add(childSa.SpiIn, childSa);
     }
+
+    public void RemoveSession(ulong spi)
+    {
+        if (_sessions.ContainsKey(spi)) _sessions.Remove(spi);
+    }
+
+    public void RemoveChildSession(uint spi)
+    {
+        if (_childSessions.ContainsKey(spi)) _childSessions.Remove(spi);
+    }
 }

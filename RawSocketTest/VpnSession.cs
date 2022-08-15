@@ -44,7 +44,7 @@ public class VpnSession
     private readonly ulong _peerSpi;
     private readonly ulong _localSpi;
     private readonly byte[] _localNonce;
-    private readonly List<ChildSa> _thisSessionChildren = new();
+    private readonly Dictionary<uint, ChildSa> _thisSessionChildren = new();
     private byte[]? _previousRequestRawData;
 
     public VpnSession(UdpServer server, VpnServer sessionHost, ulong peerSpi)
@@ -119,9 +119,8 @@ public class VpnSession
         };
         resp.Payloads.AddRange(payloads);
         
-        
-        Console.WriteLine("        payloads outgoing:");
-        foreach (var payload in resp.Payloads) Console.WriteLine($"            {payload.Describe()}");
+        //Console.WriteLine("        payloads outgoing:");
+        //foreach (var payload in resp.Payloads) Console.WriteLine($"            {payload.Describe()}");
 
         return resp.ToBytes(sendZeroHeader, crypto); // should wrap payloads in PayloadSK if we have crypto
     }
@@ -191,6 +190,7 @@ public class VpnSession
             case ExchangeType.INFORMATIONAL: // pvpn/server.py:315
                 AssertState(SessionState.ESTABLISHED, request);
                 Console.WriteLine("INFORMATIONAL received");
+                HandleInformational(request, sender, sendZeroHeader);
                 break;
 
             case ExchangeType.CREATE_CHILD_SA: // pvpn/server.py:340
@@ -204,10 +204,65 @@ public class VpnSession
         }
     }
 
+    private void HandleInformational(IkeMessage request, IPEndPoint sender, bool sendZeroHeader)
+    {
+        // pvpn/server.py:315
+        
+        // Check for any sessions the other side wants to remove
+        var deletePayload = request.GetPayload<PayloadDelete>();
+
+        if (deletePayload?.SpiList.Any() != true)
+        {
+            // Nothing to do, but we must reply
+            Reply(to: sender, message: BuildResponse(ExchangeType.INFORMATIONAL, sendZeroHeader, _myCrypto));
+            return;
+        }
+
+        if (deletePayload.ProtocolType == IkeProtocolType.IKE) // pvpn/server.py:321
+        {
+            // This session should be removed?
+            _state = SessionState.DELETED;
+            _sessionHost.RemoveSession(_localSpi);
+
+            foreach (var childSa in _thisSessionChildren)
+            {
+                _sessionHost.RemoveChildSession(childSa.Value.SpiIn);
+            }
+            _thisSessionChildren.Clear();
+            Reply(to: sender, message: BuildResponse(ExchangeType.INFORMATIONAL, sendZeroHeader, _myCrypto, deletePayload));
+            return;
+        }
+        
+        // Specific old sessions should be removed
+        // pvpn/server.py:328
+        var matches = new List<byte[]>(); // spi that have been removed
+        foreach (var deadSpi in deletePayload.SpiList)
+        {
+            var removed = TryRemoveChild(deadSpi);
+            
+            if (removed) matches.Add(deadSpi);
+        }
+        
+        Reply(to: sender, message: BuildResponse(ExchangeType.INFORMATIONAL, sendZeroHeader, _myCrypto, 
+            new PayloadDelete(deletePayload.ProtocolType, matches)));
+    }
+
+    private bool TryRemoveChild(byte[] deadSpi)
+    {
+        if (deadSpi.Length != 4) return false;
+        
+        var spi = Bit.BytesToUInt32(deadSpi);
+        var removed = _thisSessionChildren.Remove(spi);
+        
+        if (removed) _sessionHost.RemoveChildSession(spi);
+        
+        return removed;
+    }
+
     private void HandleAuth(IkeMessage request, IPEndPoint sender, bool sendZeroHeader)
     {
-        Console.WriteLine("        HandleAuth():: payloads incoming:");
-        foreach (var payload in request.Payloads) Console.WriteLine($"            {payload.Describe()}");
+        //Console.WriteLine("        HandleAuth():: payloads incoming:");
+        //foreach (var payload in request.Payloads) Console.WriteLine($"            {payload.Describe()}");
 
         var peerSkp = _peerCrypto?.SkP;
         if (peerSkp is null) throw new Exception("Peer SK-p not established before IKE_AUTH received");
@@ -254,6 +309,8 @@ public class VpnSession
         if (mySkp is null) throw new Exception("Local SK-p not established before IKE_AUTH received");
         var authData = GeneratePskAuth(_lastSentMessageBytes, _peerNonce, responsePayloadIdr, mySkp); // I think this is based on the last thing we sent
         Console.WriteLine($"    Auth data ({authData.Length} bytes) = {Bit.HexString(authData)}");
+        
+        Console.WriteLine($"    Chosen proposal: {Json.Freeze(chosenChildProposal)}");
 
         // pvpn/server.py:309
         // Send our IKE_AUTH message back
@@ -278,10 +335,12 @@ public class VpnSession
         // Should now get INFORMATIONAL messages, possibly with some `IKE_DELETE` payloads to tell me about expired sessions.
     }
 
+    // ReSharper disable CommentTypo
     /// <summary>
     /// PSK auth that matches what StrongSwan seems to do
     /// See src/libcharon/sa/ikev2/keymat_v2.c:659
     /// </summary>
+    // ReSharper restore CommentTypo
     private byte[] GeneratePskAuth(byte[] messageData, byte[] nonce, PayloadIDx payload, byte[] skP)
     {
         var prf = _peerCrypto?.Prf;
@@ -347,10 +406,13 @@ public class VpnSession
         byte[] randomSpi = new byte[4];
         RandomNumberGenerator.Fill(randomSpi);
 
+        var spiOut = Bit.BytesToUInt32(randomSpi);
         var childSa = new ChildSa(randomSpi, childProposal.SpiData, cryptoIn, cryptoOut);
 
+        // '_thisSessionChildren' using spiOut, '_sessionHost' using spiIn.
+        // Note: we may need to fiddle these around (or use both) if sessions don't look like they're working
         _sessionHost.AddChildSession(childSa); // this gets us the 32-bit SA used for ESA, not the 64-bit used for key exchange
-        _thisSessionChildren.Add(childSa);
+        _thisSessionChildren.Add(spiOut, childSa);
 
         return childSa;
     }
@@ -379,8 +441,8 @@ public class VpnSession
     private void HandleSaInit(IkeMessage request, IPEndPoint sender, bool sendZeroHeader)
     {
         Console.WriteLine("        Session: IKE_SA_INIT received");
-        Console.WriteLine("        HandleSaInit():: payloads:");
-        foreach (var payload in request.Payloads) Console.WriteLine($"            {payload.Describe()}");
+        //Console.WriteLine("        HandleSaInit():: payloads:");
+        //foreach (var payload in request.Payloads) Console.WriteLine($"            {payload.Describe()}");
 
         _peerNonce = request.GetPayload<PayloadNonce>()?.Data;
 

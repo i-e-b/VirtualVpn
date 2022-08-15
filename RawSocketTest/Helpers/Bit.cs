@@ -115,6 +115,18 @@ public static class Bit
         return data;
     }
     
+    public static UInt32 BytesToUInt32(byte[] bytes)
+    {
+        UInt32 result = 0;
+        
+        result |= (uint)bytes[0] << 24;
+        result |= (uint)bytes[0] << 16;
+        result |= (uint)bytes[0] <<  8;
+        result |= (uint)bytes[0] <<  0;
+        
+        return result;
+    }
+    
     public static void WriteUInt32(uint value, byte[] data, ref int idx)
     {
         data[idx++] = (byte)((value >> 24) & 0xff);
@@ -258,4 +270,5 @@ public static class Bit
             dst[dstOffset++] = src[i];
         }
     }
+
 }

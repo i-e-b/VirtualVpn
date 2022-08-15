@@ -115,8 +115,7 @@ public class PayloadSa : MessagePayload
             TransformType.PRF => Prf.IsSupported((PrfId)transform.Id),
             TransformType.INTEG => Integrity.IsSupported((IntegId)transform.Id),
             TransformType.DH => gmpDh.GmpDhParameters.IsSupported((DhId)transform.Id),
-            TransformType.ESN => false // ??
-            ,
+            TransformType.ESN => (EsnId)transform.Id == EsnId.NO_ESN,
             _ => false
         };
     }

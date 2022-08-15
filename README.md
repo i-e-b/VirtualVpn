@@ -22,6 +22,5 @@ https://www.secfu.net/2017/12/23/the-ikev2-header-and-the-security-association-p
 
 ## Current issues & work-face
 
-- Decryption and checksum on first SA payload from StrongSwan are not working.
-  This is likely an issue with key generation or sharing?
-    - try using dotnet built in DH?
+- Need to complete SA transaction and try to get to first 'ping' payload
+- Need to be able to start a SA from this side

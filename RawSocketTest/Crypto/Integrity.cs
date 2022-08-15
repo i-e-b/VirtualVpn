@@ -1,5 +1,4 @@
 ﻿using System.Security.Cryptography;
-using RawSocketTest.Helpers;
 
 namespace RawSocketTest.Crypto;
 
