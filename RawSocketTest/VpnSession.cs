@@ -540,10 +540,11 @@ public class VpnSession
         Log.Debug($"        Session: We agree on a viable proposition, and it is the default. Continue with key share for {payloadKe.DiffieHellmanGroup.ToString()}" +
                           $" Supplied length is {payloadKe.KeyData.Length} bytes");
 
-        var gmpDh = GmpDiffieHellman.gmp_diffie_hellman_create(DhId.DH_14) ?? throw new Exception($"Failed to create key exchange for group {payloadKe.DiffieHellmanGroup.ToString()}");
-        gmpDh.set_their_public_key(payloadKe.KeyData);
-        gmpDh.get_our_public_key(out var publicKey);
-        gmpDh.get_shared_secret(out var secret);
+        var keyExchange = BCDiffieHellman.CreateForGroup(DhId.DH_14) ?? throw new Exception($"Failed to create key exchange for group {payloadKe.DiffieHellmanGroup.ToString()}");
+        //var gmpDh = GmpDiffieHellman.CreateForGroup(DhId.DH_14) ?? throw new Exception($"Failed to create key exchange for group {payloadKe.DiffieHellmanGroup.ToString()}");
+        keyExchange.set_their_public_key(payloadKe.KeyData);
+        keyExchange.get_our_public_key(out var publicKey);
+        keyExchange.get_shared_secret(out var secret);
 
         // create keys from exchange result. If something went wrong, we will end up with a checksum failure
         CreateKeyAndCrypto(chosenProposal, secret, null);

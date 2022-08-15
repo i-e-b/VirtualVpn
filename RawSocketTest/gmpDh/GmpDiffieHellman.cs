@@ -384,7 +384,7 @@ public class GmpDiffieHellman : IDisposable
     /// <summary>
     /// Create a new key exchanger based on standard parameters
     /// </summary>
-    public static GmpDiffieHellman? gmp_diffie_hellman_create(DhId group)
+    public static GmpDiffieHellman? CreateForGroup(DhId group)
     {
         var parameters = GmpDhParameters.diffie_hellman_get_params(group);
         if (parameters is null)

@@ -13,10 +13,10 @@ public class KeyExchangeTests
     [Test] // NOTE: due to a bug in the NuGet package, you probably need to copy the 'native' library into the bin folder.
     public void comparing_secret_generators__gmp_vs_gmp()
     {
-        var alice = GmpDiffieHellman.gmp_diffie_hellman_create(DhId.DH_14) ?? throw new Exception("Failed to generate Alice");
+        var alice = GmpDiffieHellman.CreateForGroup(DhId.DH_14) ?? throw new Exception("Failed to generate Alice");
         alice.get_our_public_key(out var alicePublicKey);
         
-        var bob = GmpDiffieHellman.gmp_diffie_hellman_create(DhId.DH_14) ?? throw new Exception("Failed to generate Bob");
+        var bob = GmpDiffieHellman.CreateForGroup(DhId.DH_14) ?? throw new Exception("Failed to generate Bob");
         bob.get_our_public_key(out var bobPublicKey);
         
         alice.set_their_public_key(bobPublicKey);
@@ -40,7 +40,7 @@ public class KeyExchangeTests
         var alice = BCDiffieHellman.CreateForGroup(DhId.DH_14) ?? throw new Exception("Failed to generate Alice");
         alice.get_our_public_key(out var alicePublicKey);
         
-        var bob = GmpDiffieHellman.gmp_diffie_hellman_create(DhId.DH_14) ?? throw new Exception("Failed to generate Bob");
+        var bob = GmpDiffieHellman.CreateForGroup(DhId.DH_14) ?? throw new Exception("Failed to generate Bob");
         bob.get_our_public_key(out var bobPublicKey);
         
         alice.set_their_public_key(bobPublicKey);
