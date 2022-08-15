@@ -42,7 +42,7 @@ public class UdpServer : IDisposable
         {
             Log.Info("Listening on 500...");
             var buffer = _ikeClient.Receive(ref sender);
-            Log.Debug($"ListenPort=500 EphemeralPort={sender.Port} Caller={sender.Address} Data->{buffer.Length} bytes");
+            Log.Info($"ListenPort=500 EphemeralPort={sender.Port} Caller={sender.Address} Data->{buffer.Length} bytes");
             _ikeResponder?.Invoke(buffer, sender);
         }
     }
@@ -54,7 +54,7 @@ public class UdpServer : IDisposable
         {
             Log.Info("Listening on 4500...");
             var buffer = _speClient.Receive(ref sender);
-            Log.Debug($"ListenPort=4500 EphemeralPort={sender.Port} Caller={sender.Address} Data->{buffer.Length} bytes");
+            Log.Info($"ListenPort=4500 EphemeralPort={sender.Port} Caller={sender.Address} Data->{buffer.Length} bytes");
             _speResponder?.Invoke(buffer, sender);
         }
     }

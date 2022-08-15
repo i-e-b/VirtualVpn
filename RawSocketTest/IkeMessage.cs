@@ -306,7 +306,7 @@ public class IkeMessage
                     var childIdx = 0;
                     var innerPayloads = ReadPayloadChainInternal(nextPayload, ikeCrypto, ref childIdx, expandedPayload.PlainBody, rawData).ToList();
                     
-                    Log.Debug($"    Got {innerPayloads.Count} inner payloads:\r\n{Json.Beautify(Json.Freeze(innerPayloads))}");
+                    Log.Debug($"    Got {innerPayloads.Count} inner payloads:\r\n{string.Join("\r\n",innerPayloads.Select(p=>p.Describe()))}");
                     
                     nextPayload = PayloadType.NONE; // end of internal run
                     return innerPayloads;

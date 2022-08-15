@@ -8,7 +8,8 @@ namespace RawSocketTest.Payloads;
 /// </summary>
 public class PayloadTsx : MessagePayload
 {
-    public override int Size => HeaderSize + Data.Length;
+    public override int Size => HeaderSize + SelectorSize + 4;
+    public int SelectorSize => Selectors.Sum(s=>s.Size);
 
     public int SelectorCount { get; set; }
     public readonly List<TrafficSelector> Selectors = new();
@@ -20,6 +21,18 @@ public class PayloadTsx : MessagePayload
 
     protected override void Serialise()
     {
+        SelectorCount = Selectors.Count;
+        
+        var idx = 0;
+        Data = new byte[Size - HeaderSize];
+        
+        Data[idx++] = (byte)SelectorCount;
+        idx += 3; // unused
+        
+        foreach (var selector in Selectors)
+        {
+             selector.WriteBytes(Data, ref idx);
+        }
     }
     
     protected override void Deserialise()

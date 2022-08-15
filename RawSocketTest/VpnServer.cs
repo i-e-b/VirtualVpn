@@ -40,9 +40,21 @@ public class VpnServer : IDisposable
 
         while (_running)
         {
-            // wait for other side to contact:
-            Console.Write(".");
-            Thread.Sleep(1500);
+            // wait for local commands
+            var cmd = Console.ReadLine();
+            Console.Write($"CMD: `{cmd}`");
+
+            if (cmd == "ips")
+            {
+                Console.WriteLine("Notifying of IPs...");
+                foreach (var (key, vpnSession) in _sessions)
+                {
+                    Console.Write($"    {key}");
+                    vpnSession.NotifyIpAddresses();
+                    Console.WriteLine(" - done");
+                }
+                Console.WriteLine("notifying done.");
+            }
         }
     }
 

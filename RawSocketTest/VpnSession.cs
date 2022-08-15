@@ -19,7 +19,15 @@ public class VpnSession
     private const string PreSharedKeyString = "ThisIsForTestOnlyDontUse";
     //## State machine vars ##//
 
-    private SessionState _state;
+    public SessionState State
+    {
+        get => _state;
+        private set { 
+            Log.Info($"    Session entered state {value.ToString()}");
+            _state = value;
+        }
+    }
+
 
     /// <summary>sequence number for receiving</summary>
     private long _maxSeq = -1;
@@ -46,6 +54,8 @@ public class VpnSession
     private readonly byte[] _localNonce;
     private readonly Dictionary<uint, ChildSa> _thisSessionChildren = new();
     private byte[]? _previousRequestRawData;
+    private SessionState _state;
+    private IPEndPoint? _lastContact;
 
     public VpnSession(UdpServer server, VpnServer sessionHost, ulong peerSpi)
     {
@@ -56,7 +66,7 @@ public class VpnSession
         LastTouchUtc = DateTime.UtcNow;
         _localSpi = Bit.RandomSpi();
         _localNonce = Bit.RandomNonce();
-        _state = SessionState.INITIAL;
+        State = SessionState.INITIAL;
         _seqOut = 0;
         _peerMsgId = 0;
     }
@@ -165,8 +175,16 @@ public class VpnSession
         // make sure we're in sequence
         if (request.MessageId != _peerMsgId)
         {
-            Log.Warn($"Request is out of sequence. Expected {_peerMsgId}, but got {request.MessageId}. Not responding");
-            return;
+            if (request.MessageId > _peerMsgId)
+            {
+                _peerMsgId = request.MessageId;
+                Log.Warn($"Request is ahead of our sequence. Expected {_peerMsgId}, but got {request.MessageId}. Will advance and continue");
+            }
+            else
+            {
+                Log.Warn($"Request is out of sequence. Expected {_peerMsgId}, but got {request.MessageId}. Not responding");
+                return;
+            }
         }
 
         // We should have crypto now, as long as we're out of IKE_SA_INIT phase
@@ -220,9 +238,10 @@ public class VpnSession
         if (deletePayload.ProtocolType == IkeProtocolType.IKE) // pvpn/server.py:321
         {
             // This session should be removed?
-            _state = SessionState.DELETED;
+            State = SessionState.DELETED;
             _sessionHost.RemoveSession(_localSpi);
 
+            Log.Info($"    Removing entire session {_localSpi:x16}");
             foreach (var childSa in _thisSessionChildren)
             {
                 _sessionHost.RemoveChildSession(childSa.Value.SpiIn);
@@ -231,7 +250,14 @@ public class VpnSession
             Reply(to: sender, message: BuildResponse(ExchangeType.INFORMATIONAL, sendZeroHeader, _myCrypto, deletePayload));
             return;
         }
-        
+
+        if (deletePayload.SpiList.Count < 1)
+        {
+            Log.Warn($"    Received an empty delete list");
+            Reply(to: sender, message: BuildResponse(ExchangeType.INFORMATIONAL, sendZeroHeader, _myCrypto, deletePayload));
+            return;
+        }
+
         // Specific old sessions should be removed
         // pvpn/server.py:328
         var matches = new List<byte[]>(); // spi that have been removed
@@ -256,6 +282,7 @@ public class VpnSession
         var removed = _thisSessionChildren.Remove(spi);
         
         if (removed) _sessionHost.RemoveChildSession(spi);
+        else Log.Warn($"    Failed to remove session {Bit.HexString(deadSpi)}");
         
         return removed;
     }
@@ -312,6 +339,25 @@ public class VpnSession
         Log.Debug($"    Auth data ({authData.Length} bytes) = {Bit.HexString(authData)}");
         
         Log.Debug($"    Chosen proposal: {Json.Freeze(chosenChildProposal)}");
+        
+        // Add "ping" support to our TSr?
+       /* tsr.Selectors.Add(new TrafficSelector
+        {
+            Type = TrafficSelectType.TS_IPV4_ADDR_RANGE,
+            Protocol = IpProtocol.ICMP,
+            StartPort = 2048,
+            EndPort = 2048,
+            StartAddress = new byte[] { 55,55,55,55 },
+            EndAddress = new byte[] { 55,55,55,55 }
+        });*/
+        /*
+         
+    Payload=TSi; Selectors=[Type=TS_IPV4_ADDR_RANGE, Pr=ICMP, Port=2048-2048, Address=159.69.13.13 - 159.69.13.126 |
+     Type=TS_IPV4_ADDR_RANGE, Pr=ANY, Port=0-65535, Address=159.69.13.13 - 159.69.13.126];
+    Payload=TSr; Selectors=[Type=TS_IPV4_ADDR_RANGE, Pr=ICMP, Port=2048-2048, Address=55.55.55.55 - 55.55.55.55 | 
+    Type=TS_IPV4_ADDR_RANGE, Pr=ANY, Port=0-65535, Address=55.55.0.0 - 55.55.255.255];
+
+*/
 
         // pvpn/server.py:309
         // Send our IKE_AUTH message back
@@ -320,6 +366,9 @@ public class VpnSession
             tsi, tsr, // just accept whatever traffic selectors. We're virtual.
             responsePayloadIdr,
             new PayloadAuth(AuthMethod.PSK, authData)
+            /*new PayloadNotify(IkeProtocolType.NONE, NotifyId.ADDITIONAL_IP4_ADDRESS, null, new byte[] { 55, 55, 55, 55 }),
+            new PayloadNotify(IkeProtocolType.NONE, NotifyId.MOBIKE_SUPPORTED, null, null),
+            new PayloadNotify(IkeProtocolType.NONE, NotifyId.REDIRECT_SUPPORTED, null, null)*/
         );
 
         var cpPayload = request.GetPayload<PayloadCp>();
@@ -332,7 +381,7 @@ public class VpnSession
         Reply(to: sender, response);
 
         Log.Debug("    Setting state to established");
-        _state = SessionState.ESTABLISHED; // Should now have a full Child SA
+        State = SessionState.ESTABLISHED; // Should now have a full Child SA
         // Should now get INFORMATIONAL messages, possibly with some `IKE_DELETE` payloads to tell me about expired sessions.
     }
 
@@ -356,10 +405,10 @@ public class VpnSession
 
         var bulk = messageData.Concat(nonce).Concat(octetPad).ToArray();
 
-        Log.Debug($"#### {Bit.Describe("IDx'", idxTick)}");
-        Log.Debug($"#### {Bit.Describe("SK_p", skP)}");
-        Log.Debug($"#### {Bit.Describe("prf(Sk_px, IDx')", octetPad)}");
-        Log.Debug($"#### {Bit.Describe("octets =  message + nonce + prf(Sk_px, IDx') ", messageData)}"); // expect ~ 1192 bytes
+        Log.Crypto($"#### {Bit.Describe("IDx'", idxTick)}");
+        Log.Crypto($"#### {Bit.Describe("SK_p", skP)}");
+        Log.Crypto($"#### {Bit.Describe("prf(Sk_px, IDx')", octetPad)}");
+        Log.Crypto($"#### {Bit.Describe("octets =  message + nonce + prf(Sk_px, IDx') ", messageData)}"); // expect ~ 1192 bytes
 
         var psk = Encoding.ASCII.GetBytes(PreSharedKeyString);
         var pad = Encoding.ASCII.GetBytes(Prf.IKEv2_KeyPad);
@@ -509,7 +558,7 @@ public class VpnSession
 
         Log.Debug($"        Session: Sending IKE_SA_INIT reply to {sender.Address}:{sender.Port}");
         Reply(to: sender, message: saMessage);
-        _state = SessionState.SA_SENT;
+        State = SessionState.SA_SENT;
 
         Log.Debug("        Session: Completed IKE_SA_INIT, transition to state=SA_SENT");
     }
@@ -552,12 +601,13 @@ public class VpnSession
 
     private void Reply(IPEndPoint to, byte[] message)
     {
+        _lastContact = to;
         _lastSentMessageBytes = message;
         _server.SendRaw(message, to, out _);
         _peerMsgId++;
 
-        var name = @$"C:\temp\IKEv2-Reply_{_peerMsgId}_Port-{to.Port}_IKE.bin";
-        File.WriteAllBytes(name, message);
+        //var name = @$"C:\temp\IKEv2-Reply_{_peerMsgId}_Port-{to.Port}_IKE.bin";
+        //File.WriteAllBytes(name, message);
     }
 
     /// <summary>
@@ -566,13 +616,13 @@ public class VpnSession
     /// </summary>
     private void AssertState(SessionState expected, IkeMessage ikeMessage)
     {
-        if (_state != expected)
+        if (State != expected)
         {
             Log.Debug(Json.Freeze(ikeMessage));
-            throw new Exception($"Expected to be in state {expected.ToString()}, but was in {_state.ToString()}");
+            throw new Exception($"Expected to be in state {expected.ToString()}, but was in {State.ToString()}");
         }
 
-        Log.Debug($"        Session: State correct: {_state.ToString()} = {expected.ToString()}");
+        Log.Debug($"        Session: State correct: {State.ToString()} = {expected.ToString()}");
     }
 
     /// <summary>
@@ -580,6 +630,7 @@ public class VpnSession
     /// </summary>
     public void HandleSpe(byte[] data, IPEndPoint sender)
     {
+        Log.Critical("SPE INCOMING!");
         // the session should have a cryptography method selected
         if (_myCrypto is null) throw new Exception("No incoming crypto method agreed");
 
@@ -591,12 +642,12 @@ public class VpnSession
                 // pvpn/ip.py:402
                 // TODO: parse IPv4 packet
                 // IEB: I guess we want to run a TCP stack (client) here, and connect it to our child app?
-                Console.WriteLine($"IPv4 message (not yet handled) {rawMessage.Length} bytes, sender={sender.Address}:{sender.Port}");
+                Log.Error($"IPv4 message (not yet handled) {rawMessage.Length} bytes, sender={sender.Address}:{sender.Port}");
                 break;
 
             case IpProtocol.UDP:
                 // TODO: parse UDP packet
-                Console.WriteLine($"UPD message (not yet handled) {rawMessage.Length} bytes, sender={sender.Address}:{sender.Port}");
+                Log.Error($"UPD message (not yet handled) {rawMessage.Length} bytes, sender={sender.Address}:{sender.Port}");
                 break;
 
             case IpProtocol.ANY:
@@ -610,11 +661,29 @@ public class VpnSession
             case IpProtocol.ICMPV6:
             case IpProtocol.MH:
             case IpProtocol.RAW:
-                Console.WriteLine($"{nextHeader.ToString()} message (not supported) sender={sender.Address}:{sender.Port}");
+                Log.Error($"{nextHeader.ToString()} message (not supported) sender={sender.Address}:{sender.Port}");
                 break;
 
             default:
                 throw new ArgumentOutOfRangeException();
         }
+    }
+
+    public void NotifyIpAddresses()
+    {
+        // HACK - just send a notify with a fixed IP address
+        if (_lastContact is null)
+        {
+            Log.Error("Can't send IP addresses -- I don't have a last contact address");
+            return;
+        }
+        
+        // This currently kills the session? Maybe if we've got more than one?
+
+        var response = BuildResponse(ExchangeType.INFORMATIONAL, true, _myCrypto,
+            new PayloadNotify(IkeProtocolType.NONE, NotifyId.ADDITIONAL_IP4_ADDRESS, null, new byte[] { 55, 55, 55, 55 })
+        );
+        
+        Reply(to: _lastContact, response);
     }
 }
