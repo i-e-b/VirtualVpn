@@ -2,6 +2,7 @@
 
 using RawSocketTest;
 
+Log.SetLevel(LogLevel.Info);
 
 using var rt = new VpnServer();
 rt.Run();

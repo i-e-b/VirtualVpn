@@ -134,7 +134,7 @@ public class IkeMessage
 
         if (idx != result.Length)
         {
-            Console.WriteLine($"    WARNING: EncodePayloads unexpected length. Expected {result.Length}, but got {idx}.");
+            Log.Warn($"    WARNING: EncodePayloads unexpected length. Expected {result.Length}, but got {idx}.");
         }
 
         return result;
@@ -188,7 +188,7 @@ public class IkeMessage
         if (MessageFlag.HasFlag(MessageFlag.Encryption))
         {
             if (encryption is null) throw new Exception("Message is flagged as encrypted, but no crypto was supplied");
-            Console.WriteLine("    Message is fully encrypted");
+            Log.Debug("    Message is fully encrypted");
             
             // make sure we have just the target data
             if (offset != 0) srcData = srcData.Skip(offset).ToArray();
@@ -209,29 +209,29 @@ public class IkeMessage
     {
         var payloads = new List<MessagePayload>();
         var nextPayload = first;
-        Console.WriteLine($"    Reading chain: {srcData.Length} bytes starting at {idx} (from raw data of {rawData?.Length.ToString() ?? "n/a"})");
+        Log.Debug($"    Reading chain: {srcData.Length} bytes starting at {idx} (from raw data of {rawData?.Length.ToString() ?? "n/a"})");
 
         if (idx >= srcData.Length)
         {
-            Console.WriteLine("    WARNING: start index was already at end of data");
+            Log.Warn("    WARNING: start index was already at end of data");
             return payloads;
         }
 
         while (idx < srcData.Length && nextPayload != PayloadType.NONE)
         {
             var payload = ReadSinglePayload(srcData, encryption, ref idx, ref nextPayload, rawData);
-            //Console.WriteLine($"        Next payload: {nextPayload.ToString()}, ended at {idx}");
+            Log.Debug($"        Next payload: {nextPayload.ToString()}, ended at {idx}");
             payloads.AddRange(payload);
         }
 
         if (nextPayload != PayloadType.NONE)
         {
-            Console.WriteLine("    WARNING: got to the end of payload data without finding a PayloadType.NONE");
+            Log.Warn("    WARNING: got to the end of payload data without finding a PayloadType.NONE");
         }
 
         if (idx != srcData.Length)
         {
-            Console.WriteLine($"    WARNING: got to the end of payload data without reaching data end (ended at {idx}, length={srcData.Length})");
+            Log.Warn($"    WARNING: got to the end of payload data without reaching data end (ended at {idx}, length={srcData.Length})");
         }
 
         return payloads;
@@ -243,7 +243,7 @@ public class IkeMessage
     /// </summary>
     public static IEnumerable<MessagePayload> ReadSinglePayload(byte[] srcData, IkeCrypto? ikeCrypto, ref int idx, ref PayloadType nextPayload, byte[]? rawData = null)
     {
-        //Console.WriteLine($"    Reading payload {nextPayload.ToString()} from source ({srcData.Length} bytes starting at {idx})");
+        Log.Debug($"    Reading payload {nextPayload.ToString()} from source ({srcData.Length} bytes starting at {idx})");
         var thisType = nextPayload;
         // TODO: continue to fill out
         switch (thisType)
@@ -291,23 +291,22 @@ public class IkeMessage
                 //if (rawData is not null) File.WriteAllBytes(@"C:\temp\zzzSK-raw.bin", rawData); // log the entire message
                 
                 var ok = ikeCrypto.VerifyChecksum(srcData);
-                if (!ok) Console.WriteLine("CHECKSUM FAILED! We will continue, but result might be unreliable (in RawSocketTest.IkeMessage.ReadSinglePayload)");
-                else Console.WriteLine("Checksum passed in RawSocketTest.IkeMessage.ReadSinglePayload");
+                if (!ok) Log.Warn("CHECKSUM FAILED! We will continue, but result might be unreliable (in RawSocketTest.IkeMessage.ReadSinglePayload)");
+                else Log.Debug("Checksum passed in RawSocketTest.IkeMessage.ReadSinglePayload");
                 
                 // SK must be last, as it's 'next payload' field is actually the first of the encrypted contents
                 var expandedPayload = new PayloadSecured(srcData, ikeCrypto, ref idx, ref nextPayload);
                 // read the 'plain' as a new set of payloads
                 
-                Console.WriteLine($"    Plain body has {expandedPayload.PlainBody?.Length.ToString() ?? "no"} bytes");
+                Log.Debug($"    Plain body has {expandedPayload.PlainBody?.Length.ToString() ?? "no"} bytes");
                 if (expandedPayload.PlainBody?.Length > 0)
                 {
-                    //Console.WriteLine($"    Reading inner payload, starting with {nextPayload.ToString()}");
-                    //File.WriteAllBytes(@"C:\temp\SK_Plain.bin", expandedPayload.PlainBody);
+                    Log.Debug($"    Reading inner payload, starting with {nextPayload.ToString()}");
 
                     var childIdx = 0;
                     var innerPayloads = ReadPayloadChainInternal(nextPayload, ikeCrypto, ref childIdx, expandedPayload.PlainBody, rawData).ToList();
                     
-                    //Console.WriteLine($"    Got {innerPayloads.Count} inner payloads:\r\n{Json.Beautify(Json.Freeze(innerPayloads))}");
+                    Log.Debug($"    Got {innerPayloads.Count} inner payloads:\r\n{Json.Beautify(Json.Freeze(innerPayloads))}");
                     
                     nextPayload = PayloadType.NONE; // end of internal run
                     return innerPayloads;
@@ -333,4 +332,6 @@ public class IkeMessage
         if (pred is null) return Payloads.OfType<T>().FirstOrDefault();
         return Payloads.OfType<T>().FirstOrDefault(pred);
     }
+
+    public IEnumerable<string> DescribeAllPayloads() => Payloads.Select(payload => payload.Describe());
 }

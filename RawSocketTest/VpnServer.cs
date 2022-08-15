@@ -23,7 +23,7 @@ public class VpnServer : IDisposable
     public void Run()
     {
         _messageCount = 0;
-        Console.WriteLine("Setup");
+        Log.Debug("Setup");
         Json.DefaultParameters.EnableAnonymousTypes = true;
         Console.CancelKeyPress += StopRunning;
 
@@ -59,9 +59,9 @@ public class VpnServer : IDisposable
     {
         // write capture to file for easy testing
         _messageCount++;
-        var name = @$"C:\temp\IKEv2-{_messageCount}_Port-{sender.Port}_IKE.bin";
-        File.WriteAllBytes(name, data);
-        Console.WriteLine($"Got a 500 packet, {data.Length} bytes -- {name}");
+        //var name = @$"C:\temp\IKEv2-{_messageCount}_Port-{sender.Port}_IKE.bin";
+        //File.WriteAllBytes(name, data);
+        Log.Info($"Got a 500 packet, {data.Length} bytes");
         
         IkeSessionResponder(data, sender, sendZeroHeader: false);
     }
@@ -71,17 +71,17 @@ public class VpnServer : IDisposable
         // read the message to figure out session data
         var ikeMessage = IkeMessage.FromBytes(data, 0);
 
-        Console.WriteLine($"Got a 500 packet, {data.Length} bytes, ex={ikeMessage.Exchange}");
+        Log.Info($"Got a 500 packet, {data.Length} bytes, ex={ikeMessage.Exchange}");
 
         if (ikeMessage.Exchange == ExchangeType.IDENTITY_1) // start of an IkeV1 session
         {
-            Console.WriteLine("    it's for IKEv1. Not supported, not replying");
+            Log.Warn("    Message is for IKEv1. Not supported, not replying");
             return;
         }
 
         if (_sessions.ContainsKey(ikeMessage.SpiI))
         {
-            Console.WriteLine($"    it's for an existing session started by the peer {ikeMessage.SpiI:x16} => {ikeMessage.SpiR:x16}");
+            Log.Info($"    it's for an existing session started by the peer {ikeMessage.SpiI:x16} => {ikeMessage.SpiR:x16}");
             
             // Pass message to existing session
             _sessions[ikeMessage.SpiI].HandleIke(ikeMessage, sender, sendZeroHeader);
@@ -90,14 +90,14 @@ public class VpnServer : IDisposable
 
         if (_sessions.ContainsKey(ikeMessage.SpiR))
         {
-            Console.WriteLine($"    it's for an existing session we started {ikeMessage.SpiI:x16} => {ikeMessage.SpiR:x16}");
+            Log.Info($"    it's for an existing session we started {ikeMessage.SpiI:x16} => {ikeMessage.SpiR:x16}");
             
             // Pass message to existing session
             _sessions[ikeMessage.SpiR].HandleIke(ikeMessage, sender, sendZeroHeader);
             return;
         }
 
-        Console.WriteLine($"    it's for a new session  {ikeMessage.SpiI:x16} => {ikeMessage.SpiR:x16}");
+        Log.Info($"    it's for a new session  {ikeMessage.SpiI:x16} => {ikeMessage.SpiR:x16}");
             
         // Start a new session and store it, keyed by the initiator id
         var newSession = new VpnSession(_server, this, ikeMessage.SpiI);
@@ -114,14 +114,14 @@ public class VpnServer : IDisposable
     {
         // write capture to file for easy testing
         _messageCount++;
-        var name = @$"C:\temp\IKEv2-{_messageCount}_Port-{sender.Port}_SPE.bin";
-        File.WriteAllBytes(name, data);
-        Console.WriteLine($"Got a 4500 packet, {data.Length} bytes -- {name}");
+        //var name = @$"C:\temp\IKEv2-{_messageCount}_Port-{sender.Port}_SPE.bin";
+        //File.WriteAllBytes(name, data);
+        Log.Info($"Got a 4500 packet, {data.Length} bytes");
         
         // Check for keep-alive ping?
         if (data.Length < 4 && data[0] == 0xff)
         {
-            Console.WriteLine("    Looks like a keep-alive ping. Sending pong");
+            Log.Info("    Looks like a keep-alive ping. Sending pong");
             _server.SendRaw(data, sender, out _);
             return;
         }
@@ -134,7 +134,7 @@ public class VpnServer : IDisposable
         // We strip the padding off, and pass a flag to say it should be sent with a response
         if (header == NonEspHeader) // start session?
         {
-            Console.WriteLine("    SPI zero on 4500 -- sending to 500 (IKE) responder");
+            Log.Info("    SPI zero on 4500 -- sending to 500 (IKE) responder");
             var offsetData = data.Skip(4).ToArray();
             IkeSessionResponder(offsetData, sender, sendZeroHeader: true);
             return;
@@ -152,7 +152,7 @@ public class VpnServer : IDisposable
         // reject unknown sessions
         if (!_sessions.ContainsKey(spi))
         {
-            Console.WriteLine($"    Unknown session: 0x{spi:x16} -- not replying");
+            Log.Warn($"    Unknown session: 0x{spi:x16} -- not replying");
             return;
         }
 
@@ -160,12 +160,11 @@ public class VpnServer : IDisposable
         var session = _sessions[spi];
         idx = 4;
         var seq = Bit.ReadUInt32(data, ref idx);
-        Console.WriteLine($"    Packet has sequence #{seq}");
+        Log.Debug($"    Packet has sequence #{seq}");
         if (session.OutOfSequence(seq))
         {
-            Console.WriteLine($"    Received out of sequence packet: {seq} -- ignoring");
-            //Console.WriteLine($"    Received out of sequence packet: {seq} -- not replying");
-            //return;
+            Log.Warn($"    Received out of sequence packet: {seq} -- not replying");
+            return;
         }
         
         // TODO: HMAC-SHA2-256-96 fix ?  See pvpn/server.py:411
@@ -174,7 +173,7 @@ public class VpnServer : IDisposable
         var ok = session.VerifyMessage(data);
         if (!ok)
         {
-            Console.WriteLine($"    Received packet with bad checksum: {seq} -- not replying");
+            Log.Warn($"    Received packet with bad checksum: {seq} -- not replying");
             return;
         }
         
@@ -184,7 +183,7 @@ public class VpnServer : IDisposable
         // do decrypt, route, etc.
         session.HandleSpe(data, sender);
         
-        Console.WriteLine("    Looks like a fully valid message. Other side will expect a reply.");
+        Log.Debug("    Looks like a fully valid message. Other side will expect a reply.");
     }
 
 

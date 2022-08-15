@@ -196,7 +196,7 @@ public class IkeCrypto
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Failed to decrypt: {ex}");
+            Log.Error($"Failed to decrypt: {ex}");
             throw;
         }
         
@@ -249,7 +249,7 @@ public class IkeCrypto
         // compute
         var expected = _integrity!.Compute(_skA!, encrypted);
         
-        Console.WriteLine($"    Comparing checksums: {Hex(expected)} == {Hex(target)} ? sk-A={Hex(_skA!)}");
+        Log.Debug($"    Comparing checksums: {Hex(expected)} == {Hex(target)} ? sk-A={Hex(_skA!)}");
         
         // compare
         for (int i = 0; i < expected.Length; i++)

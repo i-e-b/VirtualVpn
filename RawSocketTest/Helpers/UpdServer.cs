@@ -40,9 +40,9 @@ public class UdpServer : IDisposable
         var sender = new IPEndPoint(IPAddress.Any, 0);
         while (_running)
         {
-            Console.WriteLine("Listening on 500...");
+            Log.Info("Listening on 500...");
             var buffer = _ikeClient.Receive(ref sender);
-            Console.WriteLine($"ListenPort=500 EphemeralPort={sender.Port} Caller={sender.Address} Data->{buffer.Length} bytes");
+            Log.Debug($"ListenPort=500 EphemeralPort={sender.Port} Caller={sender.Address} Data->{buffer.Length} bytes");
             _ikeResponder?.Invoke(buffer, sender);
         }
     }
@@ -52,9 +52,9 @@ public class UdpServer : IDisposable
         var sender = new IPEndPoint(IPAddress.Any, 0);
         while (_running)
         {
-            Console.WriteLine("Listening on 4500...");
+            Log.Info("Listening on 4500...");
             var buffer = _speClient.Receive(ref sender);
-            Console.WriteLine($"ListenPort=4500 EphemeralPort={sender.Port} Caller={sender.Address} Data->{buffer.Length} bytes");
+            Log.Debug($"ListenPort=4500 EphemeralPort={sender.Port} Caller={sender.Address} Data->{buffer.Length} bytes");
             _speResponder?.Invoke(buffer, sender);
         }
     }
@@ -70,18 +70,18 @@ public class UdpServer : IDisposable
         if (target.Port == 4500)
         {
             var addr = _speClient.Client.LocalEndPoint as IPEndPoint;
-            Console.WriteLine($"    Sending from {addr?.Address}[{addr?.Port}] to {target.Address}[{target.Port}] ({data.Length} bytes)");
+            Log.Debug($"    Sending from {addr?.Address}[{addr?.Port}] to {target.Address}[{target.Port}] ({data.Length} bytes)");
             bytesSent = _speClient.Send(data, data.Length, target);
         }
         else if (target.Port == 500)
         {
             var addr = _ikeClient.Client.LocalEndPoint as IPEndPoint;
-            Console.WriteLine($"    Sending from {addr?.Address}[{addr?.Port}] to {target.Address}[{target.Port}] ({data.Length} bytes)");
+            Log.Debug($"    Sending from {addr?.Address}[{addr?.Port}] to {target.Address}[{target.Port}] ({data.Length} bytes)");
             bytesSent = _ikeClient.Send(data, data.Length, target);
         }
         else
         {
-            Console.WriteLine($"WARNING: target port of {target.Port} is not recognised! Will send from source port of 500");
+            Log.Warn($"WARNING: target port of {target.Port} is not recognised! Will send from source port of 500");
             bytesSent = _ikeClient.Send(data, data.Length, target);
         }
     }

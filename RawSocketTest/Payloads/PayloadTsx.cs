@@ -36,7 +36,7 @@ public class PayloadTsx : MessagePayload
 
         if (Selectors.Count != SelectorCount)
         {
-            Console.WriteLine($"    WARNING: Unexpected traffic selector size. Expected {SelectorCount}, but got {Selectors.Count}");
+            Log.Warn($"    WARNING: Unexpected traffic selector size. Expected {SelectorCount}, but got {Selectors.Count}");
         }
     }
 

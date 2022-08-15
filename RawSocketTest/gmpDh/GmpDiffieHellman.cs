@@ -137,7 +137,7 @@ public class GmpDiffieHellman : IDisposable
         if (mpz_cmp_ui(yb, 1) <= 0 ||
             mpz_cmp(yb, p_min_1) >= 0)
         {
-            Log("public DH value verification failed: ", "y <= 1 || y >= p - 1");
+            DebugLog("public DH value verification failed: ", "y <= 1 || y >= p - 1");
             mpz_clear(p_min_1);
             return false;
         }
@@ -146,15 +146,9 @@ public class GmpDiffieHellman : IDisposable
         return true;
     }
 
-    private void Log(params string[] msgs)
+    private static void DebugLog(params string[] msgs)
     {
-        foreach (var msg in msgs)
-        {
-            Console.Write(msg);
-            Console.Write(" ");
-        }
-
-        Console.WriteLine();
+        Log.Debug(msgs);
     }
 
     private bool key_exchange_verify_pubkey(DhId dhId, byte[] value)
@@ -281,7 +275,7 @@ public class GmpDiffieHellman : IDisposable
             mpz_clear(q);
             if (mpz_cmp_ui(one, 1) != 0)
             {
-                Log("public DH value verification failed: ", "y ^ q mod p != 1");
+                DebugLog("public DH value verification failed: ", "y ^ q mod p != 1");
                 mpz_clear(one);
                 return true;
             }
@@ -382,7 +376,7 @@ public class GmpDiffieHellman : IDisposable
             random[i] = 0;
         }
 
-        Log("        size of DH secret exponent (bits): ", mpz_sizeinbase(xa, 2).ToString());
+        DebugLog("        size of DH secret exponent (bits): ", mpz_sizeinbase(xa, 2).ToString());
 
         mpz_powm(ya, g, xa, p);
     }

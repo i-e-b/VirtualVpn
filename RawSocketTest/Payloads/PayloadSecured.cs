@@ -42,11 +42,11 @@ public class PayloadSecured : MessagePayload
     {
         if (ikeCrypto is null) throw new Exception("Can't decrypt secured payload: crypto not provided");
         
-        Console.WriteLine($"    Incoming secured payload. Offset is {idx}bytes. Encrypted data is {data.Length} bytes.");
+        Log.Debug($"    Incoming secured payload. Offset is {idx}bytes. Encrypted data is {data.Length} bytes.");
         
         var ok = ikeCrypto.VerifyChecksum(data);
-        if (!ok) Console.WriteLine("CHECKSUM FAILED in RawSocketTest.Payloads.PayloadSecured.PayloadSecured");
-        else  Console.WriteLine("Checksum passed in RawSocketTest.Payloads.PayloadSecured.PayloadSecured");
+        if (!ok) Log.Error("CHECKSUM FAILED in RawSocketTest.Payloads.PayloadSecured.PayloadSecured");
+        else Log.Debug("Checksum passed in RawSocketTest.Payloads.PayloadSecured.PayloadSecured");
         
         ReadData(data, ref idx, ref nextPayload);
         

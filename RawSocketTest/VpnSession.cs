@@ -119,8 +119,7 @@ public class VpnSession
         };
         resp.Payloads.AddRange(payloads);
         
-        //Console.WriteLine("        payloads outgoing:");
-        //foreach (var payload in resp.Payloads) Console.WriteLine($"            {payload.Describe()}");
+        Log.Debug("        payloads outgoing:", () => resp.DescribeAllPayloads());
 
         return resp.ToBytes(sendZeroHeader, crypto); // should wrap payloads in PayloadSK if we have crypto
     }
@@ -132,14 +131,14 @@ public class VpnSession
     {
         try
         {
-            Console.WriteLine($"    Incoming IKE message {request.Exchange.ToString()} {request.MessageId}");
+            Log.Info($"    Incoming IKE message {request.Exchange.ToString()} {request.MessageId}");
             HandleIkeInternal(request, sender, sendZeroHeader);
 
             _previousRequestRawData = request.RawData; // needed to do PSK auth
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Failed to handle IKE message. Error: {ex}");
+            Log.Error($"Failed to handle IKE message. Error: {ex}");
         }
     }
 
@@ -153,12 +152,12 @@ public class VpnSession
         {
             if (_lastSentMessageBytes is null)
             {
-                Console.WriteLine("    Asked to repeat a message we didn't send? This session has faulted");
+                Log.Warn("    Asked to repeat a message we didn't send? This session has faulted");
                 // TODO: kill the session? respond with a failure message?
                 return;
             }
 
-            Console.WriteLine("    Asked to repeat a message we sent. Directly re-sending.");
+            Log.Info("    Asked to repeat a message we sent. Directly re-sending.");
             _server.SendRaw(_lastSentMessageBytes, sender, out _); // don't add zero pad again?
             return;
         }
@@ -166,8 +165,7 @@ public class VpnSession
         // make sure we're in sequence
         if (request.MessageId != _peerMsgId)
         {
-            //Console.WriteLine($"Request is out of sequence. Expected {_peerMsgId}, but got {request.MessageId}. Will respond anyway.");
-            Console.WriteLine($"Request is out of sequence. Expected {_peerMsgId}, but got {request.MessageId}. Not responding");
+            Log.Warn($"Request is out of sequence. Expected {_peerMsgId}, but got {request.MessageId}. Not responding");
             return;
         }
 
@@ -178,24 +176,25 @@ public class VpnSession
         {
             case ExchangeType.IKE_SA_INIT: // pvpn/server.py:268
                 AssertState(SessionState.INITIAL, request);
+                Log.Info("IKE_SA_INIT received");
                 HandleSaInit(request, sender, sendZeroHeader);
                 break;
 
             case ExchangeType.IKE_AUTH: // pvpn/server.py:287
                 AssertState(SessionState.SA_SENT, request);
-                Console.WriteLine("IKE_AUTH received");
+                Log.Info("IKE_AUTH received");
                 HandleAuth(request, sender, sendZeroHeader);
                 break;
 
             case ExchangeType.INFORMATIONAL: // pvpn/server.py:315
                 AssertState(SessionState.ESTABLISHED, request);
-                Console.WriteLine("INFORMATIONAL received");
+                Log.Info("INFORMATIONAL received");
                 HandleInformational(request, sender, sendZeroHeader);
                 break;
 
             case ExchangeType.CREATE_CHILD_SA: // pvpn/server.py:340
                 AssertState(SessionState.ESTABLISHED, request);
-                Console.WriteLine("CREATE_CHILD_SA received");
+                Log.Info("CREATE_CHILD_SA received");
                 break;
 
 
@@ -242,6 +241,8 @@ public class VpnSession
             
             if (removed) matches.Add(deadSpi);
         }
+
+        Log.Info($"    Removing SPIs: {string.Join(", ", matches.Select(Bit.HexString))}");
         
         Reply(to: sender, message: BuildResponse(ExchangeType.INFORMATIONAL, sendZeroHeader, _myCrypto, 
             new PayloadDelete(deletePayload.ProtocolType, matches)));
@@ -261,8 +262,7 @@ public class VpnSession
 
     private void HandleAuth(IkeMessage request, IPEndPoint sender, bool sendZeroHeader)
     {
-        //Console.WriteLine("        HandleAuth():: payloads incoming:");
-        //foreach (var payload in request.Payloads) Console.WriteLine($"            {payload.Describe()}");
+        Log.Debug("        HandleAuth():: payloads incoming:", request.DescribeAllPayloads);
 
         var peerSkp = _peerCrypto?.SkP;
         if (peerSkp is null) throw new Exception("Peer SK-p not established before IKE_AUTH received");
@@ -285,19 +285,20 @@ public class VpnSession
                                 $"Expected {Bit.HexString(pskAuth)},\r\n\tbut got {Bit.HexString(auth.AuthData)}");
         }
 
-        Console.WriteLine("    PSK auth agreed from this side");
+        Log.Debug("    PSK auth agreed from this side");
 
         // pvpn/server.py:298
         var chosenChildProposal = sa.GetProposalFor(EncryptionTypeId.ENCR_AES_CBC);
         if (chosenChildProposal is null)
         {
-            Console.WriteLine("    FATAL: could not find a compatible Child SA");
-            // TODO: how do we reject?
+            Log.Warn("    FATAL: could not find a compatible Child SA");
+            // Try to reject by sending back an empty proposal. Not sure about this
+            Reply(to: sender, BuildResponse(ExchangeType.IKE_AUTH, sendZeroHeader, _myCrypto, new PayloadSa(new Proposal())));
             return;
         }
 
         var childKey = CreateChildKey(chosenChildProposal, _peerNonce, _localNonce);
-        Console.WriteLine($"    New ESP SPI = {childKey.SpiIn:x8}");
+        Log.Debug($"    New ESP SPI = {childKey.SpiIn:x8}");
         chosenChildProposal.SpiData = Bit.UInt32ToBytes(childKey.SpiIn); // Used to refer to the child SA in ESP messages?
         chosenChildProposal.SpiSize = 4;
 
@@ -308,9 +309,9 @@ public class VpnSession
         var mySkp = _myCrypto?.SkP;
         if (mySkp is null) throw new Exception("Local SK-p not established before IKE_AUTH received");
         var authData = GeneratePskAuth(_lastSentMessageBytes, _peerNonce, responsePayloadIdr, mySkp); // I think this is based on the last thing we sent
-        Console.WriteLine($"    Auth data ({authData.Length} bytes) = {Bit.HexString(authData)}");
+        Log.Debug($"    Auth data ({authData.Length} bytes) = {Bit.HexString(authData)}");
         
-        Console.WriteLine($"    Chosen proposal: {Json.Freeze(chosenChildProposal)}");
+        Log.Debug($"    Chosen proposal: {Json.Freeze(chosenChildProposal)}");
 
         // pvpn/server.py:309
         // Send our IKE_AUTH message back
@@ -322,15 +323,15 @@ public class VpnSession
         );
 
         var cpPayload = request.GetPayload<PayloadCp>();
-        if (cpPayload is null) Console.WriteLine("    No Configuration (CP) payload");
-        else Console.WriteLine("    Configuration (CP) payload present");
+        if (cpPayload is null) Log.Debug("    No Configuration (CP) payload");
+        else Log.Debug("    Configuration (CP) payload present");
 
         // Send reply.
-        Console.WriteLine($"    Sending IKE_AUTH response to peer {sender.Address} : {sender.Port}");
+        Log.Info($"    Sending IKE_AUTH response to peer {sender.Address} : {sender.Port}");
 
         Reply(to: sender, response);
 
-        Console.WriteLine("    Setting state to established");
+        Log.Debug("    Setting state to established");
         _state = SessionState.ESTABLISHED; // Should now have a full Child SA
         // Should now get INFORMATIONAL messages, possibly with some `IKE_DELETE` payloads to tell me about expired sessions.
     }
@@ -346,7 +347,7 @@ public class VpnSession
         var prf = _peerCrypto?.Prf;
         if (prf is null) throw new Exception("Tried to generate PSK auth before key exchange completed");
 
-        //Console.WriteLine($"PSK message: {payload.Describe()}");
+        Log.Debug("PSK message:", ()=>One(payload.Describe()));
 
         var prefix = new byte[] { (byte)payload.IdType, 0, 0, 0 };
         var peerId = payload.IdData;
@@ -355,10 +356,10 @@ public class VpnSession
 
         var bulk = messageData.Concat(nonce).Concat(octetPad).ToArray();
 
-        //Console.WriteLine($"#### {Bit.Describe("IDx'", idxTick)}");
-        //Console.WriteLine($"#### {Bit.Describe("SK_p", skP)}");
-        //Console.WriteLine($"#### {Bit.Describe("prf(Sk_px, IDx')", octetPad)}");
-        //Console.WriteLine($"#### {Bit.Describe("octets =  message + nonce + prf(Sk_px, IDx') ", messageData)}"); // expect ~ 1192 bytes
+        Log.Debug($"#### {Bit.Describe("IDx'", idxTick)}");
+        Log.Debug($"#### {Bit.Describe("SK_p", skP)}");
+        Log.Debug($"#### {Bit.Describe("prf(Sk_px, IDx')", octetPad)}");
+        Log.Debug($"#### {Bit.Describe("octets =  message + nonce + prf(Sk_px, IDx') ", messageData)}"); // expect ~ 1192 bytes
 
         var psk = Encoding.ASCII.GetBytes(PreSharedKeyString);
         var pad = Encoding.ASCII.GetBytes(Prf.IKEv2_KeyPad);
@@ -366,6 +367,11 @@ public class VpnSession
 
 
         return prf.Hash(prfPskPad, bulk);
+    }
+
+    private static IEnumerable<string> One(string msg)
+    {
+        yield return msg;
     }
 
     private ChildSa CreateChildKey(Proposal childProposal, byte[] peerNonce, byte[] localNonce)
@@ -440,9 +446,8 @@ public class VpnSession
 
     private void HandleSaInit(IkeMessage request, IPEndPoint sender, bool sendZeroHeader)
     {
-        Console.WriteLine("        Session: IKE_SA_INIT received");
-        //Console.WriteLine("        HandleSaInit():: payloads:");
-        //foreach (var payload in request.Payloads) Console.WriteLine($"            {payload.Describe()}");
+        Log.Debug("        Session: IKE_SA_INIT received");
+        Log.Debug("        HandleSaInit():: payloads:", request.DescribeAllPayloads);
 
         _peerNonce = request.GetPayload<PayloadNonce>()?.Data;
 
@@ -459,7 +464,7 @@ public class VpnSession
         if (chosenProposal is null || payloadKe is null || preferredDiffieHellman is null || payloadKe.KeyData.Length < 1)
         {
             // pvpn/server.py:274
-            Console.WriteLine($"        Session: Could not find an agreeable proposition. Sending rejection to {sender.Address}:{sender.Port}");
+            Log.Warn($"        Session: Could not find an agreeable proposition. Sending rejection to {sender.Address}:{sender.Port}");
             Reply(to: sender, message: BuildResponse(ExchangeType.IKE_SA_INIT, sendZeroHeader, null,
                 new PayloadNotify(IkeProtocolType.IKE, NotifyId.INVALID_KE_PAYLOAD, null, null)
             ));
@@ -470,7 +475,7 @@ public class VpnSession
         // then we will make a new proposal with a new key exchange.
         if ((uint)payloadKe.DiffieHellmanGroup != preferredDiffieHellman.Value)
         {
-            Console.WriteLine("        Session: We agree on a viable proposition, but it was not the default. Requesting switch.");
+            Log.Info("        Session: We agree on a viable proposition, but it was not the default. Requesting switch.");
 
             var reKeyMessage = BuildResponse(ExchangeType.IKE_SA_INIT, sendZeroHeader, null,
                 new PayloadSa(chosenProposal),
@@ -483,7 +488,7 @@ public class VpnSession
         }
 
         // build key
-        Console.WriteLine($"        Session: We agree on a viable proposition, and it is the default. Continue with key share for {payloadKe.DiffieHellmanGroup.ToString()}" +
+        Log.Debug($"        Session: We agree on a viable proposition, and it is the default. Continue with key share for {payloadKe.DiffieHellmanGroup.ToString()}" +
                           $" Supplied length is {payloadKe.KeyData.Length} bytes");
 
         var gmpDh = GmpDiffieHellman.gmp_diffie_hellman_create(DhId.DH_14) ?? throw new Exception($"Failed to create key exchange for group {payloadKe.DiffieHellmanGroup.ToString()}");
@@ -502,11 +507,11 @@ public class VpnSession
             new PayloadNotify(IkeProtocolType.NONE, NotifyId.NAT_DETECTION_SOURCE_IP, Array.Empty<byte>(), Bit.RandomBytes(20))
         );
 
-        Console.WriteLine($"        Session: Sending IKE_SA_INIT reply to {sender.Address}:{sender.Port}");
+        Log.Debug($"        Session: Sending IKE_SA_INIT reply to {sender.Address}:{sender.Port}");
         Reply(to: sender, message: saMessage);
         _state = SessionState.SA_SENT;
 
-        Console.WriteLine("        Session: Completed IKE_SA_INIT, transition to state=SA_SENT");
+        Log.Debug("        Session: Completed IKE_SA_INIT, transition to state=SA_SENT");
     }
 
     /// <summary>
@@ -563,11 +568,11 @@ public class VpnSession
     {
         if (_state != expected)
         {
-            Console.WriteLine(Json.Freeze(ikeMessage));
+            Log.Debug(Json.Freeze(ikeMessage));
             throw new Exception($"Expected to be in state {expected.ToString()}, but was in {_state.ToString()}");
         }
 
-        Console.WriteLine($"        Session: State correct: {_state.ToString()} = {expected.ToString()}");
+        Log.Debug($"        Session: State correct: {_state.ToString()} = {expected.ToString()}");
     }
 
     /// <summary>
