@@ -13,6 +13,7 @@ public class VpnServer : IDisposable
     private readonly UdpServer _server;
     private readonly Dictionary<UInt64, VpnSession> _sessions = new();
     private readonly Dictionary<UInt32, ChildSa> _childSessions = new();
+    private volatile bool _running;
 
     public VpnServer()
     {
@@ -24,6 +25,7 @@ public class VpnServer : IDisposable
         _messageCount = 0;
         Console.WriteLine("Setup");
         Json.DefaultParameters.EnableAnonymousTypes = true;
+        Console.CancelKeyPress += StopRunning;
 
 // Use Gerty for testing. Run "JustListen" to check your connection is working.
 // You may need to do lots of firewall poking and NAT rules.
@@ -32,12 +34,11 @@ public class VpnServer : IDisposable
 //var target = new IPEndPoint(new IPAddress(new byte[]{197,250,65,132}), 500); // M-P
 //var target = new IPEndPoint(new IPAddress(new byte[] { 159, 69, 13, 126 }), 500); // Gerty
 
-        Thread.Sleep(1000);
-
         _server.Start();
+        _running = true;
 
-        var limit = 50;
-        for (int i = 0; i < limit; i++)
+
+        while (_running)
         {
             // wait for other side to contact:
             Console.Write(".");
@@ -45,6 +46,10 @@ public class VpnServer : IDisposable
         }
     }
 
+    private void StopRunning(object? sender, ConsoleCancelEventArgs e)
+    {
+        _running = false;
+    }
 
 
     /// <summary>
@@ -76,7 +81,7 @@ public class VpnServer : IDisposable
 
         if (_sessions.ContainsKey(ikeMessage.SpiI))
         {
-            Console.WriteLine($"    it's for an existing session started elsewhere? {ikeMessage.SpiI:x16} => {ikeMessage.SpiR:x16}");
+            Console.WriteLine($"    it's for an existing session started by the peer {ikeMessage.SpiI:x16} => {ikeMessage.SpiR:x16}");
             
             // Pass message to existing session
             _sessions[ikeMessage.SpiI].HandleIke(ikeMessage, sender, sendZeroHeader);
@@ -85,14 +90,14 @@ public class VpnServer : IDisposable
 
         if (_sessions.ContainsKey(ikeMessage.SpiR))
         {
-            Console.WriteLine($"    it's for an existing session we started? {ikeMessage.SpiI:x16} => {ikeMessage.SpiR:x16}");
+            Console.WriteLine($"    it's for an existing session we started {ikeMessage.SpiI:x16} => {ikeMessage.SpiR:x16}");
             
             // Pass message to existing session
             _sessions[ikeMessage.SpiR].HandleIke(ikeMessage, sender, sendZeroHeader);
             return;
         }
 
-        Console.WriteLine($"    it's for a new session?  {ikeMessage.SpiI:x16} => {ikeMessage.SpiR:x16}");
+        Console.WriteLine($"    it's for a new session  {ikeMessage.SpiI:x16} => {ikeMessage.SpiR:x16}");
             
         // Start a new session and store it, keyed by the initiator id
         var newSession = new VpnSession(_server, this, ikeMessage.SpiI);
@@ -138,7 +143,7 @@ public class VpnServer : IDisposable
         // There is no Non-ESP marker, so the first 4 bytes are the ESP "Security Parameters Index".
         // This is 32 bits, and not the 64 bits of the IKE SPI?
         // (see https://docs.strongswan.org/docs/5.9/features/natTraversal.html , https://en.wikipedia.org/wiki/Security_Parameter_Index )
-        // "The SPI (as per RFC 2401) is a required part of an IPsec Security Association (SA)"
+        // "The SPI (as per RFC 2401) is a required part of an Ipsec Security Association (SA)"
         // https://en.wikipedia.org/wiki/IPsec has notes and diagrams of the ESP headers
         // ESP uses different encryption modes compared to IKEv2
         idx = 0;
