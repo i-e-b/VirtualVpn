@@ -159,7 +159,8 @@ public class VpnServer : IDisposable
 
         if (Settings.CaptureTraffic)
         {
-            File.WriteAllBytes(Settings.FileBase+$"ESP_{_espCount++}.bin", data);
+            File.WriteAllText(Settings.FileBase+$"ESP_{_espCount}.txt", Bit.Describe($"esp_{_espCount}", data));
+            _espCount++;
         }
 
         // reject unknown sessions

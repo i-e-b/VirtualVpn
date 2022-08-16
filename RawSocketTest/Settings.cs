@@ -5,7 +5,7 @@ public static class Settings
     /// <summary>
     /// Prefix on capture files
     /// </summary>
-    public const string FileBase = "";
+    public const string FileBase = ".";
     //public const string FileBase = @"C:\temp\zzz";
 
     /// <summary>
@@ -24,4 +24,10 @@ public static class Settings
     /// Log level that will be set at startup
     /// </summary>
     public const LogLevel DefaultLogLevel = LogLevel.Info;
+    
+    /// <summary>
+    /// If true, the output of `Bit.Describe` generates C# code.
+    /// Otherwise it looks like StrongSwan log format.
+    /// </summary>
+    public const bool CodeModeForDescription = true;
 }

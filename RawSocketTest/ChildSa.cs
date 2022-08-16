@@ -48,7 +48,7 @@ public class ChildSa
     public bool OutOfSequence(uint seq)
     {
         Log.Info($"Not yet implemented: OutOfSequence; seq={seq}");
-        return true;
+        return false;
     }
 
     public bool VerifyMessage(byte[] data)

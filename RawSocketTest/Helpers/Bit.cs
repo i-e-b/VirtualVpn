@@ -191,30 +191,77 @@ public static class Bit
     /// </summary>
     public static string Describe(string name, byte[]? bytes)
     {
-        if (bytes is null)
+        if (Settings.CodeModeForDescription)
         {
-            return $"{name} => 0 bytes (null)\r\n";
-        }
-
-        var sb = new StringBuilder();
-        
-        sb.Append(name);
-        sb.Append(" => ");
-        sb.Append(bytes.Length);
-        sb.Append("bytes");
-        
-        var idx = 0;
-        while (idx < bytes.Length)
-        {
-            sb.AppendLine();
-            sb.Append($"{idx:d4}: ");
-            for (int b = 0; (b < 16) && (idx < bytes.Length); b++)
+            name = Safe(name);
+            if (bytes is null) return $"var {name} = new byte[0];";
+            
+            var sb = new StringBuilder();
+            
+            sb.Append("var ");
+            sb.Append(name);
+            sb.Append(" = new byte[] {");
+            
+            for (int b = 0; b < bytes.Length; b++)
             {
-                sb.Append($"{bytes[idx++]:X2} ");
+                sb.Append($"0x{bytes[b]:X2}, ");
+            }
+            
+            sb.Append("};");
+            sb.AppendLine();
+            
+            return sb.ToString();
+        }
+        else
+        {
+            if (bytes is null)
+            {
+                return $"{name} => 0 bytes (null)\r\n";
+            }
+
+            var sb = new StringBuilder();
+
+            sb.Append(name);
+            sb.Append(" => ");
+            sb.Append(bytes.Length);
+            sb.Append("bytes");
+
+            var idx = 0;
+            while (idx < bytes.Length)
+            {
+                sb.AppendLine();
+                sb.Append($"{idx:d4}: ");
+                for (int b = 0; (b < 16) && (idx < bytes.Length); b++)
+                {
+                    sb.Append($"{bytes[idx++]:X2} ");
+                }
+            }
+
+            sb.AppendLine();
+            return sb.ToString();
+        }
+    }
+
+    /// <summary>
+    /// Code friendly version of a string
+    /// </summary>
+    private static string Safe(string name)
+    {
+        var sb = new StringBuilder();
+
+        sb.Append('m');
+        foreach (var c in name)
+        {
+            switch (c)
+            {
+                case >= '0' and <= '9':
+                case >= 'a' and <= 'z':
+                case >= 'A' and <= 'Z':
+                    sb.Append(c);
+                    break;
             }
         }
-
-        sb.AppendLine();
+        
         return sb.ToString();
     }
 
