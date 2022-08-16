@@ -15,7 +15,12 @@ public enum LogLevel
     /// <summary>
     /// Include raw data for debugging crypto
     /// </summary>
-    Crypto = 5
+    Crypto = 5,
+    
+    /// <summary>
+    /// Output all logs
+    /// </summary>
+    Everything = 255
 }
 
 public static class Log

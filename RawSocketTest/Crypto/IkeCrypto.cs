@@ -159,7 +159,7 @@ public class IkeCrypto
     }
 
     /// <summary>
-    /// Recover encrypted data, and the chain byte used
+    /// Recover encrypted data. Used for IKE SK payloads
     /// </summary>
     public byte[] Decrypt(byte[] encrypted)
     {
@@ -194,7 +194,7 @@ public class IkeCrypto
          *     assoc -> + ------->/
          */
         
-        // decrypted data is [ message data ][ padding ][ pad len ][ carry-over ]
+        // decrypted data is [ message data ][ padding ][ pad len ]
         byte[] decrypted;
         try
         {
@@ -394,8 +394,40 @@ public class IkeCrypto
         }
     }
 
-    public byte[] DecryptEsp(byte[] data, out IpProtocol protocol)
+    /// <summary>
+    /// Decode an Encapsulating Security Payload (ESP) packet. This should give us details of what kind of protocol is encapsulated
+    /// </summary>
+    public byte[] DecryptEsp(byte[] encrypted, out IpProtocol next)
     {
-        throw new NotImplementedException();
+        // pvpn/crypto.py:81
+        
+        var initVectorSize = _cipher.BlockSize;
+        var hashSize = _integrity?.HashSize ?? 0;
+        var cipherSize = encrypted.Length - initVectorSize - hashSize;
+        
+        // encrypted data is [ init vec ][ cipher text ][ checksum ]
+        var iv = encrypted.Take(initVectorSize).ToArray();
+        var cipherText = encrypted.Skip(initVectorSize).Take(cipherSize).ToArray();
+        
+
+        // decrypted data is [ message data ][ padding ][ pad len ][ carry-over ]
+        byte[] decrypted;
+        try
+        {
+            decrypted = _cipher.Decrypt(_skE, iv, cipherText);
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"Failed to decrypt: {ex}");
+            throw;
+        }
+        
+        var padLength = decrypted[^2]; // second last byte
+        next = (IpProtocol)decrypted[^1]; // second last byte
+        var messageBytes = decrypted.Length - padLength - 2;
+
+        Log.Crypto($"Decoded={decrypted.Length} bytes; Pad={padLength} bytes; Protocol={next.ToString()}; Message={messageBytes} bytes;");
+        
+        return decrypted.Take(messageBytes).ToArray();
     }
 }

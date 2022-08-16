@@ -29,7 +29,7 @@ public static class Settings
     /// If true, the output of `Bit.Describe` generates C# code.
     /// Otherwise it looks like StrongSwan log format.
     /// </summary>
-    public const bool CodeModeForDescription = true;
+    public static bool CodeModeForDescription = true;
     
     /// <summary>
     /// Listener prefix for the web "airlift". This helps you pull logs.
