@@ -586,7 +586,7 @@ public class VpnSession
         _server.SendRaw(message, to, out _);
         _peerMsgId++;
 
-        //var name = @$"C:\temp\IKEv2-Reply_{_peerMsgId}_Port-{to.Port}_IKE.bin";
+        //var name = Settings.FileBase + $"IKEv2-Reply_{_peerMsgId}_Port-{to.Port}_IKE.bin";
         //File.WriteAllBytes(name, message);
     }
 

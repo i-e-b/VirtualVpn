@@ -87,18 +87,21 @@ public class IkeCrypto
         out byte[] skD, out IkeCrypto myCrypto, out IkeCrypto theirCrypto
         ){
         // pvpn/server.py:223
-        
-        
-        File.WriteAllText(@"C:\temp\zzzLastSessionKeysSources.txt",
-            $"prfId={prfId}, integId={integId}, cipherId={cipherId}, keyLength={keyLength}\r\n"+
-            Bit.Describe("theirNonce", theirNonce)+
-            Bit.Describe("myNonce", myNonce)+
-            Bit.Describe("sharedSecret", sharedSecret)+
-            Bit.Describe("theirSpi", theirSpi)+
-            Bit.Describe("mySpi", mySpi)+
-            Bit.Describe("oldSkD", oldSkD)
-        );
-        
+
+
+        if (Settings.CaptureTraffic)
+        {
+            File.WriteAllText(Settings.FileBase + "LastSessionKeysSources.txt",
+                $"prfId={prfId}, integId={integId}, cipherId={cipherId}, keyLength={keyLength}\r\n" +
+                Bit.Describe("theirNonce", theirNonce) +
+                Bit.Describe("myNonce", myNonce) +
+                Bit.Describe("sharedSecret", sharedSecret) +
+                Bit.Describe("theirSpi", theirSpi) +
+                Bit.Describe("mySpi", mySpi) +
+                Bit.Describe("oldSkD", oldSkD)
+            );
+        }
+
         // Build protocols
         var prf = new Prf(prfId);
         var integ = new Integrity(integId);
@@ -134,22 +137,25 @@ public class IkeCrypto
         // build crypto for both sides
         myCrypto = new IkeCrypto(cipher, integ, prf, skEr, skAr, skPr, null);
         theirCrypto = new IkeCrypto(cipher, integ, prf, skEi, skAi, skPi, null);
-        
-        File.WriteAllText(@"C:\temp\zzzLastSessionKeys.txt",
-            Bit.Describe("peer nonce", theirNonce)+
-            Bit.Describe("local nonce", myNonce)+
-            Bit.Describe("SK d", skD)+
-            Bit.Describe("skAi", skAi)+
-            Bit.Describe("skAr", skAr)+
-            Bit.Describe("skEi", skEi)+
-            Bit.Describe("skEr", skEr)+
-            Bit.Describe("skPi", skPi)+
-            Bit.Describe("skPr", skPr)+
-            Bit.Describe("keySource", keySource)+
-            Bit.Describe("seed", seed)+
-            Bit.Describe("secret", sharedSecret)+
-            Bit.Describe("sKeySeed", sKeySeed)
+
+        if (Settings.CaptureTraffic)
+        {
+            File.WriteAllText(Settings.FileBase + "LastSessionKeys.txt",
+                Bit.Describe("peer nonce", theirNonce) +
+                Bit.Describe("local nonce", myNonce) +
+                Bit.Describe("SK d", skD) +
+                Bit.Describe("skAi", skAi) +
+                Bit.Describe("skAr", skAr) +
+                Bit.Describe("skEi", skEi) +
+                Bit.Describe("skEr", skEr) +
+                Bit.Describe("skPi", skPi) +
+                Bit.Describe("skPr", skPr) +
+                Bit.Describe("keySource", keySource) +
+                Bit.Describe("seed", seed) +
+                Bit.Describe("secret", sharedSecret) +
+                Bit.Describe("sKeySeed", sKeySeed)
             );
+        }
     }
 
     /// <summary>

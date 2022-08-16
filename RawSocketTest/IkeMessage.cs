@@ -288,7 +288,7 @@ public class IkeMessage
                 // https://www.rfc-editor.org/rfc/rfc7296#section-3
                 if (ikeCrypto is null) throw new Exception("Received an encrypted packet without agreeing on session crypto");
                 
-                //if (rawData is not null) File.WriteAllBytes(@"C:\temp\zzzSK-raw.bin", rawData); // log the entire message
+                //if (rawData is not null) File.WriteAllBytes(Settings.FileBase + "SK-raw.bin", rawData); // log the entire message
                 
                 var ok = ikeCrypto.VerifyChecksum(srcData);
                 if (!ok) Log.Warn("CHECKSUM FAILED! We will continue, but result might be unreliable (in RawSocketTest.IkeMessage.ReadSinglePayload)");

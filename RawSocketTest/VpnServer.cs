@@ -13,6 +13,7 @@ public class VpnServer : IDisposable
     private readonly Dictionary<UInt64, VpnSession> _sessions = new();
     private readonly Dictionary<UInt32, ChildSa> _childSessions = new();
     private volatile bool _running;
+    private long _espCount;
 
     public VpnServer()
     {
@@ -68,7 +69,7 @@ public class VpnServer : IDisposable
     private void IkeResponder(byte[] data, IPEndPoint sender)
     {
         // write capture to file for easy testing
-        //var name = @$"C:\temp\IKEv2-{_messageCount}_Port-{sender.Port}_IKE.bin";
+        //var name = Settings.FileBase + $"IKEv2-{_messageCount}_Port-{sender.Port}_IKE.bin";
         //File.WriteAllBytes(name, data);
         Log.Info($"Got a 500 packet, {data.Length} bytes");
         
@@ -154,10 +155,15 @@ public class VpnServer : IDisposable
         // https://en.wikipedia.org/wiki/IPsec has notes and diagrams of the ESP headers
         // ESP uses different encryption modes compared to IKEv2
         idx = 0;
-        var spi = Bit.ReadUInt64(data, ref idx);
-        
+        var spi = Bit.ReadUInt32(data, ref idx);
+
+        if (Settings.CaptureTraffic)
+        {
+            File.WriteAllBytes(Settings.FileBase+$"ESP_{_espCount++}.bin", data);
+        }
+
         // reject unknown sessions
-        if (!_sessions.ContainsKey(spi))
+        if (!_sessions.ContainsKey(spi) && !_childSessions.ContainsKey(spi))
         {
             Log.Warn($"    Unknown session: 0x{spi:x16} -- not replying");
             return;
