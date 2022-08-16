@@ -163,18 +163,18 @@ public class VpnServer : IDisposable
         }
 
         // reject unknown sessions
-        if (!_sessions.ContainsKey(spi) && !_childSessions.ContainsKey(spi))
+        if (!_childSessions.ContainsKey(spi))
         {
             Log.Warn($"    Unknown session: 0x{spi:x16} -- not replying");
             return;
         }
 
         // if we get here, we have a new message (with encryption) for an existing session
-        var session = _sessions[spi];
+        var childSa = _childSessions[spi];
         idx = 4;
         var seq = Bit.ReadUInt32(data, ref idx);
         Log.Debug($"    Packet has sequence #{seq}");
-        if (session.OutOfSequence(seq))
+        if (childSa.OutOfSequence(seq))
         {
             Log.Warn($"    Received out of sequence packet: {seq} -- not replying");
             return;
@@ -183,7 +183,7 @@ public class VpnServer : IDisposable
         // TODO: HMAC-SHA2-256-96 fix ?  See pvpn/server.py:411
         
         // verify the checksum
-        var ok = session.VerifyMessage(data);
+        var ok = childSa.VerifyMessage(data);
         if (!ok)
         {
             Log.Warn($"    Received packet with bad checksum: {seq} -- not replying");
@@ -191,10 +191,10 @@ public class VpnServer : IDisposable
         }
         
         // looks ok. Step the sequence number forward
-        session.IncrementSequence(seq);
+        childSa.IncrementSequence(seq);
 
         // do decrypt, route, etc.
-        session.HandleSpe(data, sender);
+        childSa.HandleSpe(data, sender);
         
         Log.Debug("    Looks like a fully valid message. Other side will expect a reply.");
     }

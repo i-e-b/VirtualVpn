@@ -1,4 +1,5 @@
-﻿using RawSocketTest.Crypto;
+﻿using System.Net;
+using RawSocketTest.Crypto;
 using RawSocketTest.Helpers;
 
 // ReSharper disable BuiltInTypeReferenceStyle
@@ -43,4 +44,26 @@ public class ChildSa
     }
 
     public UInt32 SpiIn { get; set; }
+
+    public bool OutOfSequence(uint seq)
+    {
+        Log.Info($"Not yet implemented: OutOfSequence; seq={seq}");
+        return true;
+    }
+
+    public bool VerifyMessage(byte[] data)
+    {
+        Log.Info($"Not yet implemented: VerifyMessage; data={data.Length} bytes");
+        return true;
+    }
+
+    public void IncrementSequence(uint seq)
+    {
+        Log.Info($"Not yet implemented: IncrementSequence; seq={seq}");
+    }
+
+    public void HandleSpe(byte[] data, IPEndPoint sender)
+    {
+        Log.Info($"Not yet implemented: HandleSpe; data={data.Length} bytes, sender={sender}");
+    }
 }

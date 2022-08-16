@@ -3,7 +3,7 @@
 using RawSocketTest;
 using RawSocketTest.Helpers;
 
-Log.SetLevel(LogLevel.Debug);
+Log.SetLevel(Settings.DefaultLogLevel);
 
 // Notify of anything coming across the wrong protocol
 var echo1 = new TcpEcho(500);

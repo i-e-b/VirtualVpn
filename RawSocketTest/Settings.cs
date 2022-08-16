@@ -19,4 +19,9 @@ public static class Settings
     /// If true, traffic will be captured into files
     /// </summary>
     public const bool CaptureTraffic = true;
+    
+    /// <summary>
+    /// Log level that will be set at startup
+    /// </summary>
+    public const LogLevel DefaultLogLevel = LogLevel.Info;
 }
