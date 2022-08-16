@@ -5,7 +5,7 @@ public static class Settings
     /// <summary>
     /// Prefix on capture files
     /// </summary>
-    public const string FileBase = ".";
+    public const string FileBase = "/root/airlift/";
     //public const string FileBase = @"C:\temp\zzz";
 
     /// <summary>

@@ -45,7 +45,7 @@ public class HttpCapture
             }
             else
             {
-                var path = Settings.FileBase + "/" + url.TrimStart('.', '\\', '/');
+                var path = Settings.FileBase + "/" + Path.GetFileName(url);
                 if (File.Exists(path))
                 {
                     ctx.Response.AddHeader("Content-Type", "text/plain");
@@ -102,7 +102,7 @@ public class HttpCapture
         var textFiles = Directory.EnumerateFiles(Settings.FileBase, "*.txt", SearchOption.TopDirectoryOnly);
         foreach (var path in textFiles)
         {
-            var clean = path.TrimStart('.', '\\', '/');
+            var clean = Path.GetFileName(path);
             fileList.Add(T.g("li")[
                 T.g("a", "href", clean)[clean]
             ]);
