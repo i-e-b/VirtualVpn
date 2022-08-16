@@ -1,21 +1,22 @@
-﻿namespace RawSocketTest.Crypto;
-
-using System;
-using System.Collections;
+﻿using System.Collections;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Security.Cryptography;
 
-// From https://bouncycastle.org/csharp/archive/BigInteger.cs
-//using org.bouncycastle.security;
+namespace RawSocketTest.Crypto;
 
+// From https://bouncycastle.org/csharp/archive/BigInteger.cs
+
+[SuppressMessage("ReSharper", "UnusedMember.Global")]
+[SuppressMessage("ReSharper", "MemberCanBePrivate.Global")]
 public class BigInt
 {
-    private int sign; // -1 means -ve; +1 means +ve; 0 means 0;
-    private int[] magnitude; // array of ints with [0] being the most significant
-    private int nBits = -1; // cache bitCount() value
-    private int nBitLength = -1; // cache bitLength() value
-    private static readonly long IMASK = 0xffffffffL;
-    private long mQuote = -1L; // -m^(-1) mod b, b = 2^32 (see Montgomery mult.)
+    private int _sign; // -1 means -ve; +1 means +ve; 0 means 0;
+    private int[] _magnitude; // array of ints with [0] being the most significant
+    private int _nBits = -1; // cache bitCount() value
+    private int _nBitLength = -1; // cache bitLength() value
+    private const long IntMask = 0xffffffffL;
+    private long _mQuote = -1L; // -m^(-1) mod b, b = 2^32 (see Montgomery mult.)
 
 
     public static implicit operator BigInt(int v) => valueOf(v);
@@ -23,20 +24,16 @@ public class BigInt
 
     private BigInt()
     {
+        _sign = 0;
+        _magnitude = Array.Empty<int>();
     }
 
-    private BigInt(int nWords)
+    private BigInt(int sigNum, int[] mag)
     {
-        sign = 1;
-        magnitude = new int[nWords];
-    }
-
-    private BigInt(int signum, int[] mag)
-    {
-        sign = signum;
+        _sign = sigNum;
         if (mag.Length > 0)
         {
-            int i = 0;
+            var i = 0;
             while (i < mag.Length && mag[i] == 0)
             {
                 i++;
@@ -44,31 +41,26 @@ public class BigInt
 
             if (i == 0)
             {
-                magnitude = mag;
+                _magnitude = mag;
             }
             else
             {
                 // strip leading 0 bytes
-                int[] newMag = new int[mag.Length - i];
+                var newMag = new int[mag.Length - i];
                 Array.Copy(mag, i, newMag, 0, newMag.Length);
-                magnitude = newMag;
+                _magnitude = newMag;
                 if (newMag.Length == 0)
-                    sign = 0;
+                    _sign = 0;
             }
         }
         else
         {
-            magnitude = mag;
-            sign = 0;
+            _magnitude = mag;
+            _sign = 0;
         }
     }
 
-    public BigInt(String sval) //throws FormatException
-        : this(sval, 10)
-    {
-    }
-
-    public BigInt(String sval, int rdx) //throws FormatException
+    public BigInt(string sval, int rdx = 10) //throws FormatException
     {
         if (sval.Length == 0)
         {
@@ -85,12 +77,12 @@ public class BigInt
                 style = NumberStyles.AllowHexSpecifier;
                 break;
             default:
-                throw new FormatException("Only base 10 or 16 alllowed");
+                throw new FormatException("Only base 10 or 16 allowed");
         }
 
 
-        int index = 0;
-        sign = 1;
+        var index = 0;
+        _sign = 1;
 
         if (sval[0] == '-')
         {
@@ -99,12 +91,12 @@ public class BigInt
                 throw new FormatException("Zero length BigInteger");
             }
 
-            sign = -1;
+            _sign = -1;
             index = 1;
         }
 
         // strip leading zeros from the string value
-        while (index < sval.Length && Int32.Parse(sval[index].ToString(), style) == 0)
+        while (index < sval.Length && int.Parse(sval[index].ToString(), style) == 0)
         {
             index++;
         }
@@ -112,8 +104,8 @@ public class BigInt
         if (index >= sval.Length)
         {
             // zero value - we're done
-            sign = 0;
-            magnitude = new int[0];
+            _sign = 0;
+            _magnitude = new int[0];
             return;
         }
 
@@ -123,46 +115,32 @@ public class BigInt
         // storage in one hit?, then generate the magnitude in one hit too?
         //////
 
-        BigInt b = BigInt.ZERO;
-        BigInt r = valueOf(rdx);
+        var b = ZERO;
+        var r = valueOf(rdx);
         while (index < sval.Length)
         {
             // (optimise this by taking chunks of digits instead?)
-            b = b.multiply(r).add(valueOf(Int32.Parse(sval[index].ToString(), style)));
+            b = b.multiply(r).add(valueOf(int.Parse(sval[index].ToString(), style)));
             index++;
         }
 
-        magnitude = b.magnitude;
-        return;
+        _magnitude = b._magnitude;
     }
 
-    public BigInt(byte[] bval) //throws FormatException
+    public BigInt(byte[] byteVal) //throws FormatException
     {
-        if (bval.Length == 0)
+        if (byteVal.Length == 0)
         {
             throw new FormatException("Zero length BigInteger");
         }
 
-        sign = 1;
-        if (bval[0] < 0)
-        {
-            // FIXME:
-            int iBval;
-            sign = -1;
-            // strip leading sign bytes
-            for (iBval = 0; iBval < bval.Length && ((sbyte)bval[iBval] == -1); iBval++) ;
-            magnitude = new int[(bval.Length - iBval) / 2 + 1];
-            // copy bytes to magnitude
-            // invert bytes then add one to find magnitude of value
-        }
-        else
-        {
-            // strip leading zero bytes and return magnitude bytes
-            magnitude = makeMagnitude(bval);
-        }
+        _sign = 1;
+        
+        // strip leading zero bytes and return magnitude bytes
+        _magnitude = makeMagnitude(byteVal);
     }
 
-    private int[] makeMagnitude(byte[] bval)
+    private static int[] makeMagnitude(byte[] bval)
     {
         int i;
         int[] mag;
@@ -172,21 +150,24 @@ public class BigInt
         for (firstSignificant = 0;
              firstSignificant < bval.Length
              && bval[firstSignificant] == 0;
-             firstSignificant++) ;
+             firstSignificant++)
+        {
+            // nothing
+        }
 
         if (firstSignificant >= bval.Length)
         {
-            return new int[0];
+            return Array.Empty<int>();
         }
 
-        int nInts = (bval.Length - firstSignificant + 3) / 4;
-        int bCount = (bval.Length - firstSignificant) % 4;
+        var nInts = (bval.Length - firstSignificant + 3) / 4;
+        var bCount = (bval.Length - firstSignificant) % 4;
         if (bCount == 0)
             bCount = 4;
 
         mag = new int[nInts];
-        int v = 0;
-        int magnitudeIndex = 0;
+        var v = 0;
+        var magnitudeIndex = 0;
         for (i = firstSignificant; i < bval.Length; i++)
         {
             v <<= 8;
@@ -218,84 +199,75 @@ public class BigInt
 
         if (sign == 0)
         {
-            this.sign = 0;
-            this.magnitude = new int[0];
+            _sign = 0;
+            _magnitude = new int[0];
             return;
         }
 
         // copy bytes
-        this.magnitude = makeMagnitude(mag);
-        this.sign = sign;
+        _magnitude = makeMagnitude(mag);
+        _sign = sign;
     }
 
-    public BigInt(int numBits, Random rnd) //throws ArgumentException
+    public BigInt(int numBits) //throws ArgumentException
     {
         if (numBits < 0)
         {
             throw new ArgumentException("numBits must be non-negative");
         }
 
-        int nBytes = (numBits + 7) / 8;
+        var nBytes = (numBits + 7) / 8;
 
-        byte[] b = new byte[nBytes];
+        var b = new byte[nBytes];
 
         if (nBytes > 0)
         {
-            nextRndBytes(rnd, b);
+            nextRndBytes(b);
             // strip off any excess bits in the MSB
             b[0] &= rndMask[8 * nBytes - numBits];
         }
 
-        this.magnitude = makeMagnitude(b);
-        this.sign = 1;
-        this.nBits = -1;
-        this.nBitLength = -1;
+        _magnitude = makeMagnitude(b);
+        _sign = 1;
+        _nBits = -1;
+        _nBitLength = -1;
     }
 
-    private static readonly int BITS_PER_BYTE = 8;
-    private static readonly int BYTES_PER_INT = 4;
+    private void nextRndBytes(byte[] bytes) => RandomNumberGenerator.Fill(bytes);
 
-    /**
-         * strictly speaking this is a little dodgey from a compliance
-         * point of view as it forces people to be using SecureRandom as
-         * well, that being said - this implementation is for a crypto
-         * library and you do have the source!
-         */
-    private void nextRndBytes(Random rnd, byte[] bytes) => RandomNumberGenerator.Fill(bytes);
+    private static readonly byte[] rndMask = { 255, 127, 63, 31, 15, 7, 3, 1 };
 
-    private static readonly byte[] rndMask = { (byte)255, 127, 63, 31, 15, 7, 3, 1 };
-
-    public BigInt(int bitLength, int certainty, Random rnd) //throws ArithmeticException
+    public BigInt(int bitLength, int certainty) //throws ArithmeticException
     {
-        int nBytes = (bitLength + 7) / 8;
+        var nBytes = (bitLength + 7) / 8;
 
-        byte[] b = new byte[nBytes];
+        var b = new byte[nBytes];
 
         do
         {
             if (nBytes > 0)
             {
-                nextRndBytes(rnd, b);
+                nextRndBytes(b);
                 // strip off any excess bits in the MSB
                 b[0] &= rndMask[8 * nBytes - bitLength];
             }
 
-            this.magnitude = makeMagnitude(b);
-            this.sign = 1;
-            this.nBits = -1;
-            this.nBitLength = -1;
-            this.mQuote = -1L;
+            _magnitude = makeMagnitude(b);
+            _sign = 1;
+            _nBits = -1;
+            _nBitLength = -1;
+            _mQuote = -1L;
 
             if (certainty > 0 && bitLength > 2)
             {
-                this.magnitude[this.magnitude.Length - 1] |= 1;
+                _magnitude[_magnitude.Length - 1] |= 1;
             }
-        } while (this.bitLength() != bitLength || !this.isProbablePrime(certainty));
+        } while (this.bitLength() != bitLength || !isProbablePrime(certainty));
     }
 
     public BigInt abs()
     {
-        return (sign >= 0) ? this : this.negate();
+        return (_sign >= 0) ? this : negate();
     }
 
     /**
@@ -303,20 +275,20 @@ public class BigInt
          */
     private int[] add(int[] a, int[] b)
     {
-        int tI = a.Length - 1;
-        int vI = b.Length - 1;
+        var tI = a.Length - 1;
+        var vI = b.Length - 1;
         long m = 0;
 
         while (vI >= 0)
         {
-            m += (((long)a[tI]) & IMASK) + (((long)b[vI--]) & IMASK);
+            m += (a[tI] & IntMask) + (b[vI--] & IntMask);
             a[tI--] = (int)m;
             m = (long)((ulong)m >> 32);
         }
 
         while (tI >= 0 && m != 0)
         {
-            m += (((long)a[tI]) & IMASK);
+            m += (a[tI] & IntMask);
             a[tI--] = (int)m;
             m = (long)((ulong)m >> 32);
         }
@@ -326,20 +298,20 @@ public class BigInt
 
     public BigInt add(BigInt val) //throws ArithmeticException
     {
-        if (val.sign == 0 || val.magnitude.Length == 0)
+        if (val._sign == 0 || val._magnitude.Length == 0)
             return this;
-        if (this.sign == 0 || this.magnitude.Length == 0)
+        if (_sign == 0 || _magnitude.Length == 0)
             return val;
 
-        if (val.sign < 0)
+        if (val._sign < 0)
         {
-            if (this.sign > 0)
-                return this.subtract(val.negate());
+            if (_sign > 0)
+                return subtract(val.negate());
         }
         else
         {
-            if (this.sign < 0)
-                return val.subtract(this.negate());
+            if (_sign < 0)
+                return val.subtract(negate());
         }
 
         // both BigIntegers are either +ve or -ve; set the sign later
@@ -347,39 +319,39 @@ public class BigInt
         int[] mag,
             op;
 
-        if (this.magnitude.Length < val.magnitude.Length)
+        if (_magnitude.Length < val._magnitude.Length)
         {
-            mag = new int[val.magnitude.Length + 1];
+            mag = new int[val._magnitude.Length + 1];
 
-            Array.Copy(val.magnitude, 0, mag, 1, val.magnitude.Length);
-            op = this.magnitude;
+            Array.Copy(val._magnitude, 0, mag, 1, val._magnitude.Length);
+            op = _magnitude;
         }
         else
         {
-            mag = new int[this.magnitude.Length + 1];
+            mag = new int[_magnitude.Length + 1];
 
-            Array.Copy(this.magnitude, 0, mag, 1, this.magnitude.Length);
-            op = val.magnitude;
+            Array.Copy(_magnitude, 0, mag, 1, _magnitude.Length);
+            op = val._magnitude;
         }
 
-        return new BigInt(this.sign, add(mag, op));
+        return new BigInt(_sign, add(mag, op));
     }
 
     public int bitCount()
     {
-        if (nBits == -1)
+        if (_nBits == -1)
         {
-            nBits = 0;
-            for (int i = 0; i < magnitude.Length; i++)
+            _nBits = 0;
+            for (var i = 0; i < _magnitude.Length; i++)
             {
-                nBits += bitCounts[magnitude[i] & 0xff];
-                nBits += bitCounts[(magnitude[i] >> 8) & 0xff];
-                nBits += bitCounts[(magnitude[i] >> 16) & 0xff];
-                nBits += bitCounts[(magnitude[i] >> 24) & 0xff];
+                _nBits += bitCounts[_magnitude[i] & 0xff];
+                _nBits += bitCounts[(_magnitude[i] >> 8) & 0xff];
+                _nBits += bitCounts[(_magnitude[i] >> 16) & 0xff];
+                _nBits += bitCounts[(_magnitude[i] >> 24) & 0xff];
             }
         }
 
-        return nBits;
+        return _nBits;
     }
 
     private readonly static byte[] bitCounts =
@@ -404,38 +376,36 @@ public class BigInt
         {
             return 0;
         }
-        else
+
+        while (indx != mag.Length && mag[indx] == 0)
         {
-            while (indx != mag.Length && mag[indx] == 0)
+            indx++;
+        }
+
+        if (indx == mag.Length)
+        {
+            return 0;
+        }
+
+        // bit length for everything after the first int
+        bitLength = 32 * ((mag.Length - indx) - 1);
+
+        // and determine bitlength of first int
+        bitLength += bitLen(mag[indx]);
+
+        if (_sign < 0)
+        {
+            // Check if magnitude is a power of two
+            var pow2 = ((bitCounts[mag[indx] & 0xff])
+                        + (bitCounts[(mag[indx] >> 8) & 0xff])
+                        + (bitCounts[(mag[indx] >> 16) & 0xff]) + (bitCounts[(mag[indx] >> 24) & 0xff])) == 1;
+
+            for (var i = indx + 1; i < mag.Length && pow2; i++)
             {
-                indx++;
+                pow2 = (mag[i] == 0);
             }
 
-            if (indx == mag.Length)
-            {
-                return 0;
-            }
-
-            // bit length for everything after the first int
-            bitLength = 32 * ((mag.Length - indx) - 1);
-
-            // and determine bitlength of first int
-            bitLength += bitLen(mag[indx]);
-
-            if (sign < 0)
-            {
-                // Check if magnitude is a power of two
-                bool pow2 = ((bitCounts[mag[indx] & 0xff])
-                             + (bitCounts[(mag[indx] >> 8) & 0xff])
-                             + (bitCounts[(mag[indx] >> 16) & 0xff]) + (bitCounts[(mag[indx] >> 24) & 0xff])) == 1;
-
-                for (int i = indx + 1; i < mag.Length && pow2; i++)
-                {
-                    pow2 = (mag[i] == 0);
-                }
-
-                bitLength -= (pow2 ? 1 : 0);
-            }
+            bitLength -= (pow2 ? 1 : 0);
         }
 
         return bitLength;
@@ -443,19 +413,19 @@ public class BigInt
 
     public int bitLength()
     {
-        if (nBitLength == -1)
+        if (_nBitLength == -1)
         {
-            if (sign == 0)
+            if (_sign == 0)
             {
-                nBitLength = 0;
+                _nBitLength = 0;
             }
             else
             {
-                nBitLength = bitLength(0, magnitude);
+                _nBitLength = bitLength(0, _magnitude);
             }
         }
 
-        return nBitLength;
+        return _nBitLength;
     }
 
     //
@@ -485,21 +455,7 @@ public class BigInt
                     : (w < 1 << 29 ? (w < 1 << 28 ? 28 : 29) : (w < 1 << 30 ? 30 : 31)))));
     }
 
-    private readonly static byte[] bitLengths =
-    {
-        0, 1, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4,
-        5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6,
-        6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7,
-        7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7,
-        7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 8, 8, 8, 8,
-        8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
-        8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
-        8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
-        8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
-        8, 8, 8, 8, 8, 8, 8, 8
-    };
-
-    public int compareTo(Object o)
+    public int compareTo(object o)
     {
         return compareTo((BigInt)o);
     }
@@ -534,8 +490,8 @@ public class BigInt
 
         while (xIndx < x.Length)
         {
-            long v1 = (long)(x[xIndx++]) & IMASK;
-            long v2 = (long)(y[yIndx++]) & IMASK;
+            var v1 = x[xIndx++] & IntMask;
+            var v2 = y[yIndx++] & IntMask;
             if (v1 < v2)
             {
                 return -1;
@@ -552,12 +508,12 @@ public class BigInt
 
     public int compareTo(BigInt val)
     {
-        if (sign < val.sign)
+        if (_sign < val._sign)
             return -1;
-        if (sign > val.sign)
+        if (_sign > val._sign)
             return 1;
 
-        return compareTo(0, magnitude, 0, val.magnitude);
+        return compareTo(0, _magnitude, 0, val._magnitude);
     }
 
     /**
@@ -566,23 +522,23 @@ public class BigInt
          */
     private int[] divide(int[] x, int[] y)
     {
-        int xyCmp = compareTo(0, x, 0, y);
+        var xyCmp = compareTo(0, x, 0, y);
         int[] count;
 
         if (xyCmp > 0)
         {
             int[] c;
 
-            int shift = bitLength(0, x) - bitLength(0, y);
+            var shift = bitLength(0, x) - bitLength(0, y);
 
             if (shift > 1)
             {
                 c = shiftLeft(y, shift - 1);
-                count = shiftLeft(ONE.magnitude, shift - 1);
+                count = shiftLeft(ONE._magnitude, shift - 1);
                 if (shift % 32 == 0)
                 {
                     // Special case where the shift is the size of an int.
-                    int[] countSpecial = new int[shift / 32 + 1];
+                    var countSpecial = new int[shift / 32 + 1];
                     Array.Copy(count, 0, countSpecial, 1, countSpecial.Length - 1);
                     countSpecial[0] = 0;
                     count = countSpecial;
@@ -597,18 +553,18 @@ public class BigInt
                 count[0] = 1;
             }
 
-            int[] iCount = new int[count.Length];
+            var iCount = new int[count.Length];
 
             subtract(0, x, 0, c);
             Array.Copy(count, 0, iCount, 0, count.Length);
 
-            int xStart = 0;
-            int cStart = 0;
-            int iCountStart = 0;
+            var xStart = 0;
+            var cStart = 0;
+            var iCountStart = 0;
 
             for (;;)
             {
-                int cmp = compareTo(xStart, x, cStart, c);
+                var cmp = compareTo(xStart, x, cStart, c);
 
                 while (cmp >= 0)
                 {
@@ -651,8 +607,8 @@ public class BigInt
                 }
                 else if (xyCmp == 0)
                 {
-                    add(count, ONE.magnitude);
-                    for (int i = xStart; i != x.Length; i++)
+                    add(count, ONE._magnitude);
+                    for (var i = xStart; i != x.Length; i++)
                     {
                         x[i] = 0;
                     }
@@ -683,77 +639,76 @@ public class BigInt
 
     public BigInt divide(BigInt val) //throws ArithmeticException
     {
-        if (val.sign == 0)
+        if (val._sign == 0)
         {
             throw new ArithmeticException("Divide by zero");
         }
 
-        if (sign == 0)
+        if (_sign == 0)
         {
-            return BigInt.ZERO;
+            return ZERO;
         }
 
-        if (val.compareTo(BigInt.ONE) == 0)
+        if (val.compareTo(ONE) == 0)
         {
             return this;
         }
 
-        int[] mag = new int[this.magnitude.Length];
-        Array.Copy(this.magnitude, 0, mag, 0, mag.Length);
+        var mag = new int[_magnitude.Length];
+        Array.Copy(_magnitude, 0, mag, 0, mag.Length);
 
-        return new BigInt(this.sign * val.sign, divide(mag, val.magnitude));
+        return new BigInt(_sign * val._sign, divide(mag, val._magnitude));
     }
 
     public BigInt[] divideAndRemainder(BigInt val) //throws ArithmeticException
     {
-        if (val.sign == 0)
+        if (val._sign == 0)
         {
             throw new ArithmeticException("Divide by zero");
         }
 
-        BigInt[] biggies = new BigInt[2];
+        var biggies = new BigInt[2];
 
-        if (sign == 0)
+        if (_sign == 0)
         {
-            biggies[0] = biggies[1] = BigInt.ZERO;
+            biggies[0] = biggies[1] = ZERO;
 
             return biggies;
         }
 
-        if (val.compareTo(BigInt.ONE) == 0)
+        if (val.compareTo(ONE) == 0)
         {
             biggies[0] = this;
-            biggies[1] = BigInt.ZERO;
+            biggies[1] = ZERO;
 
             return biggies;
         }
 
-        int[] remainder = new int[this.magnitude.Length];
-        Array.Copy(this.magnitude, 0, remainder, 0, remainder.Length);
+        var remainder = new int[_magnitude.Length];
+        Array.Copy(_magnitude, 0, remainder, 0, remainder.Length);
 
-        int[] quotient = divide(remainder, val.magnitude);
+        var quotient = divide(remainder, val._magnitude);
 
-        biggies[0] = new BigInt(this.sign * val.sign, quotient);
-        biggies[1] = new BigInt(this.sign, remainder);
+        biggies[0] = new BigInt(_sign * val._sign, quotient);
+        biggies[1] = new BigInt(_sign, remainder);
 
         return biggies;
     }
 
-    public override bool Equals(Object val)
+    public override bool Equals(object? val)
     {
         if (val == this)
             return true;
 
-        if (!(typeof(BigInt).IsInstanceOfType(val)))
-            return false;
-        BigInt biggie = (BigInt)val;
-
-        if (biggie.sign != sign || biggie.magnitude.Length != magnitude.Length)
+        if (val is not BigInt biggie)
             return false;
 
-        for (int i = 0; i < magnitude.Length; i++)
+        if (biggie._sign != _sign || biggie._magnitude.Length != _magnitude.Length)
+            return false;
+
+        for (var i = 0; i < _magnitude.Length; i++)
         {
-            if (biggie.magnitude[i] != magnitude[i])
+            if (biggie._magnitude[i] != _magnitude[i])
                 return false;
         }
 
@@ -762,16 +717,16 @@ public class BigInt
 
     public BigInt gcd(BigInt val)
     {
-        if (val.sign == 0)
-            return this.abs();
-        else if (sign == 0)
+        if (val._sign == 0)
+            return abs();
+        if (_sign == 0)
             return val.abs();
 
         BigInt r;
-        BigInt u = this;
-        BigInt v = val;
+        var u = this;
+        var v = val;
 
-        while (v.sign != 0)
+        while (v._sign != 0)
         {
             r = u.mod(v);
             u = v;
@@ -788,25 +743,23 @@ public class BigInt
 
     public int intValue()
     {
-        if (magnitude.Length == 0)
+        if (_magnitude.Length == 0)
         {
             return 0;
         }
 
-        if (sign < 0)
+        if (_sign < 0)
         {
-            return -magnitude[magnitude.Length - 1];
+            return -_magnitude[_magnitude.Length - 1];
         }
-        else
-        {
-            return magnitude[magnitude.Length - 1];
-        }
+
+        return _magnitude[_magnitude.Length - 1];
     }
 
     /**
          * return whether or not a BigInteger is probably prime with a
          * probability of 1 - (1/2)**certainty.
-         * <p>
+         * 
          * From Knuth Vol 2, pg 395.
          */
     public bool isProbablePrime(int certainty)
@@ -816,7 +769,7 @@ public class BigInt
             return true;
         }
 
-        BigInt n = this.abs();
+        var n = abs();
 
         if (n.Equals(TWO))
         {
@@ -840,23 +793,22 @@ public class BigInt
         //
         // let n = 1 + 2^kq
         //
-        BigInt q = n.subtract(ONE);
-        int k = q.getLowestSetBit();
+        var q = n.subtract(ONE);
+        var k = q.getLowestSetBit();
 
         q = q.shiftRight(k);
 
-        Random rnd = new Random();
-        for (int i = 0; i <= certainty; i++)
+        for (var i = 0; i <= certainty; i++)
         {
             BigInt x;
 
             do
             {
-                x = new BigInt(n.bitLength(), rnd);
+                x = new BigInt(n.bitLength());
             } while (x.compareTo(ONE) <= 0 || x.compareTo(n) >= 0);
 
-            int j = 0;
-            BigInt y = x.modPow(q, n);
+            var j = 0;
+            var y = x.modPow(q, n);
 
             while (!((j == 0 && y.Equals(ONE)) || y.Equals(n.subtract(ONE))))
             {
@@ -879,31 +831,29 @@ public class BigInt
 
     public long longValue()
     {
-        long val = 0;
+        long val;
 
-        if (magnitude.Length == 0)
+        if (_magnitude.Length == 0)
         {
             return 0;
         }
 
-        if (magnitude.Length > 1)
+        if (_magnitude.Length > 1)
         {
-            val = ((long)magnitude[magnitude.Length - 2] << 32)
-                  | (magnitude[magnitude.Length - 1] & IMASK);
+            val = ((long)_magnitude[^2] << 32)
+                  | (_magnitude[^1] & IntMask);
         }
         else
         {
-            val = (magnitude[magnitude.Length - 1] & IMASK);
+            val = (_magnitude[^1] & IntMask);
         }
 
-        if (sign < 0)
+        if (_sign < 0)
         {
             return -val;
         }
-        else
-        {
-            return val;
-        }
+
+        return val;
     }
 
     public BigInt max(BigInt val)
@@ -918,34 +868,34 @@ public class BigInt
 
     public BigInt mod(BigInt m) //throws ArithmeticException
     {
-        if (m.sign <= 0)
+        if (m._sign <= 0)
         {
             throw new ArithmeticException("BigInteger: modulus is not positive");
         }
 
-        BigInt biggie = this.remainder(m);
+        var biggie = remainder(m);
 
-        return (biggie.sign >= 0 ? biggie : biggie.add(m));
+        return (biggie._sign >= 0 ? biggie : biggie.add(m));
     }
 
     public BigInt modInverse(BigInt m) //throws ArithmeticException
     {
-        if (m.sign != 1)
+        if (m._sign != 1)
         {
             throw new ArithmeticException("Modulus must be positive");
         }
 
-        BigInt x = new BigInt();
-        BigInt y = new BigInt();
+        var x = new BigInt();
+        var y = new BigInt();
 
-        BigInt gcd = BigInt.extEuclid(this, m, x, y);
+        var gcd = extEuclid(this, m, x, y);
 
-        if (!gcd.Equals(BigInt.ONE))
+        if (!gcd.Equals(ONE))
         {
             throw new ArithmeticException("Numbers not relatively prime.");
         }
 
-        if (x.compareTo(BigInt.ZERO) < 0)
+        if (x.compareTo(ZERO) < 0)
         {
             x = x.add(m);
         }
@@ -975,12 +925,12 @@ public class BigInt
     {
         BigInt res;
 
-        BigInt u1 = BigInt.ONE;
-        BigInt u3 = a;
-        BigInt v1 = BigInt.ZERO;
-        BigInt v3 = b;
+        var u1 = ONE;
+        var u3 = a;
+        var v1 = ZERO;
+        var v3 = b;
 
-        while (v3.compareTo(BigInt.ZERO) > 0)
+        while (v3.compareTo(ZERO) > 0)
         {
             BigInt q,
                 tn;
@@ -997,12 +947,12 @@ public class BigInt
             v3 = tn;
         }
 
-        u1Out.sign = u1.sign;
-        u1Out.magnitude = u1.magnitude;
+        u1Out._sign = u1._sign;
+        u1Out._magnitude = u1._magnitude;
 
         res = u3.subtract(u1.multiply(a)).divide(b);
-        u2Out.sign = res.sign;
-        u2Out.magnitude = res.magnitude;
+        u2Out._sign = res._sign;
+        u2Out._magnitude = res._magnitude;
 
         return u3;
     }
@@ -1012,7 +962,7 @@ public class BigInt
          */
     private void zero(int[] x)
     {
-        for (int i = 0; i != x.Length; i++)
+        for (var i = 0; i != x.Length; i++)
         {
             x[i] = 0;
         }
@@ -1023,66 +973,67 @@ public class BigInt
             BigInt m)
         //throws ArithmeticException
     {
-        int[] zVal = null;
-        int[] yAccum = null;
-        int[] yVal;
+        int[]? zVal = null;
+        int[]? yAccum = null;
 
         // Montgomery exponentiation is only possible if the modulus is odd,
         // but AFAIK, this is always the case for crypto algo's
-        bool useMonty = ((m.magnitude[m.magnitude.Length - 1] & 1) == 1);
+        var useMonty = ((m._magnitude[m._magnitude.Length - 1] & 1) == 1);
         long mQ = 0;
         if (useMonty)
         {
             mQ = m.getMQuote();
 
             // tmp = this * R mod m
-            BigInt tmp = this.shiftLeft(32 * m.magnitude.Length).mod(m);
-            zVal = tmp.magnitude;
+            var tmp = shiftLeft(32 * m._magnitude.Length).mod(m);
+            zVal = tmp._magnitude;
 
-            useMonty = (zVal.Length == m.magnitude.Length);
+            useMonty = (zVal.Length == m._magnitude.Length);
 
             if (useMonty)
             {
-                yAccum = new int[m.magnitude.Length + 1];
+                yAccum = new int[m._magnitude.Length + 1];
             }
         }
 
         if (!useMonty)
         {
-            if (magnitude.Length <= m.magnitude.Length)
+            if (_magnitude.Length <= m._magnitude.Length)
             {
                 //zAccum = new int[m.magnitude.Length * 2];
-                zVal = new int[m.magnitude.Length];
+                zVal = new int[m._magnitude.Length];
 
-                Array.Copy(magnitude, 0, zVal, zVal.Length - magnitude.Length,
-                    magnitude.Length);
+                Array.Copy(_magnitude, 0, zVal, zVal.Length - _magnitude.Length,
+                    _magnitude.Length);
             }
             else
             {
                 //
                 // in normal practice we'll never see this...
                 //
-                BigInt tmp = this.remainder(m);
+                var tmp = remainder(m);
 
                 //zAccum = new int[m.magnitude.Length * 2];
-                zVal = new int[m.magnitude.Length];
+                zVal = new int[m._magnitude.Length];
 
-                Array.Copy(tmp.magnitude, 0, zVal, zVal.Length - tmp.magnitude.Length,
-                    tmp.magnitude.Length);
+                Array.Copy(tmp._magnitude, 0, zVal, zVal.Length - tmp._magnitude.Length,
+                    tmp._magnitude.Length);
             }
 
-            yAccum = new int[m.magnitude.Length * 2];
+            yAccum = new int[m._magnitude.Length * 2];
         }
 
-        yVal = new int[m.magnitude.Length];
+        var yVal = new int[m._magnitude.Length];
+        if (zVal is null) throw new Exception("Failed to initialise zVal (code error)");
+        if (yAccum is null) throw new Exception("Failed to initialise yAccum (code error)");
 
         //
         // from LSW to MSW
         //
-        for (int i = 0; i < exponent.magnitude.Length; i++)
+        for (var i = 0; i < exponent._magnitude.Length; i++)
         {
-            int v = exponent.magnitude[i];
-            int bits = 0;
+            var v = exponent._magnitude[i];
+            var bits = 0;
 
             if (i == 0)
             {
@@ -1107,13 +1058,13 @@ public class BigInt
                 {
                     // Montgomery square algo doesn't exist, and a normal
                     // square followed by a Montgomery reduction proved to
-                    // be almost as heavy as a Montgomery mulitply.
-                    multiplyMonty(yAccum, yVal, yVal, m.magnitude, mQ);
+                    // be almost as heavy as a Montgomery multiply.
+                    multiplyMonty(yAccum, yVal, yVal, m._magnitude, mQ);
                 }
                 else
                 {
                     square(yAccum, yVal);
-                    remainder(yAccum, m.magnitude);
+                    remainder(yAccum, m._magnitude);
                     Array.Copy(yAccum, yAccum.Length - yVal.Length, yVal, 0, yVal.Length);
                     zero(yAccum);
                 }
@@ -1124,12 +1075,12 @@ public class BigInt
                 {
                     if (useMonty)
                     {
-                        multiplyMonty(yAccum, yVal, zVal, m.magnitude, mQ);
+                        multiplyMonty(yAccum, yVal, zVal, m._magnitude, mQ);
                     }
                     else
                     {
                         multiply(yAccum, yVal, zVal);
-                        remainder(yAccum, m.magnitude);
+                        remainder(yAccum, m._magnitude);
                         Array.Copy(yAccum, yAccum.Length - yVal.Length, yVal, 0,
                             yVal.Length);
                         zero(yAccum);
@@ -1143,12 +1094,12 @@ public class BigInt
             {
                 if (useMonty)
                 {
-                    multiplyMonty(yAccum, yVal, yVal, m.magnitude, mQ);
+                    multiplyMonty(yAccum, yVal, yVal, m._magnitude, mQ);
                 }
                 else
                 {
                     square(yAccum, yVal);
-                    remainder(yAccum, m.magnitude);
+                    remainder(yAccum, m._magnitude);
                     Array.Copy(yAccum, yAccum.Length - yVal.Length, yVal, 0, yVal.Length);
                     zero(yAccum);
                 }
@@ -1162,7 +1113,7 @@ public class BigInt
             // Return y * R^(-1) mod m by doing y * 1 * R^(-1) mod m
             zero(zVal);
             zVal[zVal.Length - 1] = 1;
-            multiplyMonty(yAccum, yVal, zVal, m.magnitude, mQ);
+            multiplyMonty(yAccum, yVal, zVal, m._magnitude, mQ);
         }
 
         return new BigInt(1, yVal);
@@ -1171,7 +1122,7 @@ public class BigInt
     /**
          * return w with w = x * x - w is assumed to have enough space.
          */
-    private int[] square(int[] w, int[] x)
+    private void square(int[] w, int[] x)
     {
         long u1,
             u2,
@@ -1182,46 +1133,44 @@ public class BigInt
             throw new ArgumentException("no I don't think so...");
         }
 
-        for (int i = x.Length - 1; i != 0; i--)
+        for (var i = x.Length - 1; i != 0; i--)
         {
-            long v = (x[i] & IMASK);
+            var v = (x[i] & IntMask);
 
             u1 = v * v;
             u2 = (long)((ulong)u1 >> 32);
-            u1 = u1 & IMASK;
+            u1 &= IntMask;
 
-            u1 += (w[2 * i + 1] & IMASK);
+            u1 += (w[2 * i + 1] & IntMask);
 
             w[2 * i + 1] = (int)u1;
             c = u2 + (u1 >> 32);
 
-            for (int j = i - 1; j >= 0; j--)
+            for (var j = i - 1; j >= 0; j--)
             {
-                u1 = (x[j] & IMASK) * v;
+                u1 = (x[j] & IntMask) * v;
                 u2 = (long)((ulong)u1 >> 31); // multiply by 2!
                 u1 = (u1 & 0x7fffffff) << 1; // multiply by 2!
-                u1 += (w[i + j + 1] & IMASK) + c;
+                u1 += (w[i + j + 1] & IntMask) + c;
 
                 w[i + j + 1] = (int)u1;
                 c = u2 + (long)((ulong)u1 >> 32);
             }
 
-            c += w[i] & IMASK;
+            c += w[i] & IntMask;
             w[i] = (int)c;
             w[i - 1] = (int)(c >> 32);
         }
 
-        u1 = (x[0] & IMASK);
-        u1 = u1 * u1;
+        u1 = (x[0] & IntMask);
+        u1 *= u1;
         u2 = (long)((ulong)u1 >> 32);
-        u1 = u1 & IMASK;
+        u1 &= IntMask;
 
-        u1 += (w[1] & IMASK);
+        u1 += (w[1] & IntMask);
 
         w[1] = (int)u1;
         w[0] = (int)(u2 + (u1 >> 32) + w[0]);
-
-        return w;
     }
 
     /**
@@ -1229,14 +1178,14 @@ public class BigInt
          */
     private int[] multiply(int[] x, int[] y, int[] z)
     {
-        for (int i = z.Length - 1; i >= 0; i--)
+        for (var i = z.Length - 1; i >= 0; i--)
         {
-            long a = z[i] & IMASK;
+            var a = z[i] & IntMask;
             long value = 0;
 
-            for (int j = y.Length - 1; j >= 0; j--)
+            for (var j = y.Length - 1; j >= 0; j--)
             {
-                value += a * (y[j] & IMASK) + (x[i + j + 1] & IMASK);
+                value += a * (y[j] & IntMask) + (x[i + j + 1] & IntMask);
 
                 x[i + j + 1] = (int)value;
 
@@ -1254,73 +1203,73 @@ public class BigInt
          */
     private long getMQuote()
     {
-        if (mQuote != -1L)
+        if (_mQuote != -1L)
         {
             // allready calculated
-            return mQuote;
+            return _mQuote;
         }
 
-        if ((magnitude[magnitude.Length - 1] & 1) == 0)
+        if ((_magnitude[_magnitude.Length - 1] & 1) == 0)
         {
             return -1L; // not for even numbers
         }
 
         byte[] bytes = { 1, 0, 0, 0, 0 };
-        BigInt b = new BigInt(1, bytes); // 2^32
-        mQuote = this.negate().mod(b).modInverse(b).longValue();
-        return mQuote;
+        var b = new BigInt(1, bytes); // 2^32
+        _mQuote = negate().mod(b).modInverse(b).longValue();
+        return _mQuote;
     }
 
     /**
          * Montgomery multiplication: a = x * y * R^(-1) mod m
-         * <br>
+         *
          * Based algorithm 14.36 of Handbook of Applied Cryptography.
-         * <br>
+         *
          * <li> m, x, y should have length n </li>
          * <li> a should have length (n + 1) </li>
          * <li> b = 2^32, R = b^n </li>
-         * <br>
+         *
          * The result is put in x
-         * <br>
+         *
          * NOTE: the indices of x, y, m, a different in HAC and in Java
          */
     public void multiplyMonty(int[] a, int[] x, int[] y, int[] m, long mQuote)
         // mQuote = -m^(-1) mod b
     {
-        int n = m.Length;
-        int nMinus1 = n - 1;
-        long y_0 = y[n - 1] & IMASK;
+        var n = m.Length;
+        var nMinus1 = n - 1;
+        var y_0 = y[n - 1] & IntMask;
 
         // 1. a = 0 (Notation: a = (a_{n} a_{n-1} ... a_{0})_{b} )
-        for (int i = 0; i <= n; i++)
+        for (var i = 0; i <= n; i++)
         {
             a[i] = 0;
         }
 
         // 2. for i from 0 to (n - 1) do the following:
-        for (int i = n; i > 0; i--)
+        for (var i = n; i > 0; i--)
         {
-            long x_i = x[i - 1] & IMASK;
+            var x_i = x[i - 1] & IntMask;
 
             // 2.1 u = ((a[0] + (x[i] * y[0]) * mQuote) mod b
-            long u = ((((a[n] & IMASK) + ((x_i * y_0) & IMASK)) & IMASK) * mQuote) & IMASK;
+            var u = ((((a[n] & IntMask) + ((x_i * y_0) & IntMask)) & IntMask) * mQuote) & IntMask;
 
             // 2.2 a = (a + x_i * y + u * m) / b
-            long prod1 = x_i * y_0;
-            long prod2 = u * (m[n - 1] & IMASK);
-            long tmp = (a[n] & IMASK) + (prod1 & IMASK) + (prod2 & IMASK);
-            long carry = (long)((ulong)prod1 >> 32) + (long)((ulong)prod2 >> 32) + (long)((ulong)tmp >> 32);
-            for (int j = nMinus1; j > 0; j--)
+            var prod1 = x_i * y_0;
+            var prod2 = u * (m[n - 1] & IntMask);
+            var tmp = (a[n] & IntMask) + (prod1 & IntMask) + (prod2 & IntMask);
+            var carry = (long)((ulong)prod1 >> 32) + (long)((ulong)prod2 >> 32) + (long)((ulong)tmp >> 32);
+            for (var j = nMinus1; j > 0; j--)
             {
-                prod1 = x_i * (y[j - 1] & IMASK);
-                prod2 = u * (m[j - 1] & IMASK);
-                tmp = (a[j] & IMASK) + (prod1 & IMASK) + (prod2 & IMASK) + (carry & IMASK);
+                prod1 = x_i * (y[j - 1] & IntMask);
+                prod2 = u * (m[j - 1] & IntMask);
+                tmp = (a[j] & IntMask) + (prod1 & IntMask) + (prod2 & IntMask) + (carry & IntMask);
                 carry = (long)((ulong)carry >> 32) + (long)((ulong)prod1 >> 32) +
                         (long)((ulong)prod2 >> 32) + (long)((ulong)tmp >> 32);
                 a[j + 1] = (int)tmp; // division by b
             }
 
-            carry += (a[0] & IMASK);
+            carry += (a[0] & IntMask);
             a[1] = (int)carry;
             a[0] = (int)((ulong)carry >> 32); // OJO!!!!!
         }
@@ -1332,7 +1281,7 @@ public class BigInt
         }
 
         // put the result in x
-        for (int i = 0; i < n; i++)
+        for (var i = 0; i < n; i++)
         {
             x[i] = a[i + 1];
         }
@@ -1340,29 +1289,29 @@ public class BigInt
 
     public BigInt multiply(BigInt val)
     {
-        if (sign == 0 || val.sign == 0)
-            return BigInt.ZERO;
+        if (_sign == 0 || val._sign == 0)
+            return ZERO;
 
-        int[] res = new int[magnitude.Length + val.magnitude.Length];
+        var res = new int[_magnitude.Length + val._magnitude.Length];
 
-        return new BigInt(sign * val.sign, multiply(res, magnitude, val.magnitude));
+        return new BigInt(_sign * val._sign, multiply(res, _magnitude, val._magnitude));
     }
 
     public BigInt negate()
     {
-        return new BigInt(-sign, magnitude);
+        return new BigInt(-_sign, _magnitude);
     }
 
     public BigInt pow(int exp) //throws ArithmeticException
     {
         if (exp < 0)
             throw new ArithmeticException("Negative exponent");
-        if (sign == 0)
-            return (exp == 0 ? BigInt.ONE : this);
+        if (_sign == 0)
+            return (exp == 0 ? ONE : this);
 
         BigInt y,
             z;
-        y = BigInt.ONE;
+        y = ONE;
         z = this;
 
         while (exp != 0)
@@ -1387,12 +1336,12 @@ public class BigInt
          */
     private int[] remainder(int[] x, int[] y)
     {
-        int xyCmp = compareTo(0, x, 0, y);
+        var xyCmp = compareTo(0, x, 0, y);
 
         if (xyCmp > 0)
         {
             int[] c;
-            int shift = bitLength(0, x) - bitLength(0, y);
+            var shift = bitLength(0, x) - bitLength(0, y);
 
             if (shift > 1)
             {
@@ -1407,12 +1356,12 @@ public class BigInt
 
             subtract(0, x, 0, c);
 
-            int xStart = 0;
-            int cStart = 0;
+            var xStart = 0;
+            var cStart = 0;
 
             for (;;)
             {
-                int cmp = compareTo(xStart, x, cStart, c);
+                var cmp = compareTo(xStart, x, cStart, c);
 
                 while (cmp >= 0)
                 {
@@ -1447,7 +1396,7 @@ public class BigInt
                 }
                 else if (xyCmp == 0)
                 {
-                    for (int i = xStart; i != x.Length; i++)
+                    for (var i = xStart; i != x.Length; i++)
                     {
                         x[i] = 0;
                     }
@@ -1462,7 +1411,7 @@ public class BigInt
         }
         else if (xyCmp == 0)
         {
-            for (int i = 0; i != x.Length; i++)
+            for (var i = 0; i != x.Length; i++)
             {
                 x[i] = 0;
             }
@@ -1473,21 +1422,21 @@ public class BigInt
 
     public BigInt remainder(BigInt val) //throws ArithmeticException
     {
-        if (val.sign == 0)
+        if (val._sign == 0)
         {
             throw new ArithmeticException("BigInteger: Divide by zero");
         }
 
-        if (sign == 0)
+        if (_sign == 0)
         {
-            return BigInt.ZERO;
+            return ZERO;
         }
 
-        int[] res = new int[this.magnitude.Length];
+        var res = new int[_magnitude.Length];
 
-        Array.Copy(this.magnitude, 0, res, 0, res.Length);
+        Array.Copy(_magnitude, 0, res, 0, res.Length);
 
-        return new BigInt(sign, remainder(res, val.magnitude));
+        return new BigInt(_sign, remainder(res, val._magnitude));
     }
 
     /**
@@ -1495,24 +1444,24 @@ public class BigInt
          */
     private int[] shiftLeft(int[] mag, int n)
     {
-        int nInts = (int)((uint)n >> 5);
-        int nBits = n & 0x1f;
-        int magLen = mag.Length;
-        int[] newMag = null;
+        var nInts = (int)((uint)n >> 5);
+        var nBits = n & 0x1f;
+        var magLen = mag.Length;
+        int[] newMag;
 
         if (nBits == 0)
         {
             newMag = new int[magLen + nInts];
-            for (int i = 0; i < magLen; i++)
+            for (var i = 0; i < magLen; i++)
             {
                 newMag[i] = mag[i];
             }
         }
         else
         {
-            int i = 0;
-            int nBits2 = 32 - nBits;
-            int highBits = (int)((uint)mag[0] >> nBits2);
+            var i = 0;
+            var nBits2 = 32 - nBits;
+            var highBits = (int)((uint)mag[0] >> nBits2);
 
             if (highBits != 0)
             {
@@ -1524,10 +1473,10 @@ public class BigInt
                 newMag = new int[magLen + nInts];
             }
 
-            int m = mag[0];
-            for (int j = 0; j < magLen - 1; j++)
+            var m = mag[0];
+            for (var j = 0; j < magLen - 1; j++)
             {
-                int next = mag[j + 1];
+                var next = mag[j + 1];
 
                 newMag[i++] = (m << nBits) | (int)((uint)next >> nBits2);
                 m = next;
@@ -1541,7 +1490,7 @@ public class BigInt
 
     public BigInt shiftLeft(int n)
     {
-        if (sign == 0 || magnitude.Length == 0)
+        if (_sign == 0 || _magnitude.Length == 0)
         {
             return ZERO;
         }
@@ -1556,7 +1505,7 @@ public class BigInt
             return shiftRight(-n);
         }
 
-        return new BigInt(sign, shiftLeft(magnitude, n));
+        return new BigInt(_sign, shiftLeft(_magnitude, n));
     }
 
     /**
@@ -1564,20 +1513,20 @@ public class BigInt
          */
     private int[] shiftRight(int start, int[] mag, int n)
     {
-        int nInts = (int)((uint)n >> 5) + start;
-        int nBits = n & 0x1f;
-        int magLen = mag.Length;
+        var nInts = (int)((uint)n >> 5) + start;
+        var nBits = n & 0x1f;
+        var magLen = mag.Length;
 
         if (nInts != start)
         {
-            int delta = (nInts - start);
+            var delta = (nInts - start);
 
-            for (int i = magLen - 1; i >= nInts; i--)
+            for (var i = magLen - 1; i >= nInts; i--)
             {
                 mag[i] = mag[i - delta];
             }
 
-            for (int i = nInts - 1; i >= start; i--)
+            for (var i = nInts - 1; i >= start; i--)
             {
                 mag[i] = 0;
             }
@@ -1585,12 +1534,12 @@ public class BigInt
 
         if (nBits != 0)
         {
-            int nBits2 = 32 - nBits;
-            int m = mag[magLen - 1];
+            var nBits2 = 32 - nBits;
+            var m = mag[magLen - 1];
 
-            for (int i = magLen - 1; i >= nInts + 1; i--)
+            for (var i = magLen - 1; i >= nInts + 1; i--)
             {
-                int next = mag[i - 1];
+                var next = mag[i - 1];
 
                 mag[i] = (int)((uint)m >> nBits) | (next << nBits2);
                 m = next;
@@ -1607,13 +1556,13 @@ public class BigInt
          */
     private int[] shiftRightOne(int start, int[] mag)
     {
-        int magLen = mag.Length;
+        var magLen = mag.Length;
 
-        int m = mag[magLen - 1];
+        var m = mag[magLen - 1];
 
-        for (int i = magLen - 1; i >= start + 1; i--)
+        for (var i = magLen - 1; i >= start + 1; i--)
         {
-            int next = mag[i - 1];
+            var next = mag[i - 1];
 
             mag[i] = ((int)((uint)m >> 1)) | (next << 31);
             m = next;
@@ -1638,19 +1587,19 @@ public class BigInt
 
         if (n >= bitLength())
         {
-            return (this.sign < 0 ? valueOf(-1) : BigInt.ZERO);
+            return (_sign < 0 ? valueOf(-1) : ZERO);
         }
 
-        int[] res = new int[this.magnitude.Length];
+        var res = new int[_magnitude.Length];
 
-        Array.Copy(this.magnitude, 0, res, 0, res.Length);
+        Array.Copy(_magnitude, 0, res, 0, res.Length);
 
-        return new BigInt(this.sign, shiftRight(0, res, n));
+        return new BigInt(_sign, shiftRight(0, res, n));
     }
 
     public int signum()
     {
-        return sign;
+        return _sign;
     }
 
     /**
@@ -1658,14 +1607,14 @@ public class BigInt
          */
     private int[] subtract(int xStart, int[] x, int yStart, int[] y)
     {
-        int iT = x.Length - 1;
-        int iV = y.Length - 1;
+        var iT = x.Length - 1;
+        var iV = y.Length - 1;
         long m;
-        int borrow = 0;
+        var borrow = 0;
 
         do
         {
-            m = (((long)x[iT]) & IMASK) - (((long)y[iV--]) & IMASK) + borrow;
+            m = (x[iT] & IntMask) - (y[iV--] & IntMask) + borrow;
 
             x[iT--] = (int)m;
 
@@ -1681,7 +1630,7 @@ public class BigInt
 
         while (iT >= xStart)
         {
-            m = (((long)x[iT]) & IMASK) + borrow;
+            m = (x[iT] & IntMask) + borrow;
             x[iT--] = (int)m;
 
             if (m < 0)
@@ -1699,30 +1648,30 @@ public class BigInt
 
     public BigInt subtract(BigInt val)
     {
-        if (val.sign == 0 || val.magnitude.Length == 0)
+        if (val._sign == 0 || val._magnitude.Length == 0)
         {
             return this;
         }
 
-        if (sign == 0 || magnitude.Length == 0)
+        if (_sign == 0 || _magnitude.Length == 0)
         {
             return val.negate();
         }
 
-        if (val.sign < 0)
+        if (val._sign < 0)
         {
-            if (this.sign > 0)
-                return this.add(val.negate());
+            if (_sign > 0)
+                return add(val.negate());
         }
         else
         {
-            if (this.sign < 0)
-                return this.add(val.negate());
+            if (_sign < 0)
+                return add(val.negate());
         }
 
         BigInt bigun,
             littlun;
-        int compare = compareTo(val);
+        var compare = compareTo(val);
         if (compare == 0)
         {
             return ZERO;
@@ -1739,43 +1688,43 @@ public class BigInt
             littlun = val;
         }
 
-        int[] res = new int[bigun.magnitude.Length];
+        var res = new int[bigun._magnitude.Length];
 
-        Array.Copy(bigun.magnitude, 0, res, 0, res.Length);
+        Array.Copy(bigun._magnitude, 0, res, 0, res.Length);
 
-        return new BigInt(this.sign * compare, subtract(0, res, 0, littlun.magnitude));
+        return new BigInt(_sign * compare, subtract(0, res, 0, littlun._magnitude));
     }
 
     public byte[] toByteArray()
     {
-        int bitLength = this.bitLength();
-        byte[] bytes = new byte[bitLength / 8 + 1];
+        var bitLength = this.bitLength();
+        var bytes = new byte[bitLength / 8 + 1];
 
-        int bytesCopied = 4;
-        int mag = 0;
-        int ofs = magnitude.Length - 1;
-        int carry = 1;
+        var bytesCopied = 4;
+        var mag = 0;
+        var ofs = _magnitude.Length - 1;
+        var carry = 1;
         long lMag;
-        for (int i = bytes.Length - 1; i >= 0; i--)
+        for (var i = bytes.Length - 1; i >= 0; i--)
         {
             if (bytesCopied == 4 && ofs >= 0)
             {
-                if (sign < 0)
+                if (_sign < 0)
                 {
                     // we are dealing with a +ve number and we want a -ve one, so
                     // invert the magnitude ints and add 1 (propagating the carry)
                     // to make a 2's complement -ve number
-                    lMag = ~magnitude[ofs--] & IMASK;
+                    lMag = ~_magnitude[ofs--] & IntMask;
                     lMag += carry;
-                    if ((lMag & ~IMASK) != 0)
+                    if ((lMag & ~IntMask) != 0)
                         carry = 1;
                     else
                         carry = 0;
-                    mag = (int)(lMag & IMASK);
+                    mag = (int)(lMag & IntMask);
                 }
                 else
                 {
-                    mag = magnitude[ofs--];
+                    mag = _magnitude[ofs--];
                 }
 
                 bytesCopied = 1;
@@ -1792,14 +1741,14 @@ public class BigInt
         return bytes;
     }
 
-    public override String ToString()
+    public override string ToString()
     {
         return ToString(10);
     }
 
-    public String ToString(int rdx)
+    public string ToString(int rdx)
     {
-        String format;
+        string format;
         switch (rdx)
         {
             case 10:
@@ -1812,50 +1761,46 @@ public class BigInt
                 throw new FormatException("Only base 10 or 16 are allowed");
         }
 
-        if (magnitude == null)
-        {
-            return "null";
-        }
-        else if (sign == 0)
+        if (_sign == 0)
         {
             return "0";
         }
 
-        String s = "";
-        String h;
+        var s = "";
+        string h;
 
         if (rdx == 16)
         {
-            for (int i = 0; i < magnitude.Length; i++)
+            for (var i = 0; i < _magnitude.Length; i++)
             {
-                h = "0000000" + magnitude[i].ToString("x");
+                h = "0000000" + _magnitude[i].ToString("x");
                 h = h.Substring(h.Length - 8);
-                s = s + h;
+                s += h;
             }
         }
         else
         {
             // This is algorithm 1a from chapter 4.4 in Seminumerical Algorithms, slow but it works
-            Stack S = new Stack();
-            BigInt bs = new BigInt(rdx.ToString());
+            var S = new Stack();
+            var bs = new BigInt(rdx.ToString());
             // The sign is handled separatly.
             // Notice however that for this to work, radix 16 _MUST_ be a special case,
             // unless we want to enter a recursion well. In their infinite wisdom, why did not 
             // the Sun engineers made a c'tor for BigIntegers taking a BigInteger as parameter?
             // (Answer: Becuase Sun's BigIntger is clonable, something bouncycastle's isn't.)
-            BigInt u = new BigInt(this.abs().ToString(16), 16);
+            var u = new BigInt(abs().ToString(16), 16);
             BigInt b;
 
             // For speed, maye these test should look directly a u.magnitude.Length?
-            while (!u.Equals(BigInt.ZERO))
+            while (!u.Equals(ZERO))
             {
                 b = u.mod(bs);
-                if (b.Equals(BigInt.ZERO))
+                if (b.Equals(ZERO))
                     S.Push("0");
                 else
                 {
                     // see how to interact with different bases
-                    S.Push(b.magnitude[0].ToString(format));
+                    S.Push(b._magnitude[0].ToString(format));
                 }
 
                 u = u.divide(bs);
@@ -1863,7 +1808,7 @@ public class BigInt
 
             // Then pop the stack
             while (S.Count != 0)
-                s = s + S.Pop();
+                s += S.Pop();
         }
 
         // Strip leading zeros.
@@ -1872,7 +1817,7 @@ public class BigInt
 
         if (s.Length == 0)
             s = "0";
-        else if (sign == -1)
+        else if (_sign == -1)
             s = "-" + s;
 
         return s;
@@ -1886,12 +1831,12 @@ public class BigInt
     {
         if (val == 0)
         {
-            return BigInt.ZERO;
+            return ZERO;
         }
 
         // store val into a byte array
-        byte[] b = new byte[8];
-        for (int i = 0; i < 8; i++)
+        var b = new byte[8];
+        for (var i = 0; i < 8; i++)
         {
             b[7 - i] = (byte)val;
             val >>= 8;
@@ -1900,7 +1845,7 @@ public class BigInt
         return new BigInt(b);
     }
 
-    private int max(int a, int b)
+    public int max(int a, int b)
     {
         if (a < b)
             return b;
@@ -1909,16 +1854,16 @@ public class BigInt
 
     public int getLowestSetBit()
     {
-        if (this.Equals(ZERO))
+        if (Equals(ZERO))
         {
             return -1;
         }
 
-        int w = magnitude.Length - 1;
+        var w = _magnitude.Length - 1;
 
         while (w >= 0)
         {
-            if (magnitude[w] != 0)
+            if (_magnitude[w] != 0)
             {
                 break;
             }
@@ -1926,11 +1871,11 @@ public class BigInt
             w--;
         }
 
-        int b = 31;
+        var b = 31;
 
         while (b > 0)
         {
-            if ((uint)(magnitude[w] << b) == 0x80000000)
+            if ((uint)(_magnitude[w] << b) == 0x80000000)
             {
                 break;
             }
@@ -1938,7 +1883,7 @@ public class BigInt
             b--;
         }
 
-        return (((magnitude.Length - 1) - w) * 32 + (31 - b));
+        return (((_magnitude.Length - 1) - w) * 32 + (31 - b));
     }
 
     public bool testBit(int n) //throws ArithmeticException
@@ -1948,11 +1893,11 @@ public class BigInt
             throw new ArithmeticException("Bit position must not be negative");
         }
 
-        if ((n / 32) >= magnitude.Length)
+        if ((n / 32) >= _magnitude.Length)
         {
-            return sign < 0;
+            return _sign < 0;
         }
 
-        return ((magnitude[(magnitude.Length - 1) - n / 32] >> (n % 32)) & 1) > 0;
+        return ((_magnitude[(_magnitude.Length - 1) - n / 32] >> (n % 32)) & 1) > 0;
     }
 }

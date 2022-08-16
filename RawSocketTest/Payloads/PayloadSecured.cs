@@ -28,7 +28,6 @@ public class PayloadSecured : MessagePayload
 */
     
     
-    private readonly IpProtocol? _firstHeader;
     public override PayloadType Type { get => PayloadType.SK; set { } }
     
     public override int Size => HeaderSize + Data.Length;
@@ -51,7 +50,6 @@ public class PayloadSecured : MessagePayload
         ReadData(data, ref idx, ref nextPayload);
         
         PlainBody = ikeCrypto.Decrypt(Data);
-        _firstHeader = null; // not sure if this is at all correct
     }
 
     /// <summary>

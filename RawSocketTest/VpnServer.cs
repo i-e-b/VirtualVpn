@@ -8,8 +8,7 @@ namespace RawSocketTest;
 public class VpnServer : IDisposable
 {
     private const int NonEspHeader = 0; // https://docs.strongswan.org/docs/5.9/features/natTraversal.html
-    
-    private int _messageCount;
+
     private readonly UdpServer _server;
     private readonly Dictionary<UInt64, VpnSession> _sessions = new();
     private readonly Dictionary<UInt32, ChildSa> _childSessions = new();
@@ -22,7 +21,6 @@ public class VpnServer : IDisposable
 
     public void Run()
     {
-        _messageCount = 0;
         Log.Debug("Setup");
         Json.DefaultParameters.EnableAnonymousTypes = true;
         Console.CancelKeyPress += StopRunning;
@@ -70,7 +68,6 @@ public class VpnServer : IDisposable
     private void IkeResponder(byte[] data, IPEndPoint sender)
     {
         // write capture to file for easy testing
-        _messageCount++;
         //var name = @$"C:\temp\IKEv2-{_messageCount}_Port-{sender.Port}_IKE.bin";
         //File.WriteAllBytes(name, data);
         Log.Info($"Got a 500 packet, {data.Length} bytes");
@@ -124,12 +121,10 @@ public class VpnServer : IDisposable
     /// </summary>
     private void SpeResponder(byte[] data, IPEndPoint sender)
     {
-        // write capture to file for easy testing
-        _messageCount++;
-        //var name = @$"C:\temp\IKEv2-{_messageCount}_Port-{sender.Port}_SPE.bin";
-        //File.WriteAllBytes(name, data);
+        if (data.Length < 1) return; // junk message
+
         Log.Info($"Got a 4500 packet, {data.Length} bytes");
-        
+
         // Check for keep-alive ping?
         if (data.Length < 4 && data[0] == 0xff)
         {

@@ -24,10 +24,8 @@ public class CryptoTests
         
         // The cipher should pad data out to required size, and remove on decoding.
         // So, any size input data should work.
-        var h1 = IpProtocol.MH;
         var plain1 = Encoding.ASCII.GetBytes("This is a private message, you should not see it in the encrypted text.");
         
-        var h2 = IpProtocol.IPV4;
         var plain2 = Encoding.ASCII.GetBytes("This is a private message. Lorem Ipsum is simply dummy text of the printing and typesetting industry.");
         
         var msg1 = subject.Encrypt(plain1);
