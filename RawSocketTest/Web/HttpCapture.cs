@@ -13,7 +13,8 @@ public class HttpCapture
     {
         _listener = new HttpListener();
         _listener.IgnoreWriteExceptions = true;
-        _listener.Prefixes.Add("http://localhost:8011/");
+
+        _listener.Prefixes.Add("http" + Settings.HttpPrefix);
         
         _thread = new Thread(RequestThread){IsBackground = true};
     }

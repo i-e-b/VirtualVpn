@@ -30,4 +30,10 @@ public static class Settings
     /// Otherwise it looks like StrongSwan log format.
     /// </summary>
     public const bool CodeModeForDescription = true;
+    
+    /// <summary>
+    /// Listener prefix for the web "airlift". This helps you pull logs.
+    /// </summary>
+    public const string HttpPrefix = "://+:8011/"; // <-- this will require root/admin access.
+    //public const string HttpPrefix = "://localhost:8011/"; // <-- use this if testing locally
 }
