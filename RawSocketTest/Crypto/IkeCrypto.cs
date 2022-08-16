@@ -405,6 +405,8 @@ public class IkeCrypto
         var hashSize = _integrity?.HashSize ?? 0;
         var cipherSize = encrypted.Length - initVectorSize - hashSize;
         
+        Log.Crypto($"IV={initVectorSize} bytes; Hash={hashSize} bytes; Cipher={cipherSize} bytes;");
+        
         // encrypted data is [ init vec ][ cipher text ][ checksum ]
         var iv = encrypted.Take(initVectorSize).ToArray();
         var cipherText = encrypted.Skip(initVectorSize).Take(cipherSize).ToArray();
@@ -422,7 +424,7 @@ public class IkeCrypto
         }
         
         var padLength = decrypted[^2]; // second last byte
-        if (padLength > decrypted.Length - 2) throw new Exception("Invalid decryption: Padding length exceeded message length");
+        if (padLength > decrypted.Length - 2) throw new Exception($"Invalid decryption: Padding length exceeded message length: Pad={padLength} bytes, Plaintext length={decrypted.Length} bytes");
         
         next = (IpProtocol)decrypted[^1]; // second last byte
         var messageBytes = decrypted.Length - padLength - 2;
