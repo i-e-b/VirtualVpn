@@ -332,32 +332,13 @@ public class VpnSession
         if (_lastSentMessageBytes is null) throw new Exception("IKE_AUTH stage reached without recording a last sent message? Auth cannot proceed.");
 
         // pvpn/server.py:301
-        var responsePayloadIdr = new PayloadIDr(IdType.ID_IPV4_ADDR, new byte[] { 185, 81, 252, 44 }, 0, 0); // should be configured
+        var responsePayloadIdr = new PayloadIDr(IdType.ID_IPV4_ADDR, Settings.LocalIpAddress, 0, 0); // must be same as ipsec.conf, otherwise auth will fail
         var mySkp = _myCrypto?.SkP;
         if (mySkp is null) throw new Exception("Local SK-p not established before IKE_AUTH received");
         var authData = GeneratePskAuth(_lastSentMessageBytes, _peerNonce, responsePayloadIdr, mySkp); // I think this is based on the last thing we sent
         Log.Debug($"    Auth data ({authData.Length} bytes) = {Bit.HexString(authData)}");
         
         Log.Debug($"    Chosen proposal: {Json.Freeze(chosenChildProposal)}");
-        
-        // Add "ping" support to our TSr?
-       /* tsr.Selectors.Add(new TrafficSelector
-        {
-            Type = TrafficSelectType.TS_IPV4_ADDR_RANGE,
-            Protocol = IpProtocol.ICMP,
-            StartPort = 2048,
-            EndPort = 2048,
-            StartAddress = new byte[] { 55,55,55,55 },
-            EndAddress = new byte[] { 55,55,55,55 }
-        });*/
-        /*
-         
-    Payload=TSi; Selectors=[Type=TS_IPV4_ADDR_RANGE, Pr=ICMP, Port=2048-2048, Address=159.69.13.13 - 159.69.13.126 |
-     Type=TS_IPV4_ADDR_RANGE, Pr=ANY, Port=0-65535, Address=159.69.13.13 - 159.69.13.126];
-    Payload=TSr; Selectors=[Type=TS_IPV4_ADDR_RANGE, Pr=ICMP, Port=2048-2048, Address=55.55.55.55 - 55.55.55.55 | 
-    Type=TS_IPV4_ADDR_RANGE, Pr=ANY, Port=0-65535, Address=55.55.0.0 - 55.55.255.255];
-
-*/
 
         // pvpn/server.py:309
         // Send our IKE_AUTH message back
@@ -365,10 +346,8 @@ public class VpnSession
             new PayloadSa(chosenChildProposal),
             tsi, tsr, // just accept whatever traffic selectors. We're virtual.
             responsePayloadIdr,
-            new PayloadAuth(AuthMethod.PSK, authData)
-            /*new PayloadNotify(IkeProtocolType.NONE, NotifyId.ADDITIONAL_IP4_ADDRESS, null, new byte[] { 55, 55, 55, 55 }),
-            new PayloadNotify(IkeProtocolType.NONE, NotifyId.MOBIKE_SUPPORTED, null, null),
-            new PayloadNotify(IkeProtocolType.NONE, NotifyId.REDIRECT_SUPPORTED, null, null)*/
+            new PayloadAuth(AuthMethod.PSK, authData),
+            new PayloadNotify(IkeProtocolType.NONE, NotifyId.REDIRECT_SUPPORTED, null, null)
         );
 
         var cpPayload = request.GetPayload<PayloadCp>();
