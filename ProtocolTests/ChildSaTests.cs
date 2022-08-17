@@ -3,6 +3,8 @@ using RawSocketTest;
 using RawSocketTest.Crypto;
 using RawSocketTest.Enums;
 using RawSocketTest.Helpers;
+using RawSocketTest.InternetProtocol;
+using SkinnyJson;
 
 namespace ProtocolTests;
 
@@ -10,10 +12,45 @@ namespace ProtocolTests;
 public class ChildSaTests
 {
     [Test]
+    public void deserialising_ping()
+    {
+        Json.DefaultParameters.EnableAnonymousTypes = true;
+        
+        var data = new byte[]
+        {
+            0x45, 0x00, 0x00, 0x54, 0xB8, 0x08, 0x40, 0x00, 0x40, 0x01, 0x53, 0x62, 0xC0, 0xA8, 0x00, 0x28, 0x37, 0x37, 0x37, 0x37, 0x08, 0x00, 0x9D, 0x7D, 0x00, 0x0E, 0x00, 0x01, 0x1D, 0x95, 0xFC, 0x62, 0x00, 0x00, 0x00, 0x00, 0x7A, 0xA8, 0x07, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F, 0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2A, 0x2B, 0x2C, 0x2D, 0x2E, 0x2F, 0x30, 0x31, 0x32, 0x33,
+            0x34, 0x35, 0x36, 0x37
+        };
+        
+        var ok = ByteSerialiser.FromBytes<IpPacket>(data, out var basicPacket);
+        
+        Assert.True(ok, "Deserialising failed");
+        
+        Console.WriteLine(TypeDescriber.Describe(basicPacket));
+        
+        Assert.That(basicPacket.Version, Is.EqualTo(IpV4Version.Version4), "Version");
+        Assert.That(basicPacket.Length, Is.EqualTo(5), "Length");
+        Assert.That(basicPacket.ServiceType, Is.EqualTo(0), "ServiceType");
+        Assert.That(basicPacket.TotalLength, Is.EqualTo(84), "TotalLength");
+        Assert.That(basicPacket.PacketId, Is.EqualTo(47112), "PacketId");
+        Assert.That(basicPacket.Flags, Is.EqualTo(IpV4HeaderFlags.DontFragment), "Flags");
+        Assert.That(basicPacket.FragmentIndex, Is.EqualTo(0), "FragmentIndex");
+        Assert.That(basicPacket.Ttl, Is.EqualTo(64), "Ttl");
+        Assert.That(basicPacket.Checksum, Is.EqualTo(21346), "Checksum");
+        Assert.That(basicPacket.Source.AsString, Is.EqualTo("192.168.0.40"), "IP source");
+        Assert.That(basicPacket.Destination.AsString, Is.EqualTo("55.55.55.55"), "IP dest");
+        Assert.That(basicPacket.Options, Is.Empty, "Options");
+        
+        Assert.That(basicPacket.Payload, Is.Not.Empty, "Payload");
+        
+    }
+
+    [Test]
     public void can_decode_ping()
     {
         Log.SetLevel(LogLevel.Everything);
-        Settings.CodeModeForDescription = false;
+        Settings.CodeModeForDescription = true;
         
         // Key sources --
         //prfId=PRF_HMAC_SHA2_256, integId=AUTH_HMAC_SHA2_256_128, cipherId=ENCR_AES_CBC, keyLength=128
@@ -113,7 +150,7 @@ public class ChildSaTests
         
         var ttl = plain[idx++];
         Console.WriteLine($"Time to live = {ttl}");
-        var protocol = (IpPayloadProtocol)plain[idx++];
+        var protocol = (IpV4Protocol)plain[idx++];
         Console.WriteLine($"Protocol = 0x{(byte)protocol:x2} ({protocol.ToString()})");
         
         var checksum = Bit.ReadUInt16(plain, ref idx);
@@ -139,7 +176,7 @@ public class ChildSaTests
         var subset = Bit.Subset(dataLength, plain, ref idx);
         Console.WriteLine(Bit.Describe("Packet payload", subset));
 
-        if (protocol == IpPayloadProtocol.ICMP) // https://en.wikipedia.org/wiki/Ping_(networking_utility)#Message_format
+        if (protocol == IpV4Protocol.ICMP) // https://en.wikipedia.org/wiki/Ping_(networking_utility)#Message_format
         {
             idx = 0;
             var type = (IcmpType)subset[idx++];

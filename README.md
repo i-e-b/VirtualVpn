@@ -1,5 +1,6 @@
 # VirtualVpn
-A IKEv2 VPN gateway that presents an application as if it was a private network
+
+An IKEv2 VPN gateway that presents an application as if it was on a private network
 
 This is currently not even slightly working
 
@@ -22,5 +23,24 @@ https://www.secfu.net/2017/12/23/the-ikev2-header-and-the-security-association-p
 
 ## Current issues & work-face
 
-- Need to complete SA transaction and try to get to first 'ping' payload
-- Need to be able to start a SA from this side
+### Now
+
+- https://en.wikipedia.org/wiki/Internet_checksum
+- https://en.wikipedia.org/wiki/IPv4#Header
+- https://en.wikipedia.org/wiki/List_of_IP_protocol_numbers
+- https://en.wikipedia.org/wiki/Ping_(networking_utility)#Message_format
+
+
+- [ ] Read IP packets
+- [ ] Encrypt ESP packets
+- [ ] Respond to ping (then dance around the room a bit)
+- [ ] Read wget and give some kind of dummy response
+
+### Next
+
+- [ ] Migrate Payloads to Bitwise serialiser?
+- [ ] Need to be able to start a SA from this side
+
+### Future
+
+- [ ] Either host an app, or pass network requests to one

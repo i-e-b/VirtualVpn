@@ -8,7 +8,7 @@ namespace RawSocketTest.Enums;
 /// Protocol as defined in IP packets.
 /// See https://en.wikipedia.org/wiki/List_of_IP_protocol_numbers
 /// </summary>
-public enum IpPayloadProtocol : byte
+public enum IpV4Protocol : byte
 {
     /// <summary>
     /// IPv6 Hop-by-Hop Option
