@@ -5,7 +5,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 
-namespace RawSocketTest;
+namespace RawSocketTest.Enums;
 
 // Huge piles of enums are a sign of a bad design...
 

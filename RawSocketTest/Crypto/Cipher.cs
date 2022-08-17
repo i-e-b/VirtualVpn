@@ -1,4 +1,5 @@
 ﻿using System.Security.Cryptography;
+using RawSocketTest.Enums;
 
 namespace RawSocketTest.Crypto;
 

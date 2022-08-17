@@ -259,11 +259,17 @@ public static class Bit
                     i++;
                     sb.Append(c);
                     break;
+                
                 case >= 'a' and <= 'z':
                 case >= 'A' and <= 'Z':
                 case '_':
                     i++;
                     sb.Append(c);
+                    break;
+                
+                case ' ':
+                    i++;
+                    sb.Append('_');
                     break;
             }
         }

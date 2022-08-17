@@ -1,4 +1,6 @@
-﻿namespace RawSocketTest.Payloads;
+﻿using RawSocketTest.Enums;
+
+namespace RawSocketTest.Payloads;
 
 /// <summary>
 /// Payload for messages we don't understand

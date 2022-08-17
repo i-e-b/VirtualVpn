@@ -1,6 +1,7 @@
 ﻿using NUnit.Framework;
 using RawSocketTest;
 using RawSocketTest.Crypto;
+using RawSocketTest.Enums;
 using RawSocketTest.Helpers;
 
 namespace ProtocolTests;
@@ -82,39 +83,41 @@ public class ChildSaTests
         var plain = cryptoIn.DecryptEsp(payload, out var next);
         
         Console.WriteLine(Bit.Describe("esp0_plain", plain));
-        Console.WriteLine($"Declared payload: {next.ToString()}");
+        Console.WriteLine($"Declared payload: {next.ToString()} (from ESP)");
         
-        Assert.That(plain.Length, Is.GreaterThan(5), "Decrypted length is invalid");
+        Assert.That(plain.Length, Is.GreaterThanOrEqualTo(20), "Decrypted length is invalid"); // must be at least a complete IP header
+        
+        // https://en.wikipedia.org/wiki/IPv4#Header
         
         var idx = 0;
         var versionAndLength = plain[idx++];
         var version = (byte)(versionAndLength >> 4);
-        var headerLength = (byte)(versionAndLength & 0x0f);
+        var headerLength = (byte)(versionAndLength & 0x0f); // count of 32bit words in header
         Console.WriteLine($"Version = {Bit.BinString(version)} (should be 0000 0100)");
-        Console.WriteLine($"Header length = {headerLength}");
+        Console.WriteLine($"Header length = {headerLength} (should be 5 unless 'options' used) -> {headerLength * 4} bytes");
         
         var serviceType = plain[idx++];
-        Console.WriteLine($"Service type = 0x{serviceType:x2}");
+        Console.WriteLine($"Service type = 0x{serviceType:x2} (usually 0x00 in IPv4. In IPv6, it's split between DSCP and ECN)"); // https://en.wikipedia.org/wiki/Type_of_service
         
         var totalLength = Bit.ReadUInt16(plain, ref idx);
-        Console.WriteLine($"Total length = {totalLength}");
+        Console.WriteLine($"Total length = {totalLength} (headers + data, must be >= 20)");
         
         var packetId = Bit.ReadUInt16(plain, ref idx);
-        Console.WriteLine($"Packet id = 0x{packetId:x4}");
+        Console.WriteLine($"Packet id = 0x{packetId:x4}"); // just a unique number among fragments
         
         var flagsAndFrags = Bit.ReadUInt16(plain, ref idx);
         var flags = (byte)(flagsAndFrags >> 13);
         var fragmentIndex = flagsAndFrags & 0x1fff;
-        Console.WriteLine($"Flags = {Bit.BinString(flags)} (expect 0000 0010 ?)");
-        Console.WriteLine($"Fragment index = {fragmentIndex}");
+        Console.WriteLine($"Flags = {Bit.BinString(flags)} (expect 0000 0010 ?)"); // [ zero ] [ don't fragment ] [ more fragments ]
+        Console.WriteLine($"Fragment offset = {fragmentIndex} (location in final packet data, in units of eight-byte blocks)");
         
         var ttl = plain[idx++];
         Console.WriteLine($"Time to live = {ttl}");
-        var protocol = plain[idx++];
-        Console.WriteLine($"Protocol = 0x{protocol:x2} ({protocol})");
+        var protocol = (IpPayloadProtocol)plain[idx++];
+        Console.WriteLine($"Protocol = 0x{(byte)protocol:x2} ({protocol.ToString()})");
         
         var checksum = Bit.ReadUInt16(plain, ref idx);
-        Console.WriteLine($"Checksum = 0x{checksum:x4}");
+        Console.WriteLine($"Checksum = 0x{checksum:x4}"); // https://en.wikipedia.org/wiki/Internet_checksum
         
         var source1 = plain[idx++]; var source2 = plain[idx++]; var source3 = plain[idx++]; var source4 = plain[idx++];
         Console.WriteLine($"Source = {source1}.{source2}.{source3}.{source4}");
@@ -128,11 +131,29 @@ public class ChildSaTests
             Console.WriteLine($"IP Options ({optionLength} bytes)");
             idx += optionLength;
         }
+        else Console.WriteLine("No IP options");
         
         var dataLength = plain.Length - idx;
         Console.WriteLine($"Packet data has {dataLength} bytes");
-        // todo: test the whole run
         
+        var subset = Bit.Subset(dataLength, plain, ref idx);
+        Console.WriteLine(Bit.Describe("Packet payload", subset));
+
+        if (protocol == IpPayloadProtocol.ICMP) // https://en.wikipedia.org/wiki/Ping_(networking_utility)#Message_format
+        {
+            idx = 0;
+            var type = (IcmpType)subset[idx++];
+            var code = subset[idx++]; // depends on type
+            var icmpChecksum = Bit.Subset(2,subset, ref idx);
+            var pingIdentifier = Bit.ReadUInt16(subset, ref idx);
+            var pingSequence = Bit.ReadUInt16(subset, ref idx);
+            var pingPayload = Bit.Subset(-1, subset, ref idx);
+            
+            Console.WriteLine($"ICMP message: Type={type.ToString()}; Code={code}; Checksum=0x{Bit.HexString(icmpChecksum)}");
+            Console.WriteLine($"If ping, ID={pingIdentifier}; Sequence={pingSequence}; Payload={Bit.HexString(pingPayload)}");
+        }
+
+        // todo: set-up child SA test the whole message handling path
         Assert.Inconclusive();
     }
 }

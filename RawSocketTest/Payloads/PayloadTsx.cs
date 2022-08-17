@@ -1,4 +1,5 @@
-﻿using RawSocketTest.Helpers;
+﻿using RawSocketTest.Enums;
+using RawSocketTest.Helpers;
 using RawSocketTest.Payloads.PayloadSubunits;
 
 namespace RawSocketTest.Payloads;

@@ -1,4 +1,5 @@
 ﻿using System.Text;
+using RawSocketTest.Enums;
 using RawSocketTest.Helpers;
 
 namespace RawSocketTest.Payloads;

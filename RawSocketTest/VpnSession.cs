@@ -2,6 +2,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using RawSocketTest.Crypto;
+using RawSocketTest.Enums;
 using RawSocketTest.gmpDh;
 using RawSocketTest.Helpers;
 using RawSocketTest.Payloads;

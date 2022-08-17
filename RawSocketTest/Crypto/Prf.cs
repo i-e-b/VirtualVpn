@@ -1,4 +1,7 @@
 ﻿// ReSharper disable InconsistentNaming
+
+using RawSocketTest.Enums;
+
 namespace RawSocketTest.Crypto;
 
 using System.Security.Cryptography;

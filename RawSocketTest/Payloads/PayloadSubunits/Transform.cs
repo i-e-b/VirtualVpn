@@ -1,4 +1,6 @@
-﻿namespace RawSocketTest.Payloads.PayloadSubunits;
+﻿using RawSocketTest.Enums;
+
+namespace RawSocketTest.Payloads.PayloadSubunits;
 
 public class Transform
 {

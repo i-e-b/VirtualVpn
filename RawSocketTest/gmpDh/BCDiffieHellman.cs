@@ -1,6 +1,7 @@
 ﻿using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using RawSocketTest.Crypto;
+using RawSocketTest.Enums;
 
 // ReSharper disable InconsistentNaming
 

@@ -1,6 +1,7 @@
 ﻿using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using MathGmp.Native;
+using RawSocketTest.Enums;
 using static MathGmp.Native.gmp_lib;
 
 // ReSharper disable InconsistentNaming

@@ -1,4 +1,7 @@
 ﻿// ReSharper disable CommentTypo
+
+using RawSocketTest.Enums;
+
 namespace RawSocketTest.gmpDh;
 
 public class GmpDhParameters

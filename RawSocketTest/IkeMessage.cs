@@ -1,6 +1,7 @@
 ﻿// ReSharper disable BuiltInTypeReferenceStyle
 
 using RawSocketTest.Crypto;
+using RawSocketTest.Enums;
 using RawSocketTest.Helpers;
 using RawSocketTest.Payloads;
 using SkinnyJson;

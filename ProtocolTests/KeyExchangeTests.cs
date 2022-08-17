@@ -1,6 +1,7 @@
 ﻿using NUnit.Framework;
 using RawSocketTest;
 using RawSocketTest.Crypto;
+using RawSocketTest.Enums;
 using RawSocketTest.gmpDh;
 using RawSocketTest.Helpers;
 

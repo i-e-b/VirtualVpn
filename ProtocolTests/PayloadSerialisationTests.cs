@@ -1,5 +1,6 @@
 ﻿using NUnit.Framework;
 using RawSocketTest;
+using RawSocketTest.Enums;
 using RawSocketTest.Payloads;
 using RawSocketTest.Payloads.PayloadSubunits;
 
