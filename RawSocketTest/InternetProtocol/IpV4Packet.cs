@@ -40,7 +40,7 @@ public class IpV4Packet
     public int Ttl;
     
     [BigEndian(bytes: 1, order:8)]
-    public int Protocol;
+    public IpV4Protocol Protocol;
     
     [BigEndian(bytes: 2, order:9)]
     public int Checksum;

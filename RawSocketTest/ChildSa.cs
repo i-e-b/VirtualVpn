@@ -58,13 +58,24 @@ public class ChildSa
     {
         Log.Info($"Not yet implemented: HandleSpe; data={data.Length} bytes, sender={sender}");
         
-        var ipPkt = ReadSpe(data, out var espPkt);
+        var incomingIpv4Message = ReadSpe(data, out var espPkt);
         
         
-        
-        
+        // IEB: just for now, only respond to PING
+        if (incomingIpv4Message.Protocol == IpV4Protocol.ICMP)
+        {
+            Log.Info("ICMP payload found");
+            
+            var ok = ByteSerialiser.FromBytes<IcmpPacket>(incomingIpv4Message.Payload, out var icmp);
+            if (!ok) throw new Exception("Could not read ICMP packet");
+
+            if (icmp.MessageType == IcmpType.EchoRequest) // this is a ping!
+            {
+                ReplyToPing(sender, icmp, incomingIpv4Message);
+            }
+        }
+
         IncrementMessageId(espPkt.Sequence);
-        
         
         // dump the crypto details if requested
         if (Settings.CaptureTraffic)
@@ -76,6 +87,42 @@ public class ChildSa
                 "\r\nCryptoOut=" + _cryptoOut.UnsafeDump()
             );
         }
+    }
+
+    private void ReplyToPing(IPEndPoint sender, IcmpPacket icmp, IpV4Packet incomingIpv4Message)
+    {
+        Log.Info("    It's a ping. Constructing reply.");
+        icmp.MessageType = IcmpType.EchoReply;
+        icmp.MessageCode = 0;
+        icmp.Checksum = 0;
+
+        var checksum = IpV4Packet.CalculateChecksum(ByteSerialiser.ToBytes(icmp));
+        icmp.Checksum = checksum;
+
+        var icmpData = ByteSerialiser.ToBytes(icmp);
+        var ipv4Reply = new IpV4Packet
+        {
+            Version = IpV4Version.Version4,
+            Length = 5,
+            ServiceType = 0,
+            TotalLength = 20 + icmpData.Length, // calculate later?
+            PacketId = 642, // should be random?
+            Flags = IpV4HeaderFlags.DontFragment,
+            FragmentIndex = 0,
+            Ttl = 64,
+            Protocol = IpV4Protocol.ICMP,
+            Checksum = 0,
+            Source = incomingIpv4Message.Destination,
+            Destination = incomingIpv4Message.Source,
+            Options = Array.Empty<byte>(),
+            Payload = icmpData
+        };
+
+        checksum = IpV4Packet.CalculateChecksum(ByteSerialiser.ToBytes(ipv4Reply));
+        ipv4Reply.Checksum = checksum;
+
+        var encryptedData = WriteSpe(ipv4Reply);
+        Reply(encryptedData, sender);
     }
 
     private void Reply(byte[] message, IPEndPoint to)
@@ -91,6 +138,10 @@ public class ChildSa
         _msgIdOut++;
     }
 
+    /// <summary>
+    /// Write SPE packet for an IPv4 payload.
+    /// Encrypts and adds SPE checksum. IPv4 checksum must be written before calling
+    /// </summary>
     public byte[] WriteSpe(IpV4Packet packet)
     {
         var plain = ByteSerialiser.ToBytes(packet);

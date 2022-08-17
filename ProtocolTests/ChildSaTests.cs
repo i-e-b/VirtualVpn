@@ -59,7 +59,6 @@ public class ChildSaTests
         var oldSum = basicPacket.Checksum;
         basicPacket.Checksum = 0;
         
-        // IEB: not writing partial bits properly!
         var newData = ByteSerialiser.ToBytes(basicPacket);
         var finalChecksum = IpV4Packet.CalculateChecksum(newData);
 
@@ -153,16 +152,45 @@ public class ChildSaTests
 
         var original = new IpV4Packet
         {
-            // TODO: add all fields
-            Checksum = 123456
+            Version = IpV4Version.Version4,
+            Length = 5,
+            ServiceType = 1,
+            TotalLength = 0x0203,
+            PacketId = 0x0405,
+            Flags = (IpV4HeaderFlags)0x07, // 0xE0 when shifted
+            FragmentIndex = 0x1FFF, // with above, comes out to FF FF if correct
+            Ttl = 0x08,
+            Protocol = 0x09,
+            Checksum = 0x1011,
+            Source = new IpV4Address{Value = new byte[]{0x12,0x13,0x14,0x15}},
+            Destination = new IpV4Address{Value = new byte[]{0x16,0x17,0x18,0x19}},
+            Options = Array.Empty<byte>(),
+            Payload = new byte[]
+            {
+                0x21,0x22,0x23
+            }
         };
         
         
         var generated = sender.WriteSpe(original);
         var recovered = receiver.ReadSpe(generated, out _);
         
+        Console.WriteLine(TypeDescriber.Describe(recovered));
+        
+        Assert.That(recovered.Version, Is.EqualTo(original.Version), "Version");
+        Assert.That(recovered.Length, Is.EqualTo(original.Length), "Length");
+        Assert.That(recovered.ServiceType, Is.EqualTo(original.ServiceType), "ServiceType");
+        Assert.That(recovered.TotalLength, Is.EqualTo(original.TotalLength), "TotalLength");
+        Assert.That(recovered.PacketId, Is.EqualTo(original.PacketId), "PacketId");
+        Assert.That(recovered.Flags, Is.EqualTo(original.Flags), "Flags");
+        Assert.That(recovered.FragmentIndex, Is.EqualTo(original.FragmentIndex), "FragmentIndex");
+        Assert.That(recovered.Ttl, Is.EqualTo(original.Ttl), "Ttl");
+        Assert.That(recovered.Protocol, Is.EqualTo(original.Protocol), "Protocol");
         Assert.That(recovered.Checksum, Is.EqualTo(original.Checksum), "Checksum");
-        Assert.Inconclusive("need to check all fields");
+        Assert.That(recovered.Source.Value, Is.EqualTo(original.Source.Value), "Source.Value");
+        Assert.That(recovered.Destination.Value, Is.EqualTo(original.Destination.Value), "Destination.Value");
+        Assert.That(recovered.Options, Is.EqualTo(original.Options), "Options");
+        Assert.That(recovered.Payload, Is.EqualTo(original.Payload), "Payload");
     }
 
     [Test]
