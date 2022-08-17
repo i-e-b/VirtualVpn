@@ -11,6 +11,36 @@ namespace ProtocolTests;
 public class ChildSaTests
 {
     [Test]
+    public void ipv4_writing()
+    {
+        IpV4Packet basicPacket = new IpV4Packet
+        {
+            Version = IpV4Version.Version4,
+            Length = 5,
+            ServiceType = 1,
+            TotalLength = 0x0203,
+            PacketId = 0x0405,
+            Flags = (IpV4HeaderFlags)0x07, // 0xE0 when shifted
+            FragmentIndex = 0x1FFF, // comes out to FF FF if correct
+            Ttl = 0x08,
+            Protocol = 0x09,
+            Checksum = 0x1011,
+            Source = new IpV4Address{Value = new byte[]{0x12,0x13,0x14,0x15}},
+            Destination = new IpV4Address{Value = new byte[]{0x16,0x17,0x18,0x19}},
+            Options = new byte[]
+            {
+               0x20
+            },
+            Payload = new byte[]
+            {
+                0x21,0x22,0x23
+            }
+        };
+        var newData = ByteSerialiser.ToBytes(basicPacket);
+        Console.WriteLine(Bit.Describe("new", newData));
+    }
+
+    [Test]
     public void ipv4_checksum()
     {
         var data = new byte[]
