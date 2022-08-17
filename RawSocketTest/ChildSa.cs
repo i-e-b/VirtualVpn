@@ -65,5 +65,14 @@ public class ChildSa
     public void HandleSpe(byte[] data, IPEndPoint sender)
     {
         Log.Info($"Not yet implemented: HandleSpe; data={data.Length} bytes, sender={sender}");
+        
+        // For now, dump the crypto details
+        
+        File.WriteAllText(Settings.FileBase+"CSA.txt",
+            Bit.Describe("SPI-in", _spiIn)+
+            Bit.Describe("SPI-out", _spiOut)+
+            "\r\nCryptoIn="+_cryptoIn.UnsafeDump()+
+            "\r\nCryptoOut="+_cryptoOut.UnsafeDump()
+            );
     }
 }

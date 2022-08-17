@@ -106,8 +106,13 @@ public class ChildSaTests
         Console.WriteLine($"SPI = 0x{Bit.HexString(spi)}");
         Console.WriteLine($"ESP Sequence = 0x{Bit.HexString(seq)}");
         
-        
-        
+        /* IEB: I think I've got the crypto for the IKE, but I need the crypto from the ChildSA
+         
+         1. Add an export from the child SA (including the SPI for keying)
+         2. Reimport the data above
+         3. Test things!
+         
+        */
         // Decode!
         var payload = esp0.Skip(8).ToArray();
         var plain = cryptoIn.DecryptEsp(payload, out var next);

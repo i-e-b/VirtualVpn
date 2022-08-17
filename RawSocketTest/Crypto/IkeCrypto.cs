@@ -433,4 +433,24 @@ public class IkeCrypto
         
         return decrypted.Take(messageBytes).ToArray();
     }
+
+    /// <summary>
+    /// Output all keys to a string
+    /// </summary>
+    public string UnsafeDump()
+    {
+        var sb = new StringBuilder();
+        
+        sb.Append(Bit.Describe("skE", _skE));
+        sb.Append(Bit.Describe("skA", _skA));
+        sb.Append(Bit.Describe("skP", _skP));
+        sb.Append(Bit.Describe("lastIv", _lastIv));
+
+        foreach (var vector in _vectors)
+        {
+            sb.Append(Bit.Describe($"vector_{vector.Key}", vector.Value));
+        }
+        
+        return sb.ToString();
+    }
 }

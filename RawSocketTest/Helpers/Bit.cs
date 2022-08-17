@@ -249,14 +249,20 @@ public static class Bit
     {
         var sb = new StringBuilder();
 
-        sb.Append('m');
+        var i = 0;
         foreach (var c in name)
         {
             switch (c)
             {
                 case >= '0' and <= '9':
+                    if (i==0) sb.Append('_');
+                    i++;
+                    sb.Append(c);
+                    break;
                 case >= 'a' and <= 'z':
                 case >= 'A' and <= 'Z':
+                case '_':
+                    i++;
                     sb.Append(c);
                     break;
             }
@@ -265,13 +271,13 @@ public static class Bit
         return sb.ToString();
     }
 
-    public static byte[] ParseBytes(string pstr)
+    public static byte[] ParseBytes(string pStr)
     {
         var accum = new List<byte>();
 
-        for (int i = 0; i < pstr.Length; i += 2)
+        for (int i = 0; i < pStr.Length; i += 2)
         {
-            accum.Add(byte.Parse($"{pstr[i]}{pstr[i+1]}",NumberStyles.HexNumber));
+            accum.Add(byte.Parse($"{pStr[i]}{pStr[i+1]}",NumberStyles.HexNumber));
         }
         
         return accum.ToArray();
