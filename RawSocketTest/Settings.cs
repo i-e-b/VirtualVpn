@@ -18,7 +18,7 @@ public static class Settings
     /// <summary>
     /// If true, traffic will be captured into files
     /// </summary>
-    public const bool CaptureTraffic = true;
+    public static bool CaptureTraffic = true;
     
     /// <summary>
     /// Log level that will be set at startup

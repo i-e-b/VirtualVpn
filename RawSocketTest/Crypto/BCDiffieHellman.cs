@@ -1,15 +1,13 @@
-﻿using System.Runtime.InteropServices;
-using System.Security.Cryptography;
-using RawSocketTest.Crypto;
+﻿using System.Security.Cryptography;
 using RawSocketTest.Enums;
 
 // ReSharper disable InconsistentNaming
 
-namespace RawSocketTest.gmpDh;
+namespace RawSocketTest.Crypto;
 
 public class BCDiffieHellman : IDisposable
 {
-    /*
+/*
  * Copyright (C) 1998-2002  D. Hugh Redelmeier.
  * Copyright (C) 1999, 2000, 2001  Henry Spencer.
  * Copyright (C) 2010 Tobias Brunner
@@ -26,9 +24,6 @@ public class BCDiffieHellman : IDisposable
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
  * for more details.
  */
-
-
-//typedef struct private_gmp_diffie_hellman_t private_gmp_diffie_hellman_t;
 
 
     /**
@@ -141,9 +136,9 @@ public class BCDiffieHellman : IDisposable
             case DhId.DH_23:
             case DhId.DH_24:
             {
-                var settings = GmpDhParameters.diffie_hellman_get_params(group);
+                var settings = DiffieHellmanParameters.GetParametersForGroup(group);
                 if (settings is null) return false;
-                return (value.Length == settings.Value.prime.Length);
+                return (value.Length == settings.Prime.Length);
             }
 
             case DhId.DH_19:
@@ -235,9 +230,9 @@ public class BCDiffieHellman : IDisposable
             //mpz_init(q);
             //mpz_init(one);
 
-            var dh_params = GmpDhParameters.diffie_hellman_get_params(group) ?? throw new Exception($"DH group not supported: {group.ToString()}");
+            var dh_params = DiffieHellmanParameters.GetParametersForGroup(group) ?? throw new Exception($"DH group not supported: {group.ToString()}");
 
-            if (dh_params.subgroup.Length <= 0)
+            if (dh_params.SubGroup.Length <= 0)
             {
                 //mpz_init(p_min_1);
                 p_min_1 = p.subtract(1);
@@ -248,7 +243,7 @@ public class BCDiffieHellman : IDisposable
             }
             else
             {
-                import(ref q, dh_params.subgroup);
+                import(ref q, dh_params.SubGroup);
                 //mpz_import(q, params->subgroup.len, 1, 1, 1, 0, params->subgroup.ptr);
             }
 
@@ -372,13 +367,13 @@ public class BCDiffieHellman : IDisposable
     /// </summary>
     public static BCDiffieHellman? CreateForGroup(DhId group)
     {
-        var parameters = GmpDhParameters.diffie_hellman_get_params(group);
+        var parameters = DiffieHellmanParameters.GetParametersForGroup(group);
         if (parameters is null)
         {
             return null;
         }
 
-        return new BCDiffieHellman(group, (int)parameters.Value.exp_len, parameters.Value.generator, parameters.Value.prime);
+        return new BCDiffieHellman(group, (int)parameters.ExponentLength, parameters.Generator, parameters.Prime);
     }
 
 
