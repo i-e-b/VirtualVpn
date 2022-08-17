@@ -44,16 +44,21 @@ public class VpnServer : IDisposable
             var cmd = Console.ReadLine();
             Console.Write($"CMD: `{cmd}`");
 
-            if (cmd == "ips")
+            switch (cmd)
             {
-                Console.WriteLine("Notifying of IPs...");
-                foreach (var (key, vpnSession) in _sessions)
+                case "loud":
                 {
-                    Console.Write($"    {key}");
-                    vpnSession.NotifyIpAddresses();
-                    Console.WriteLine(" - done");
+                    Log.SetLevel(LogLevel.Debug);
+                    break;
                 }
-                Console.WriteLine("notifying done.");
+                case "less":
+                {
+                    Log.SetLevel(LogLevel.Info);
+                    break;
+                }
+                default:
+                    Console.WriteLine("Known commands: loud, less;");
+                    break;
             }
         }
     }
@@ -217,7 +222,6 @@ public class VpnServer : IDisposable
         
         Log.Debug("    Looks like a fully valid message. Other side will expect a reply.");
     }
-
 
 
     public void Dispose()
