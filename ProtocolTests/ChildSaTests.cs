@@ -23,7 +23,7 @@ public class ChildSaTests
             Flags = (IpV4HeaderFlags)0x07, // 0xE0 when shifted
             FragmentIndex = 0x1FFF, // comes out to FF FF if correct
             Ttl = 0x08,
-            Protocol = 0x09,
+            Protocol = (IpV4Protocol)0x09,
             Checksum = 0x1011,
             Source = new IpV4Address{Value = new byte[]{0x12,0x13,0x14,0x15}},
             Destination = new IpV4Address{Value = new byte[]{0x16,0x17,0x18,0x19}},
@@ -160,7 +160,7 @@ public class ChildSaTests
             Flags = (IpV4HeaderFlags)0x07, // 0xE0 when shifted
             FragmentIndex = 0x1FFF, // with above, comes out to FF FF if correct
             Ttl = 0x08,
-            Protocol = 0x09,
+            Protocol = (IpV4Protocol)0x09,
             Checksum = 0x1011,
             Source = new IpV4Address{Value = new byte[]{0x12,0x13,0x14,0x15}},
             Destination = new IpV4Address{Value = new byte[]{0x16,0x17,0x18,0x19}},
