@@ -134,7 +134,13 @@ public class VpnServer : IDisposable
             _server.SendRaw(data, sender, out _);
             return;
         }
-        
+
+        if (data.Length < 8)
+        {
+            Log.Warn($"    Malformed SPE/ESP from {sender.Address}. Not responding");
+            return;
+        }
+
         // Check for "IKE header" (prefix of 4 zero bytes)
         var idx = 0;
         var header = Bit.ReadInt32(data, ref idx); // not quite sure what this is about
@@ -150,7 +156,7 @@ public class VpnServer : IDisposable
         }
 
         // There is no Non-ESP marker, so the first 4 bytes are the ESP "Security Parameters Index".
-        // This is 32 bits, and not the 64 bits of the IKE SPI?
+        // This is 32 bits, and not the 64 bits of the IKE SPI.
         // (see https://docs.strongswan.org/docs/5.9/features/natTraversal.html , https://en.wikipedia.org/wiki/Security_Parameter_Index )
         // "The SPI (as per RFC 2401) is a required part of an Ipsec Security Association (SA)"
         // https://en.wikipedia.org/wiki/IPsec has notes and diagrams of the ESP headers
@@ -173,6 +179,20 @@ public class VpnServer : IDisposable
 
         // if we get here, we have a new message (with encryption) for an existing session
         var childSa = _childSessions[spi];
+
+        try
+        {
+            // check, decrypt, route, etc.
+            childSa.HandleSpe(data, sender);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Failed to handle SPE message from {sender.Address}: {ex.Message}");
+            Log.Debug(ex.ToString());
+        }
+        // TODO: HMAC-SHA2-256-96 fix ?  See pvpn/server.py:411
+
+        /*
         idx = 4;
         var seq = Bit.ReadUInt32(data, ref idx);
         Log.Debug($"    Packet has sequence #{seq}");
@@ -182,7 +202,6 @@ public class VpnServer : IDisposable
             return;
         }
         
-        // TODO: HMAC-SHA2-256-96 fix ?  See pvpn/server.py:411
         
         // verify the checksum
         var ok = childSa.VerifyMessage(data);
@@ -193,10 +212,8 @@ public class VpnServer : IDisposable
         }
         
         // looks ok. Step the sequence number forward
-        childSa.IncrementSequence(seq);
+        childSa.IncrementSequence(seq);*/
 
-        // do decrypt, route, etc.
-        childSa.HandleSpe(data, sender);
         
         Log.Debug("    Looks like a fully valid message. Other side will expect a reply.");
     }

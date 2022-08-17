@@ -273,7 +273,7 @@ public class IkeCrypto
     /// Calculate and inject a checksum into an encrypted message.
     /// "assoc" comes from the header of the IkeMessage, not including encrypted data or SPE zero padding
     /// </summary>
-    public void AddChecksum(byte[] encrypted, byte[] assoc)
+    public void AddChecksum(byte[] encrypted)
     { 
 /* prepare data to authenticate-decrypt:
  * | IV | plain | padding | ICV |
@@ -433,6 +433,28 @@ public class IkeCrypto
         Log.Crypto($"Decoded={decrypted.Length} bytes; Pad={padLength} bytes; Protocol={next.ToString()}; Message={messageBytes} bytes;");
         
         return decrypted.Take(messageBytes).ToArray();
+    }
+    
+    /// <summary>
+    /// Encrypt an Encapsulating Security Payload (ESP) packet, adding padding for a checksum and 'next protocol' byte.
+    /// </summary>
+    public byte[] EncryptEsp(byte[] plain, IpProtocol protocol)
+    {
+        // pvpn/crypto.py:88
+        var blockSize = _cipher.BlockSize;
+        var iv = _cipher.GenerateIv();
+        var padLength = blockSize - ((plain.Length + 1) % blockSize) - 1;
+
+        var pad = new byte[padLength];
+        var tail = new[] { (byte)padLength, (byte)protocol };
+        var checksumPad = (_integrity is null) ? Array.Empty<byte>() : new byte[_integrity.HashSize];
+
+        var payload = plain.Concat(pad).Concat(tail).ToArray();
+        var encrypted = _cipher.Encrypt(_skE, iv, payload);
+
+        var packet = iv.Concat(encrypted).Concat(checksumPad).ToArray();
+
+        return packet;
     }
 
     /// <summary>

@@ -106,7 +106,7 @@ public class CryptoTests
         var plain = Encoding.ASCII.GetBytes("This is a private message, you should not see it in the encrypted text.");
         
         var msg = subject.Encrypt(plain);
-        subject.AddChecksum(msg, Array.Empty<byte>());
+        subject.AddChecksum(msg);
         
         var ok = subject.VerifyChecksum(msg);
         
@@ -133,7 +133,7 @@ public class CryptoTests
         var plain = Encoding.ASCII.GetBytes("This is a private message, you should not see it in the encrypted text.");
         
         var msg = subject.Encrypt(plain);
-        subject.AddChecksum(msg, Array.Empty<byte>());
+        subject.AddChecksum(msg);
         
         var ok = subject.VerifyChecksum(msg);
         
@@ -160,7 +160,7 @@ public class CryptoTests
         var plain = Encoding.ASCII.GetBytes("This is a private message, you should not see it in the encrypted text.");
         
         var msg = subject.Encrypt(plain);
-        subject.AddChecksum(msg, Array.Empty<byte>());
+        subject.AddChecksum(msg);
         
         // do some damage
         msg[0] ^= 0x40;

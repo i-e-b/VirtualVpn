@@ -16,7 +16,6 @@ namespace JetBrains.Annotations { [AttributeUsage(AttributeTargets.All)] public 
 
 namespace RawSocketTest.Helpers
 {
-
     /// <summary>
     /// Marks a class as representing the fields in a byte array.
     /// Each FIELD in the marked class will need to have a byte order and position marker,
@@ -305,6 +304,11 @@ namespace RawSocketTest.Helpers
     public static class ByteSerialiser
     {
         /// <summary>
+        /// De-serialiser won't create variable-sized array items larger than this.
+        /// </summary>
+        public const int VariableByteStringSafetyLimit = 10240;
+        
+        /// <summary>
         /// Serialise a [ByteLayout] object to a byte array
         /// </summary>
         /// <param name="source">Object to be serialised</param>
@@ -367,6 +371,7 @@ namespace RawSocketTest.Helpers
             if (source is null) return;
             var publicFields = source.GetType()
                 .GetFields(BindingFlags.Public | BindingFlags.Instance)
+                .Where(NotSpecial)
                 .OrderBy(AttributeOrder)
                 .ToList();
 
@@ -405,9 +410,18 @@ namespace RawSocketTest.Helpers
             if (IsByteString(field, out byteCount)) // if value is longer than declared, we truncate
             {
                 var byteValues = GetValueAsByteArray(source, field);
-                for (var i = 0; i < byteCount; i++)
+                
+                // If value is shorter than declared, we pad
+                var pad = byteCount - byteValues.Length;
+                for (int i = 0; i < pad; i++)
                 {
-                    output.Add(byteValues[i]);
+                    output.Add(0);
+                }
+                
+                var idx = 0;
+                for (var i = pad; i < byteCount; i++)
+                {
+                    output.Add(byteValues[idx++]);
                 }
 
                 return;
@@ -544,10 +558,19 @@ namespace RawSocketTest.Helpers
                 byteCount = (method.Invoke(output, null) as int?) ?? throw new Exception($"Calculator function {field.DeclaringType?.Name}.{functionName}() returned an unexpected value");
                 
                 // go fetch bytes
-                var byteValues = new byte[byteCount];
-                for (var i = 0; i < byteCount; i++)
+                byte[] byteValues;
+                if (byteCount < 1 || byteCount > VariableByteStringSafetyLimit)
                 {
-                    byteValues[i] = feed.NextByte();
+                    byteValues = Array.Empty<byte>();
+                }
+                else
+                {
+
+                    byteValues = new byte[byteCount];
+                    for (var i = 0; i < byteCount; i++)
+                    {
+                        byteValues[i] = feed.NextByte();
+                    }
                 }
 
                 CastAndSetField(field, output, byteValues);
@@ -784,19 +807,25 @@ namespace RawSocketTest.Helpers
         internal class RunOutByteQueue
         {
             private readonly Queue<byte> _q;
+            
+            /// <summary>
+            /// Set to 'true' if more bytes were requested than supplied
+            /// </summary>
             public bool WasOverRun { get; private set; }
+
+            /// <summary> Last byte we popped when doing `NextBits` </summary>
+            private byte _lastFrag;
+
+            /// <summary> Offset in bytes (caused when reading bits). Zero means aligned </summary>
+            private int _offset;
 
             public RunOutByteQueue(IEnumerable<byte> source)
             {
                 _q = new Queue<byte>(source);
+                _lastFrag = 0;
+                _offset=0;
                 WasOverRun = false;
             }
-
-            /// <summary> Last byte we popped when doing `NextBits` </summary>
-            byte _lastFrag = 0;
-
-            /// <summary> Offset in bytes (caused when reading bits). Zero means aligned </summary>
-            int _offset = 0;
 
             /// <summary>
             /// Read a non-byte aligned number of bits.
@@ -824,7 +853,7 @@ namespace RawSocketTest.Helpers
 
                 // simple case: there is enough data in the last frag
                 int mask, shift;
-                byte result = 0;
+                byte result;
                 var rem = 8 - _offset;
 
                 if (rem >= bitCount)
@@ -846,9 +875,16 @@ namespace RawSocketTest.Helpers
                 // complex case: we need to mix data from two bytes
 
                 // example:
-                // offset = 3, bit count = 7; rem = 5, bfn = 2
+                // offset = 3, bitCount = 7 => rem = 5, bitsFromNext = 2
+                //
+                // Input state:
                 // 0 1 2 3 4 5 6 7 | 0 1 2 3 4 5 6 7
-                // x x x ? ? ? ? ? | ? ? _ _ _ _ _ _
+                // x x x A B C D E | F G _ _ _ _ _ _
+                //
+                // Output state:
+                //     0 1 2 3 4 5 6 7
+                // --> _ A B C D E F G 
+                //
                 // next offset = 2
                 // output = ((last & b0001_1111) << 2) | ((next >> 6))
                 if (_q.Count < 1) WasOverRun = true;

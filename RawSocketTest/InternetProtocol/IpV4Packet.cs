@@ -1,10 +1,15 @@
-﻿using RawSocketTest.Enums;
+﻿using System.Diagnostics.CodeAnalysis;
+using RawSocketTest.Enums;
 using RawSocketTest.Helpers;
 
 namespace RawSocketTest.InternetProtocol;
 
+/// <summary>
+/// IPv4 packet.
+/// https://en.wikipedia.org/wiki/IPv4
+/// </summary>
 [ByteLayout]
-public class IpPacket
+public class IpV4Packet
 {
     [BigEndianPartial(bits: 4, order:0)]
     public IpV4Version Version;
@@ -49,19 +54,53 @@ public class IpPacket
     [VariableByteString(source: nameof(OptionsLength), order:12)]
     public byte[] Options = Array.Empty<byte>();
     
-    //RemainingBytesAttribute
     [RemainingBytes(order: 13)]
     public byte[] Payload = Array.Empty<byte>();
 
-
+    
     /// <summary>
     /// Calculate how many bytes of 'options' we have, based
     /// on length field (usually zero)
     /// </summary>
     public int OptionsLength() => Length * 4 - 20;
+
+    /// <summary>
+    /// Calculate the checksum of the raw data.
+    /// If the checksum is in place and correct, this will return zero.
+    /// If the checksum is zeroed, this will give the correct value to inject
+    /// </summary>
+    public static ushort CalculateChecksum(byte[] raw)
+    {
+        if (raw.Length < 2) throw new Exception($"Invalid IPv4 packet length {raw.Length}");
+        
+        ulong sum = 0;
+        var i = 0;
+        // main words
+        for (; i+1 < raw.Length; i+=2)
+        {
+            var word = (uint)((raw[i] << 8) | raw[i+1]);
+            sum += word;
+        }
+
+        // trailing byte
+        if (i < raw.Length - 1)
+        {
+            sum += raw[i];
+        }
+
+        // folding
+        while ((sum >> 16) > 0)
+        {
+            sum = (sum & 0xffff) + (sum >> 16);
+        }
+
+        // bitwise flip
+        return (ushort)~((ushort)sum);
+    }
 }
 
 
+[SuppressMessage("ReSharper", "UnusedMember.Global")]
 public enum IpV4Version
 {
     Invalid = 0,
@@ -70,9 +109,11 @@ public enum IpV4Version
 }
 
 [Flags]
+[SuppressMessage("ReSharper", "UnusedMember.Global")]
 public enum IpV4HeaderFlags
 {
     None = 0,
+    
     /// <summary>
     /// Must not be set
     /// </summary>

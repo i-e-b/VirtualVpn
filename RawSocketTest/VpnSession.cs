@@ -434,14 +434,11 @@ public class VpnSession
         var cryptoOut = new IkeCrypto(cipher, check, null, skEr, skAr, null, null);
 
 
-        //self.child_sa.append(child_sa)
-        //self.sessions[child_sa.spi_in] = child_sa
-
-        byte[] randomSpi = new byte[4];
+        var randomSpi = new byte[4];
         RandomNumberGenerator.Fill(randomSpi);
 
         var spiOut = Bit.BytesToUInt32(randomSpi);
-        var childSa = new ChildSa(randomSpi, childProposal.SpiData, cryptoIn, cryptoOut);
+        var childSa = new ChildSa(randomSpi, childProposal.SpiData, cryptoIn, cryptoOut, _server);
 
         // '_thisSessionChildren' using spiOut, '_sessionHost' using spiIn.
         // Note: we may need to fiddle these around (or use both) if sessions don't look like they're working
@@ -603,50 +600,6 @@ public class VpnSession
         }
 
         Log.Debug($"        Session: State correct: {State.ToString()} = {expected.ToString()}");
-    }
-
-    /// <summary>
-    /// Handle an incoming SPE message
-    /// </summary>
-    public void HandleSpe(byte[] data, IPEndPoint sender)
-    {
-        Log.Critical("SPE INCOMING!");
-        // the session should have a cryptography method selected
-        if (_myCrypto is null) throw new Exception("No incoming crypto method agreed");
-
-        var rawMessage = _myCrypto.DecryptEsp(data, out var nextHeader);
-
-        switch (nextHeader)
-        {
-            case IpProtocol.IPV4:
-                // pvpn/ip.py:402
-                // TODO: parse IPv4 packet
-                // IEB: I guess we want to run a TCP stack (client) here, and connect it to our child app?
-                Log.Error($"IPv4 message (not yet handled) {rawMessage.Length} bytes, sender={sender.Address}:{sender.Port}");
-                break;
-
-            case IpProtocol.UDP:
-                // TODO: parse UDP packet
-                Log.Error($"UPD message (not yet handled) {rawMessage.Length} bytes, sender={sender.Address}:{sender.Port}");
-                break;
-
-            case IpProtocol.ANY:
-            case IpProtocol.ICMP:
-            case IpProtocol.IGMP:
-            case IpProtocol.GGP:
-            case IpProtocol.TCP:
-            case IpProtocol.RDP:
-            case IpProtocol.IPV6:
-            case IpProtocol.ESP:
-            case IpProtocol.ICMPV6:
-            case IpProtocol.MH:
-            case IpProtocol.RAW:
-                Log.Error($"{nextHeader.ToString()} message (not supported) sender={sender.Address}:{sender.Port}");
-                break;
-
-            default:
-                throw new ArgumentOutOfRangeException();
-        }
     }
 
     public void NotifyIpAddresses()

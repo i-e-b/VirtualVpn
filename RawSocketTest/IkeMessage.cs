@@ -114,7 +114,7 @@ public class IkeMessage
             // pvpn/message.py:571
             var asl = 0;
             var assoc = Bit.Subset(32, bytes, ref asl);
-            ikeCrypto.AddChecksum(bytes, assoc);
+            ikeCrypto.AddChecksum(bytes);
         }
 
         if (idx != ExpectedLength) throw new Exception($"Unexpected write length. Expected {ExpectedLength}, but got {idx}");
