@@ -1,4 +1,5 @@
 ﻿using System.Net;
+using System.Text;
 using RawSocketTest.Crypto;
 using RawSocketTest.Enums;
 using RawSocketTest.EspProtocol;
@@ -56,24 +57,42 @@ public class ChildSa
 
     public void HandleSpe(byte[] data, IPEndPoint sender)
     {
-        Log.Info($"Not yet implemented: HandleSpe; data={data.Length} bytes, sender={sender}");
+        Log.Info($"HandleSpe: data={data.Length} bytes, sender={sender}");
         
         var incomingIpv4Message = ReadSpe(data, out var espPkt);
-        
-        
-        // IEB: just for now, only respond to PING
-        if (incomingIpv4Message.Protocol == IpV4Protocol.ICMP)
-        {
-            Log.Info("ICMP payload found");
-            
-            var ok = ByteSerialiser.FromBytes<IcmpPacket>(incomingIpv4Message.Payload, out var icmp);
-            if (!ok) throw new Exception("Could not read ICMP packet");
 
-            if (icmp.MessageType == IcmpType.EchoRequest) // this is a ping!
+
+        switch (incomingIpv4Message.Protocol)
+        {
+            // IEB: just for now, only respond to PING
+            case IpV4Protocol.ICMP:
             {
-                ReplyToPing(sender, icmp, incomingIpv4Message);
+                Log.Info("ICMP payload found");
+            
+                var ok = ByteSerialiser.FromBytes<IcmpPacket>(incomingIpv4Message.Payload, out var icmp);
+                if (!ok) throw new Exception("Could not read ICMP packet");
+
+                if (icmp.MessageType == IcmpType.EchoRequest) // this is a ping!
+                {
+                    ReplyToPing(sender, icmp, incomingIpv4Message);
+                }
+
+                break;
+            }
+            case IpV4Protocol.TCP:
+            {
+                Log.Info("Regular TCP/IP packet");
+                Log.Debug("Payload as string: " + Encoding.ASCII.GetString(incomingIpv4Message.Payload));
+                break;
+            }
+            case IpV4Protocol.UDP:
+            {
+                Log.Info("UDP packet tunnelled in. Not responding.");
+                break;
             }
         }
+        
+        
 
         IncrementMessageId(espPkt.Sequence);
         
