@@ -133,6 +133,9 @@ public class TcpSession
         // TODO: shut down this connection
     }
 
+    /// <summary>
+    /// Feed incoming message through the TCP state machine
+    /// </summary>
     private bool HandleMessage(IpV4Packet ipv4, out TcpSegment tcp)
     {
         // read the TCP segment
@@ -188,10 +191,15 @@ public class TcpSession
                 // We should either get an empty ACK message (end of handshake)
                 // OR an ACK message with data (streaming)
 
-                if (tcp.Flags != TcpSegmentFlags.Ack) throw new Exception($"Invalid flags. Local state={State.ToString()}, request flags={tcp.Flags.ToString()}");
+                if (tcp.Flags == TcpSegmentFlags.Ack && tcp.Payload.Length < 1)
+                {
+                    Log.Info($"Handshake complete. Connected to {ipv4.Source.AsString}:{tcp.SourcePort}");
+                    break;
+                }
 
                 if (tcp.Payload.Length > 0)
                 {
+                    Log.Info($"Tcp packet. Flags={tcp.Flags.ToString()}, Data length={tcp.Payload}");
                     Log.Critical("PAY-DIRT!\r\n"+Encoding.ASCII.GetString(tcp.Payload));
                 }
 
