@@ -7,6 +7,8 @@ namespace RawSocketTest.Enums;
 /// <summary>
 /// Protocol as defined in IP packets.
 /// See https://en.wikipedia.org/wiki/List_of_IP_protocol_numbers
+/// <p></p>
+/// This is not an exhaustive list
 /// </summary>
 public enum IpV4Protocol : byte
 {
@@ -112,9 +114,114 @@ public enum IpV4Protocol : byte
     /// </summary>
     UDP=17,
     
+    /// <summary>
+    /// IPv6 Encapsulation (6to4 and 6in4)
+    /// RFC 2473
+    /// </summary>
+    IPv6=41,
     
+    /// <summary>
+    /// (VPN) Generic Routing Encapsulation
+    /// RFC 2784, RFC 2890
+    /// </summary>
+    GRE=47,
     
+    /// <summary>
+    /// (VPN) Encapsulating Security Payload
+    /// RFC 4303
+    /// </summary>
+    ESP=50,
     
+    /// <summary>
+    /// (VPN) Authentication Header
+    /// RFC 4302
+    /// </summary>
+    AH=51,
+    
+    /// <summary>
+    /// IPv6 encapsulation
+    /// RFC 2473
+    /// </summary>
+    ENCAP=41,
+    
+    /// <summary>
+    /// Transport Layer Security Protocol
+    /// </summary>
+    TLSP=56,
+    
+    /// <summary>
+    /// ICMP for IPv6
+    /// RFC 4443, RFC 4884
+    /// </summary>
+    IPv6ICMP=58,
+    
+    /// <summary>
+    /// No Next Header for IPv6
+    /// RFC 8200
+    /// </summary>
+    IPv6NoNxt=59,
+    
+    /// <summary>
+    /// Destination Options for IPv6
+    /// RFC 8200
+    /// </summary>
+    IPv6Opts=60,
+    
+    /// <summary>
+    /// Reserved for any host internal protocol
+    /// </summary>
+    Internal=61,
+    
+    /// <summary>
+    /// Reserved for any local network protocol
+    /// </summary>
+    Local=63,
+    
+    /// <summary>
+    /// Reserved for any distributed file system protocol
+    /// </summary>
+    FileSystem=68,
+    
+    /// <summary>
+    /// Open Shortest Path First
+    /// RFC 2328
+    /// </summary>
+    OSPF=89,
+    
+    /// <summary>
+    /// (VPN) Virtual Router Redundancy Protocol
+    /// </summary>
+    VRRP=112,
+    
+    /// <summary>
+    /// (VPN) Layer Two Tunneling Protocol Version 3
+    /// RFC 3931
+    /// </summary>
+    L2TP=115,
+    
+    /// <summary>
+    /// Stream Control Transmission Protocol
+    /// RFC 4960
+    /// </summary>
+    SCTP=132,
+    
+    /// <summary>
+    /// Lightweight User Datagram Protocol
+    /// RFC 3828
+    /// </summary>
+    UDPLite=136,
+    
+    /// <summary>
+    /// (VPN) Multiprotocol Label Switching Encapsulated in IP
+    /// RFC 4023, RFC 5332
+    /// </summary>
+    MPLS_in_IP=137,
+    
+    /// <summary>
+    /// (VPN) Wrapped Encapsulating Security Payload
+    /// RFC 5840
+    /// </summary>
+    WESP=141,
     
     // 144-252 are unassigned at this time
     

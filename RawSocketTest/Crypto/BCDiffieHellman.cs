@@ -5,8 +5,9 @@ using RawSocketTest.Enums;
 
 namespace RawSocketTest.Crypto;
 
-public class BCDiffieHellman : IDisposable
+public class BCDiffieHellman
 {
+    // ReSharper disable CommentTypo
 /*
  * Copyright (C) 1998-2002  D. Hugh Redelmeier.
  * Copyright (C) 1999, 2000, 2001  Henry Spencer.
@@ -24,47 +25,39 @@ public class BCDiffieHellman : IDisposable
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
  * for more details.
  */
+    // ReSharper restore CommentTypo
 
 
     /**
 	 * Diffie Hellman group number.
 	 */
-    DhId group;
-
-    /*
-     * Generator value.
-     */
-    BigInt g;
-
-    /**
-	 * My private value.
-	 */
-    BigInt xa;
-
-    /**
-	 * My public value.
-	 */
-    BigInt ya;
-
-    /**
-	 * Other public value.
-	 */
-    BigInt yb;
-
-    /**
-	 * Shared secret.
-	 */
-    BigInt zz;
+    private readonly DhId group;
 
     /**
 	 * Modulus.
 	 */
-    BigInt p;
+    private readonly BigInt p;
 
     /**
-	 * Modulus length.
+	 * My private value.
 	 */
-    int p_len;
+    private readonly BigInt xa;
+
+    /**
+	 * My public value.
+	 */
+    private readonly BigInt ya;
+
+    /**
+	 * Other side public value.
+	 */
+    private BigInt yb;
+
+    /**
+	 * Shared secret.
+	 */
+    private BigInt zz;
+
 
     /**
 	 * True if shared secret is computed and stored in my_public_value.
@@ -74,21 +67,18 @@ public class BCDiffieHellman : IDisposable
 //METHOD(key_exchange_t, set_public_key, bool, private_gmp_diffie_hellman_t *this, chunk_t value)
     public bool set_their_public_key(byte[] value)
     {
-        BigInt p_min_1 = BigInt.ZERO;//new BigInt();
-
-        if (!key_exchange_verify_pubkey(group, value)) // check the length is valid
+        if (!VerifyPublicKey(group, value)) // check the length is valid
         {
             return false;
         }
 
         //mpz_init(p_min_1);
-        p_min_1 = p.subtract(1);
+        var p_min_1 = p.subtract(1); //new BigInt();
         //mpz_sub_ui(p_min_1, this.p, 1);
-
         /* this->computed is not reset in order to prevent reuse of this DH
          * instance (see below) */
         //mpz_import(this.yb, (size_t)value.Length, 1, 1, 1, 0, data);
-        import(ref yb, value);
+        import(out yb, value);
 
         /* check that the public value y satisfies 1 < y < p-1.
          * according to RFC 6989, section 2.1, this is enough for the common safe-
@@ -112,12 +102,12 @@ public class BCDiffieHellman : IDisposable
         return true;
     }
 
-    private static void DebugLog(params string[] msgs)
+    private static void DebugLog(params string[] messages)
     {
-        Log.Debug(msgs);
+        Log.Debug(messages);
     }
 
-    private bool key_exchange_verify_pubkey(DhId dhId, byte[] value)
+    private bool VerifyPublicKey(DhId dhId, byte[] value)
     {
         switch (dhId)
         {
@@ -158,7 +148,6 @@ public class BCDiffieHellman : IDisposable
         }
     }
 
-//METHOD(key_exchange_t, get_public_key, bool, private_gmp_diffie_hellman_t *this,chunk_t *value)
     public bool get_our_public_key(out byte[] result)
     {
         result = export(ya);
@@ -175,46 +164,14 @@ public class BCDiffieHellman : IDisposable
     {
         var tmp = src.toByteArray(); // this can leave a zero byte at the top
         
-        if (tmp[0] == 0) return tmp.Skip(1).ToArray();
-        return tmp;
-        
-        /*
-        var expectedSize = mpz_sizeinbase(src, 2);
-        var allocSize = (size_t)((long)expectedSize * 2);
-
-        var data = allocate(allocSize);
-        size_t size = (size_t)0;
-        size_t oneByte = (size_t)1;
-        mpz_export(data, ref size, 1, oneByte, 1, 0, src);
-
-        var realSize = (int)size;
-        var result = new byte[realSize];
-        Marshal.Copy(data.ToIntPtr(), result, 0, realSize);
-        free(data);
-        return result;*/
+        return tmp[0] == 0 ? tmp.Skip(1).ToArray() : tmp;
     }
 
-//METHOD(key_exchange_t, set_private_key, bool, private_gmp_diffie_hellman_t *this, chunk_t value)
-    public bool set_private_key(byte[] value)
-    {
-        //mpz_import(xa, value.len, 1, 1, 1, 0, value.ptr);
-        import(ref xa, value);
-        //mpz_powm(ya, g, xa, p);
-        ya = g.modPow(xa, p);
-        computed = false;
-        return true;
-    }
-
-    private static void import(ref BigInt target, byte[] value)
+    private static void import(out BigInt target, byte[] value)
     {
         target = new BigInt(value);
-        /*var data = allocate((size_t)value.Length);
-        Marshal.Copy(value, 0, data.ToIntPtr(), value.Length);
-        mpz_import(target, (size_t)value.Length, 1, 1, 1, 0, data);
-        free(data);*/
     }
 
-//METHOD(key_exchange_t, get_shared_secret, bool, private_gmp_diffie_hellman_t *this, chunk_t *secret)
     public bool get_shared_secret(out byte[] secret)
     {
         secret = Array.Empty<byte>(); // default in case of failure
@@ -224,43 +181,27 @@ public class BCDiffieHellman : IDisposable
              * the subgroup.  as noted above, this check is not really necessary as
              * the plugin does not reuse private keys */
 
-            var one = (BigInt)1;//new mpz_t();
-            var q = (BigInt)0;//new mpz_t();
-            var p_min_1 = (BigInt)0;//new mpz_t();
-            //mpz_init(q);
-            //mpz_init(one);
+            BigInt q;
 
             var dh_params = DiffieHellmanParameters.GetParametersForGroup(group) ?? throw new Exception($"DH group not supported: {group.ToString()}");
 
             if (dh_params.SubGroup.Length <= 0)
             {
-                //mpz_init(p_min_1);
-                p_min_1 = p.subtract(1);
-                //mpz_sub_ui(p_min_1, p, 1);
-                q = p_min_1.divide(2); // ???
-                //mpz_fdiv_q_2exp(q, p_min_1, 1);
-                //mpz_clear(p_min_1);
+                var p_min_1 = p.subtract(1);
+                q = p_min_1.divide(2);
             }
             else
             {
-                import(ref q, dh_params.SubGroup);
-                //mpz_import(q, params->subgroup.len, 1, 1, 1, 0, params->subgroup.ptr);
+                import(out q, dh_params.SubGroup);
             }
 
-            //mpz_powm(one, yb, q, p);
-            one = yb.modPow(q, p);
-            //mpz_clear(q);
-            //if (mpz_cmp_ui(one, 1) != 0)
+            var one = yb.modPow(q, p);
             if (one.compareTo(1) != 0)
             {
                 DebugLog("public DH value verification failed: ", "y ^ q mod p != 1");
-                //mpz_clear(one);
                 return true;
             }
 
-            //mpz_clear(one);
-
-            //mpz_powm(zz, yb, xa, p);
             zz = yb.modPow(xa,p);
             computed = true;
         }
@@ -269,88 +210,32 @@ public class BCDiffieHellman : IDisposable
         return true;
     }
 
-//METHOD(key_exchange_t, get_method, key_exchange_method_t, private_gmp_diffie_hellman_t *this)
-    public DhId get_method()
-    {
-        return group;
-    }
-
-//METHOD(key_exchange_t, destroy, void, private_gmp_diffie_hellman_t *this)
-    public void destroy()
-    {
-        /*
-        mpz_clear(p);
-        mpz_clear(xa);
-        mpz_clear(ya);
-        mpz_clear(yb);
-        mpz_clear(zz);
-        mpz_clear(g);*/
-    }
-
-    public BCDiffieHellman()
-    {
-        group = DhId.None;
-        g = 0;//new mpz_t();
-        xa = 0;//new mpz_t();
-        ya = 0;//new mpz_t();
-        yb = 0;//new mpz_t();
-        zz = 0;//new mpz_t();
-        p = 0;//new mpz_t();
-        p_len = 0;
-    }
-
-
     /**
  * Generic internal constructor
  */
-//static gmp_diffie_hellman_t *create_generic(key_exchange_method_t group, size_t exp_len, chunk_t g, chunk_t p)
     public BCDiffieHellman(DhId group_, int exp_len_, byte[] g_, byte[] p_)
     {
         group = group_;
-        p_len = p_.Length;
 
-        g = 0;//new mpz_t();
-        xa = 0;//new mpz_t();
-        ya = 0;//new mpz_t();
-        yb = 0;//new mpz_t();
-        zz = 0;//new mpz_t();
-        p = 0;//new mpz_t();
-        p_len = 0;
-
-        /*mpz_init(p);
-        mpz_init(yb);
-        mpz_init(ya);
-        mpz_init(xa);
-        mpz_init(zz);
-        mpz_init(g);*/
-
-        //mpz_import(this->g, g.len, 1, 1, 1, 0, g.ptr);
-        //mpz_import(this->p, p.len, 1, 1, 1, 0, p.ptr);
-        import(ref g, g_);
-        import(ref p, p_);
+        xa = 0;
+        ya = 0;
+        yb = 0;
+        zz = 0;
+        p = 0;
+        var pLen = 0;
+        import(out var g, g_);
+        import(out p, p_);
 
         var random = new byte[exp_len_];
         RandomNumberGenerator.Fill(random);
-        /*if (!rng->allocate_bytes(rng, exp_len, &random))
-        {
-            DBG1(DBG_LIB, "failed to allocate DH secret");
-            rng->destroy(rng);
-            destroy(this);
-            return NULL;
-        }
-        rng->destroy(rng);*/
 
-        if (exp_len_ == p_len)
+        if (exp_len_ == pLen)
         {
-            /* achieve bitsof(p)-1 by setting MSB to 0 */
-            //*random.ptr &= 0x7F;
             random[0] &= 0x7F;
         }
 
-        //mpz_import(this->xa, random.len, 1, 1, 1, 0, random.ptr);
-        import(ref xa, random);
+        import(out xa, random);
 
-        //chunk_clear(&random);
         for (int i = 0; i < random.Length; i++)
         {
             random[i] = 0;
@@ -358,7 +243,6 @@ public class BCDiffieHellman : IDisposable
 
         DebugLog("        size of DH secret exponent (bits): ", xa.bitCount().ToString());
 
-        //mpz_powm(ya, g, xa, p);
         ya = g.modPow(xa,p);
     }
 
@@ -374,19 +258,5 @@ public class BCDiffieHellman : IDisposable
         }
 
         return new BCDiffieHellman(group, (int)parameters.ExponentLength, parameters.Generator, parameters.Prime);
-    }
-
-
-    public void Dispose()
-    {
-        destroy();
-        /*g.Dispose();
-        xa.Dispose();
-        ya.Dispose();
-        yb.Dispose();
-        zz.Dispose();
-        p.Dispose();
-        */
-        GC.SuppressFinalize(this);
     }
 }

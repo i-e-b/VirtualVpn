@@ -31,16 +31,19 @@ https://www.secfu.net/2017/12/23/the-ikev2-header-and-the-security-association-p
 - https://en.wikipedia.org/wiki/Ping_(networking_utility)#Message_format
 
 
-- [ ] Read IP packets
-- [ ] Encrypt ESP packets
-- [ ] Respond to ping (then dance around the room a bit)
+- [x] Read IP packets
+- [x] Encrypt ESP packets
+- [x] Respond to ping (then dance around the room a bit)
+- [ ] TCP connection / handshake etc
 - [ ] Read wget and give some kind of dummy response
 
 ### Next
 
-- [ ] Migrate Payloads to Bitwise serialiser?
+- [ ] Migrate Payloads to Bitwise serialiser? (this would need counts & looping)
 - [ ] Need to be able to start a SA from this side
 
 ### Future
 
 - [ ] Either host an app, or pass network requests to one
+- [ ] Go through the collection types and make them thread safe
+- [ ] Check all "to-do" items

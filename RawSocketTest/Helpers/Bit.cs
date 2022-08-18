@@ -120,10 +120,40 @@ public static class Bit
         UInt32 result = 0;
         
         result |= (uint)bytes[0] << 24;
-        result |= (uint)bytes[0] << 16;
-        result |= (uint)bytes[0] <<  8;
-        result |= (uint)bytes[0] <<  0;
+        result |= (uint)bytes[1] << 16;
+        result |= (uint)bytes[2] <<  8;
+        result |= (uint)bytes[3] <<  0;
         
+        return result;
+    }
+    
+    /// <summary>
+    /// Read most significant bytes first from data, filling in
+    /// as much of a 64-bit integer as possible,
+    /// starting at most significant byte of output.
+    /// Will stop after 8 bytes, OR if data is exhausted.
+    /// </summary>
+    public static ulong BytesToUInt64Msb(byte[] data)
+    {
+        var result = 0ul;
+        var idx = 0;
+        var end = data.Length;
+        result |= (ulong)data[idx++] << 56;
+        if (idx >= end) return result;
+        result |= (ulong)data[idx++] << 48;
+        if (idx >= end) return result;
+        result |= (ulong)data[idx++] << 40;
+        if (idx >= end) return result;
+        result |= (ulong)data[idx++] << 32;
+        if (idx >= end) return result;
+        
+        result |= (ulong)data[idx++] << 24;
+        if (idx >= end) return result;
+        result |= (ulong)data[idx++] << 16;
+        if (idx >= end) return result;
+        result |= (ulong)data[idx++] <<  8;
+        if (idx >= end) return result;
+        result |= (ulong)data[idx  ] <<  0;
         return result;
     }
     
@@ -332,4 +362,10 @@ public static class Bit
 
     public static string BinString(byte b) => Convert.ToString(b, 2).PadLeft(8, '0');
     public static string BinString(int b) => Convert.ToString(b, 2);
+
+    public static string ToIpAddressString(byte[] bytes)
+    {
+        if (bytes.Length == 4) return $"{bytes[0]}.{bytes[1]}.{bytes[2]}.{bytes[3]}";
+        return HexString(bytes);
+    }
 }

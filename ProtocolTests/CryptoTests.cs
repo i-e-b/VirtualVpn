@@ -198,10 +198,6 @@ public class CryptoTests
     public void non_crypto_data()
     {
         // This came from strong-swan logs at 'enc 4' level
-/*
-config setup
-        charondebug="ike 4, enc 4, net 4"
-*/
         var raw = new byte[]
         {
             0x29, 0x00, 0x00, 0x0C, 0x01, 0x00, 0x00, 0x00, 0x9F, 0x45, 0x0D, 0x7E, 0x26, 0x00, 0x00, 0x08,
@@ -240,7 +236,7 @@ config setup
         Console.WriteLine(Json.Freeze(msg));
         
         /*
-This gets output from Strongswan too -- so should check my keys against it.
+This gets output from StrongSwan too -- so should check my keys against it.
 
 
 Aug  8 14:21:58 Gertrud charon: 01[IKE] authentication of '159.69.13.126' (myself) with pre-shared key
@@ -348,7 +344,7 @@ Aug  8 14:21:58 Gertrud charon: 01[IKE]   16: 85 FE DB D6 52 1D F5 B3 BC 0E E8 4
         IkeCrypto.CreateKeysAndCryptoInstances(
             theirNonce, myNonce, sharedSecret, theirSpi, mySpi,
             PrfId.PRF_HMAC_SHA2_256, IntegId.AUTH_HMAC_SHA2_256_128, EncryptionTypeId.ENCR_AES_CBC, keyLength: 128,
-            null, out var skD, out var myCrypto, out var theirCrypto
+            null, out _, out var myCrypto, out var theirCrypto
         );
         
         // NOTE: this is how the PSK is calculated:
@@ -393,7 +389,7 @@ Aug  8 14:21:58 Gertrud charon: 01[IKE]   16: 85 FE DB D6 52 1D F5 B3 BC 0E E8 4
         IkeCrypto.CreateKeysAndCryptoInstances(
             theirNonce, myNonce, sharedSecret, theirSpi, mySpi,
             PrfId.PRF_HMAC_SHA2_256, IntegId.AUTH_HMAC_SHA2_256_128, EncryptionTypeId.ENCR_AES_CBC, keyLength: 128,
-            null, out var skD, out var myCrypto, out var theirCrypto
+            null, out _, out _, out var theirCrypto
         );
         
         // NOTE: this is how the PSK is calculated:
@@ -442,7 +438,7 @@ Aug  8 14:21:58 Gertrud charon: 01[IKE]   16: 85 FE DB D6 52 1D F5 B3 BC 0E E8 4
         IkeCrypto.CreateKeysAndCryptoInstances(
             theirNonce, myNonce, sharedSecret, theirSpi, mySpi,
             PrfId.PRF_HMAC_SHA2_256, IntegId.AUTH_HMAC_SHA2_256_128, EncryptionTypeId.ENCR_AES_CBC, keyLength: 128,
-            null, out var skD, out var myCrypto, out var theirCrypto
+            null, out _, out var myCrypto, out _
         );
 
         var defaultProposal = new Proposal();
@@ -459,7 +455,6 @@ Aug  8 14:21:58 Gertrud charon: 01[IKE]   16: 85 FE DB D6 52 1D F5 B3 BC 0E E8 4
             new PayloadNotify(IkeProtocolType.NONE, NotifyId.NAT_DETECTION_SOURCE_IP, Array.Empty<byte>(), Bit.RandomBytes(20))
         );
         
-        // IEB: this should be passing. I think I must be getting the checksum calculation wrong?
         var checksumOk = myCrypto.VerifyChecksum(bytes);
         Assert.True(checksumOk, "Checksum failed");
         

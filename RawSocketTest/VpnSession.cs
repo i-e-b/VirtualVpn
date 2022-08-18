@@ -28,7 +28,6 @@ public class VpnSession
         }
     }
 
-
     /// <summary>sequence number for receiving</summary>
     private long _maxSeq = -1;
 
@@ -39,6 +38,11 @@ public class VpnSession
     private byte[]? _lastSentMessageBytes;
     private byte[]? _peerNonce;
     private byte[]? _skD;
+    
+    private readonly Dictionary<uint, ChildSa> _thisSessionChildren = new();
+    private byte[]? _previousRequestRawData;
+    private SessionState _state;
+    private IPEndPoint? _lastContact;
 
     //## Algorithmic selections (negotiated with peer) ##//
 
@@ -52,10 +56,6 @@ public class VpnSession
     private readonly ulong _peerSpi;
     private readonly ulong _localSpi;
     private readonly byte[] _localNonce;
-    private readonly Dictionary<uint, ChildSa> _thisSessionChildren = new();
-    private byte[]? _previousRequestRawData;
-    private SessionState _state;
-    private IPEndPoint? _lastContact;
 
     public VpnSession(UdpServer server, VpnServer sessionHost, ulong peerSpi)
     {
@@ -106,6 +106,15 @@ public class VpnSession
         if (seq > (_maxSeq + 65536)) _maxSeq++;
         else if (seq == _maxSeq) _maxSeq++;
         else _maxSeq = seq; // this isn't exactly right, see pvpn/server.py:421
+    }
+    
+    
+    /// <summary>
+    /// This method should be called periodically
+    /// </summary>
+    public void EventPump()
+    {
+        // TODO: send keep-alive messages for any active sessions where we are the initiator
     }
 
     // pvpn/server.py:253

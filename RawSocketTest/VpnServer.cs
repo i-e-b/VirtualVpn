@@ -10,6 +10,7 @@ public class VpnServer : IDisposable
 {
     private const int NonEspHeader = 0; // https://docs.strongswan.org/docs/5.9/features/natTraversal.html
 
+    private readonly Thread _eventPumpThread;
     private readonly UdpServer _server;
     private readonly Dictionary<UInt64, VpnSession> _sessions = new();
     private readonly Dictionary<UInt32, ChildSa> _childSessions = new();
@@ -19,6 +20,7 @@ public class VpnServer : IDisposable
     public VpnServer()
     {
         _server = new UdpServer(IkeResponder, SpeResponder);
+        _eventPumpThread = new Thread(EventPumpLoop){IsBackground = true};
     }
 
     public void Run()
@@ -35,6 +37,7 @@ public class VpnServer : IDisposable
 //var target = new IPEndPoint(new IPAddress(new byte[] { 159, 69, 13, 126 }), 500); // Gerty
 
         _server.Start();
+        _eventPumpThread.Start();
         _running = true;
 
 
@@ -63,11 +66,31 @@ public class VpnServer : IDisposable
         }
     }
 
+    public void Dispose()
+    {
+        _server.Dispose();
+        GC.SuppressFinalize(this);
+    }
+
+    public void AddChildSession(ChildSa childSa)
+    {
+        _childSessions.Add(childSa.SpiIn, childSa);
+    }
+
+    public void RemoveSession(ulong spi)
+    {
+        if (_sessions.ContainsKey(spi)) _sessions.Remove(spi);
+    }
+
+    public void RemoveChildSession(uint spi)
+    {
+        if (_childSessions.ContainsKey(spi)) _childSessions.Remove(spi);
+    }
+
     private void StopRunning(object? sender, ConsoleCancelEventArgs e)
     {
         _running = false;
     }
-
 
     /// <summary>
     /// Responds to port 500 traffic
@@ -223,25 +246,45 @@ public class VpnServer : IDisposable
         Log.Debug("    Looks like a fully valid message. Other side will expect a reply.");
     }
 
-
-    public void Dispose()
+    private void EventPumpLoop()
     {
-        _server.Dispose();
-        GC.SuppressFinalize(this);
-    }
+        while (_running)
+        {
+            Thread.Sleep(Settings.EventPumpRate);
+            Log.Debug("Triggering event pump");
 
-    public void AddChildSession(ChildSa childSa)
-    {
-        _childSessions.Add(childSa.SpiIn, childSa);
-    }
+            try
+            {
+                foreach (var session in _sessions.Values)
+                {
+                    try
+                    {
+                        session.EventPump();
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Error($"Event pump failure, VPN: {ex.Message}");
+                        Log.Debug($"Event pump failure stack, VPN: {ex}");
+                    }
+                }
 
-    public void RemoveSession(ulong spi)
-    {
-        if (_sessions.ContainsKey(spi)) _sessions.Remove(spi);
-    }
-
-    public void RemoveChildSession(uint spi)
-    {
-        if (_childSessions.ContainsKey(spi)) _childSessions.Remove(spi);
+                foreach (var childSa in _childSessions.Values)
+                {
+                    try
+                    {
+                        childSa.EventPump();
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Error($"Event pump failure, ChildSA: {ex.Message}");
+                        Log.Debug($"Event pump failure stack, ChildSA: {ex}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warn($"Outer event pump failure: {ex.Message}"); // most likely a thread conflict
+            }
+        }
     }
 }

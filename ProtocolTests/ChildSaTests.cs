@@ -16,7 +16,7 @@ public class ChildSaTests
         IpV4Packet basicPacket = new IpV4Packet
         {
             Version = IpV4Version.Version4,
-            Length = 5,
+            HeaderLength = 5,
             ServiceType = 1,
             TotalLength = 0x0203,
             PacketId = 0x0405,
@@ -87,7 +87,7 @@ public class ChildSaTests
         Console.WriteLine(TypeDescriber.Describe(basicPacket));
 
         Assert.That(basicPacket.Version, Is.EqualTo(IpV4Version.Version4), "Version");
-        Assert.That(basicPacket.Length, Is.EqualTo(5), "Length");
+        Assert.That(basicPacket.HeaderLength, Is.EqualTo(5), "Length");
         Assert.That(basicPacket.ServiceType, Is.EqualTo(0), "ServiceType");
         Assert.That(basicPacket.TotalLength, Is.EqualTo(84), "TotalLength");
         Assert.That(basicPacket.PacketId, Is.EqualTo(47112), "PacketId");
@@ -153,7 +153,7 @@ public class ChildSaTests
         var original = new IpV4Packet
         {
             Version = IpV4Version.Version4,
-            Length = 5,
+            HeaderLength = 5,
             ServiceType = 1,
             TotalLength = 0x0203,
             PacketId = 0x0405,
@@ -178,7 +178,7 @@ public class ChildSaTests
         Console.WriteLine(TypeDescriber.Describe(recovered));
         
         Assert.That(recovered.Version, Is.EqualTo(original.Version), "Version");
-        Assert.That(recovered.Length, Is.EqualTo(original.Length), "Length");
+        Assert.That(recovered.HeaderLength, Is.EqualTo(original.HeaderLength), "Length");
         Assert.That(recovered.ServiceType, Is.EqualTo(original.ServiceType), "ServiceType");
         Assert.That(recovered.TotalLength, Is.EqualTo(original.TotalLength), "TotalLength");
         Assert.That(recovered.PacketId, Is.EqualTo(original.PacketId), "PacketId");

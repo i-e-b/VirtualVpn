@@ -1,10 +1,10 @@
 ﻿using System.Net;
-using System.Text;
 using RawSocketTest.Crypto;
 using RawSocketTest.Enums;
 using RawSocketTest.EspProtocol;
 using RawSocketTest.Helpers;
 using RawSocketTest.InternetProtocol;
+using RawSocketTest.TransmissionControlProtocol;
 
 // ReSharper disable BuiltInTypeReferenceStyle
 
@@ -19,7 +19,8 @@ public class ChildSa
     private readonly UdpServer? _server;
     private long _msgIdIn;
     private long _msgIdOut;
-    private readonly HashSet<long> _msgWin;
+    
+    private readonly Dictionary<SenderPort, TcpSession> _tcpSessions = new();
 
     // pvpn/server.py:18
     public ChildSa(byte[] spiIn, byte[] spiOut, IkeCrypto cryptoIn, IkeCrypto cryptoOut, UdpServer? server)
@@ -32,7 +33,6 @@ public class ChildSa
 
         _msgIdIn = 1;
         _msgIdOut = 1;
-        _msgWin = new HashSet<long>();
         
         var idx = 0;
         SpiIn = Bit.ReadUInt32(spiIn, ref idx);
@@ -43,12 +43,24 @@ public class ChildSa
     public void IncrementMessageId(uint espPacketSequence)
     {
         _msgIdIn = (int)(espPacketSequence+1);
-        
+    }
 
-        while (_msgWin.Contains(_msgIdIn))
+    /// <summary>
+    /// This method should be called periodically
+    /// </summary>
+    public void EventPump()
+    {
+        // Check TCP sessions, close them if they are timed out.
+        var allSessions = _tcpSessions.Keys.ToList();
+        foreach (var tcpKey in allSessions)
         {
-            _msgWin.Remove(_msgIdIn);
-            _msgIdIn++;
+            var tcp = _tcpSessions[tcpKey];
+            if (tcp.LastContact.Elapsed > Settings.TcpTimeout)
+            {
+                Log.Debug($"Old session: {tcp.LastContact.Elapsed}; remote={Bit.ToIpAddressString(tcp.RemoteAddress)}:{tcp.RemotePort}," +
+                          $" local={Bit.ToIpAddressString(tcp.LocalAddress)}:{tcp.LocalPort}. Closing");
+                CloseConnection(tcpKey);
+            }
         }
     }
 
@@ -64,25 +76,16 @@ public class ChildSa
 
         switch (incomingIpv4Message.Protocol)
         {
-            // IEB: just for now, only respond to PING
             case IpV4Protocol.ICMP:
             {
                 Log.Info("ICMP payload found");
-            
-                var ok = ByteSerialiser.FromBytes<IcmpPacket>(incomingIpv4Message.Payload, out var icmp);
-                if (!ok) throw new Exception("Could not read ICMP packet");
-
-                if (icmp.MessageType == IcmpType.EchoRequest) // this is a ping!
-                {
-                    ReplyToPing(sender, icmp, incomingIpv4Message);
-                }
-
+                HandleIcmp(sender, incomingIpv4Message);
                 break;
             }
             case IpV4Protocol.TCP:
             {
                 Log.Info("Regular TCP/IP packet");
-                Log.Debug("Payload as string: " + Encoding.ASCII.GetString(incomingIpv4Message.Payload));
+                if (HandleTcp(sender, incomingIpv4Message)) return;
                 break;
             }
             case IpV4Protocol.UDP:
@@ -90,6 +93,19 @@ public class ChildSa
                 Log.Info("UDP packet tunnelled in. Not responding.");
                 break;
             }
+            case IpV4Protocol.AH:
+            case IpV4Protocol.ESP:
+            case IpV4Protocol.GRE:
+            case IpV4Protocol.VRRP:
+            case IpV4Protocol.L2TP:
+            case IpV4Protocol.MPLS_in_IP:
+            case IpV4Protocol.WESP:
+                Log.Error($"Another VPN-like protocol ({incomingIpv4Message.Protocol.ToString()}) was tunnelled through this VPN link. This is likely a misconfiguration.");
+                break;
+            
+            default:
+                Log.Warn($"Unsupported protocol delivered ({incomingIpv4Message.Protocol.ToString()})");
+                break;
         }
         
         
@@ -108,6 +124,52 @@ public class ChildSa
         }
     }
 
+    private bool HandleTcp(IPEndPoint sender, IpV4Packet incomingIpv4Message)
+    {
+        var key = TcpSession.ReadSenderAndPort(incomingIpv4Message);
+        if (key.DestinationPort == 0 || key.SenderAddress == 0)
+        {
+            Log.Info("Invalid TCP/IP request: address or port not recognised");
+            return true;
+        }
+
+        // Is it a known session?
+        if (_tcpSessions.ContainsKey(key))
+        {
+            // check that this session is still coming through the original tunnel
+            var session = _tcpSessions[key];
+            if (!session.Gateway.Address.Equals(sender.Address))
+            {
+                Log.Warn($"Crossed connection in TCP? Expected gateway {session.Gateway.Address}, but got gateway {sender.Address} -- not replying");
+                return true;
+            }
+
+            // continue existing session
+            session.Accept(incomingIpv4Message);
+        }
+        else
+        {
+            // start new session
+            var newSession = new TcpSession(this, sender);
+            var sessionOk = newSession.Start(incomingIpv4Message);
+            if (sessionOk) _tcpSessions.Add(key, newSession);
+        }
+
+        return false;
+    }
+
+    private void HandleIcmp(IPEndPoint sender, IpV4Packet incomingIpv4Message)
+    {
+        var ok = ByteSerialiser.FromBytes<IcmpPacket>(incomingIpv4Message.Payload, out var icmp);
+        if (!ok) throw new Exception("Could not read ICMP packet");
+
+        if (icmp.MessageType == IcmpType.EchoRequest) // this is a ping!
+        {
+            ReplyToPing(sender, icmp, incomingIpv4Message);
+        }
+        else Log.Debug($"Unsupported ICMP message '{icmp.MessageType.ToString()}' -- not replying");
+    }
+
     private void ReplyToPing(IPEndPoint sender, IcmpPacket icmp, IpV4Packet incomingIpv4Message)
     {
         Log.Info("    It's a ping. Constructing reply.");
@@ -122,7 +184,7 @@ public class ChildSa
         var ipv4Reply = new IpV4Packet
         {
             Version = IpV4Version.Version4,
-            Length = 5,
+            HeaderLength = 5,
             ServiceType = 0,
             TotalLength = 20 + icmpData.Length, // calculate later?
             PacketId = 642, // should be random?
@@ -144,6 +206,21 @@ public class ChildSa
         Reply(encryptedData, sender);
     }
 
+    private void CloseConnection(SenderPort key)
+    {
+        try
+        {
+            var session = _tcpSessions[key];
+            _tcpSessions.Remove(key);
+
+            session.Close();
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"Failed to close TCP session: {ex}");
+        }
+    }
+    
     private void Reply(byte[] message, IPEndPoint to)
     {
         if (_server is null)
@@ -155,6 +232,16 @@ public class ChildSa
         _server.SendRaw(message, to, out _);
 
         _msgIdOut++;
+    }
+    
+    /// <summary>
+    /// Send a message through the gateway.
+    /// Used by protocol layer (e.g. TCP)
+    /// </summary>
+    public void Send(IpV4Packet reply, IPEndPoint gateway)
+    {
+        var raw = WriteSpe(reply);
+        Reply(raw, gateway);
     }
 
     /// <summary>
@@ -182,7 +269,7 @@ public class ChildSa
         // sanity check
         if (encrypted.Length < 8) throw new Exception("EspPacket too short");
         
-        var ok = ByteSerialiser.FromBytes<EspPacket>(encrypted, out espPacket);
+        var ok = ByteSerialiser.FromBytes(encrypted, out espPacket);
         if (!ok) throw new Exception("Failed to deserialise EspPacket");
 
         // target check
