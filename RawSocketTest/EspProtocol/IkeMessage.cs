@@ -4,9 +4,8 @@ using RawSocketTest.Crypto;
 using RawSocketTest.Enums;
 using RawSocketTest.Helpers;
 using RawSocketTest.Payloads;
-using SkinnyJson;
 
-namespace RawSocketTest;
+namespace RawSocketTest.EspProtocol;
 
 public class IkeMessage
 {

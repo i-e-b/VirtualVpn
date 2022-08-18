@@ -1,5 +1,6 @@
 ﻿using System.Net;
 using RawSocketTest.Enums;
+using RawSocketTest.EspProtocol;
 using RawSocketTest.Helpers;
 using SkinnyJson;
 // ReSharper disable BuiltInTypeReferenceStyle

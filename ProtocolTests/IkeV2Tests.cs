@@ -1,5 +1,6 @@
 ﻿using NUnit.Framework;
 using RawSocketTest;
+using RawSocketTest.EspProtocol;
 using SkinnyJson;
 
 namespace ProtocolTests;

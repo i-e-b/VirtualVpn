@@ -3,6 +3,7 @@ using NUnit.Framework;
 using RawSocketTest;
 using RawSocketTest.Crypto;
 using RawSocketTest.Enums;
+using RawSocketTest.EspProtocol;
 using RawSocketTest.Helpers;
 using RawSocketTest.Payloads;
 using RawSocketTest.Payloads.PayloadSubunits;

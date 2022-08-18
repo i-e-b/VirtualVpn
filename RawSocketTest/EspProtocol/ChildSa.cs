@@ -1,14 +1,13 @@
 ﻿using System.Net;
 using RawSocketTest.Crypto;
 using RawSocketTest.Enums;
-using RawSocketTest.EspProtocol;
 using RawSocketTest.Helpers;
 using RawSocketTest.InternetProtocol;
 using RawSocketTest.TransmissionControlProtocol;
 
 // ReSharper disable BuiltInTypeReferenceStyle
 
-namespace RawSocketTest;
+namespace RawSocketTest.EspProtocol;
 
 public class ChildSa
 {
@@ -19,6 +18,7 @@ public class ChildSa
     private readonly UdpServer? _server;
     private long _msgIdIn;
     private long _msgIdOut;
+    private long _captureNumber;
     
     private readonly Dictionary<SenderPort, TcpSession> _tcpSessions = new();
 
@@ -253,6 +253,7 @@ public class ChildSa
     /// </summary>
     public void Send(IpV4Packet reply, IPEndPoint gateway)
     {
+        Log.Info("Sending reply");
         var raw = WriteSpe(reply);
         Reply(raw, gateway);
     }
@@ -265,7 +266,9 @@ public class ChildSa
     {
         var plain = ByteSerialiser.ToBytes(packet);
         var encrypted = _cryptoOut.EncryptEsp(plain, IpProtocol.IPV4);
-        
+
+        CaptureTraffic(plain, "out");
+
         var wrapper = new EspPacket{
             Sequence = (uint)_msgIdOut,
             Spi = SpiOut,
@@ -298,9 +301,19 @@ public class ChildSa
         
         if (declaredProtocol != IpProtocol.IPV4) throw new Exception($"ESP delivered unsupported payload type: {declaredProtocol.ToString()}");
         
+        CaptureTraffic(plain, "in");
+        
         ok = ByteSerialiser.FromBytes<IpV4Packet>(plain, out var ipv4);
         if (!ok) throw new Exception("Failed to deserialise IPv4 packet");
         
         return ipv4;
+    }
+
+    private void CaptureTraffic(byte[] plain, string direction)
+    {
+        if (!Settings.CaptureTraffic) return;
+        
+        File.WriteAllText(Settings.FileBase + $"IPv4_{_captureNumber}_{direction}.txt", Bit.Describe($"ipv4_{_captureNumber}_{direction}", plain));
+        _captureNumber++;
     }
 }
