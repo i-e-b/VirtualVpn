@@ -1,5 +1,4 @@
-﻿using System.Diagnostics.CodeAnalysis;
-using VirtualVpn.Enums;
+﻿using VirtualVpn.Enums;
 using VirtualVpn.Helpers;
 using VirtualVpn.InternetProtocol;
 
@@ -117,89 +116,51 @@ public class TcpSegment
     /// <summary>
     /// Update the TCP checksum for current headers and payload,
     /// this includes data from the outer wrapper.
+    /// <p></p>
+    /// https://www.rfc-editor.org/rfc/rfc793#section-3.1
     /// </summary>
     /// <remarks>this is honestly a *weird* checksum</remarks>
-    public void UpdateChecksum(byte[] sourceAddress, byte[] destAddress, IpV4Protocol protocol)
+    public void UpdateChecksum(byte[] sourceAddress, byte[] destAddress)
     {
+        /*
+  Checksum:  16 bits
+
+    The checksum field is the 16 bit one's complement of the one's
+    complement sum of all 16 bit words in the header and text.  If a
+    segment contains an odd number of header and text octets to be
+    checksummed, the last octet is padded on the right with zeros to
+    form a 16 bit word for checksum purposes.  The pad is not
+    transmitted as part of the segment.  While computing the checksum,
+    the checksum field itself is replaced with zeros.
+
+    The checksum also covers a 96 bit pseudo header conceptually
+    prefixed to the TCP header.  This pseudo header contains the Source
+    Address, the Destination Address, the Protocol, and TCP length.
+    This gives the TCP protection against misrouted segments.  This
+    information is carried in the Internet Protocol and is transferred
+    across the TCP/Network interface in the arguments or results of
+    calls by the TCP on the IP.
+
+                     +--------+--------+--------+--------+
+                     |           Source Address          |
+                     +--------+--------+--------+--------+
+                     |         Destination Address       |
+                     +--------+--------+--------+--------+
+                     |  zero  |  PtCl  |    TCP Length   |
+                     +--------+--------+--------+--------+
+
+      The TCP Length is the TCP header length plus the data length in
+      octets (this is not an explicitly transmitted quantity, but is
+      computed), and it does not count the 12 octets of the pseudo
+      header.
+         */
         // Clear checksum
         Checksum = 0;
         
         // capture message bytes
         var tcpBytes = ByteSerialiser.ToBytes(this);
         
-        // prepare a buffer
-        var idx = 0;
-        var data = new byte[12 + tcpBytes.Length];
-        
-        // write the pseudo-header
-        Bit.CopyOver(sourceAddress, data, ref idx);
-        Bit.CopyOver(destAddress, data, ref idx);
-        data[idx++] = 0;
-        data[idx++] = (byte)protocol;
-        Bit.WriteUInt16((ushort)tcpBytes.Length, data, ref idx);
-        
-        // copy payload data
-        Bit.CopyOver(tcpBytes, data, ref idx);
-        
-        // calculate and set
-        Checksum = IpChecksum.CalculateChecksum(data);
+        // calculate and set checksum
+        Checksum = IpChecksum.TcpChecksum(sourceAddress, destAddress, 6, tcpBytes.Length, tcpBytes, 0);
     }
-    
-
-}
-
-[Flags]
-[SuppressMessage("ReSharper", "UnusedMember.Global")]
-public enum TcpSegmentFlags
-{
-    None = 0,
-    
-    /// <summary>
-    /// Both Syn and Ack flags
-    /// </summary>
-    SynAck = Syn | Ack,
-    
-    /// <summary> FIN: Last packet from sender </summary>
-    Fin = 1 << 0,
-    
-    /// <summary>
-    /// SYN: Synchronize sequence numbers.
-    /// <para></para>
-    /// Only the first packet sent from each end should have this flag set.
-    /// Some other flags and fields change meaning based on this flag,
-    /// and some are only valid when it is set, and others when it is clear
-    /// </summary>
-    Syn = 1 << 1,
-    
-    /// <summary> RST: Reset the connection </summary>
-    Rst = 1 << 2,
-    
-    /// <summary> PSH: Push function. Asks to push the buffered data to the receiving application </summary>
-    Psh = 1 << 3,
-    
-    /// <summary> ACK: Indicates that the Acknowledgment field is significant. All packets after the initial SYN packet sent by the client should have this flag set </summary>
-    Ack = 1 << 4,
-    
-    /// <summary> URG: Indicates that the Urgent pointer field is significant </summary>
-    Urg = 1 << 5,
-    
-    /// <summary>
-    /// ECE: ECN-Echo has a dual role, depending on the value of the SYN flag. It indicates:
-    /// <ul>
-    /// <li>If the SYN flag is set (1), that the TCP peer is ECN capable.</li>
-    /// <li>If the SYN flag is clear (0), that a packet with Congestion Experienced flag set (ECN=11)
-    ///     in the IP header was received during normal transmission.
-    ///     This serves as an indication of network congestion (or impending congestion) to the TCP sender.</li>
-    /// </ul>
-    /// </summary>
-    Ece = 1 << 6,
-    
-    /// <summary>
-    /// CWR: Congestion window reduced (CWR) flag is
-    /// set by the sending host to indicate that it received a TCP segment with
-    /// the ECE flag set and had responded in congestion control mechanism </summary>
-    Cwr = 1 << 7,
-    
-    /// <summary> NS: ECN-nonce - concealment protection </summary>
-    Ns_ = 1 << 8,
 }
