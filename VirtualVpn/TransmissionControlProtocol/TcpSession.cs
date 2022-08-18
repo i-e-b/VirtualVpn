@@ -294,7 +294,9 @@ public class TcpSession
         
         // Set message checksum
         message.UpdateChecksum(sender.Destination.Value, sender.Source.Value, IpV4Protocol.TCP);
-        Log.Debug($"Tcp checksum={message.Checksum:x4} (dest={Bit.HexString(sender.Destination.Value)}, src={Bit.HexString(sender.Source.Value)}, proto={(byte)IpV4Protocol.TCP})");
+        Log.Info($"Tcp checksum={message.Checksum:x4} (" +
+                  $"dest={Bit.HexString(sender.Destination.Value)}, src={Bit.HexString(sender.Source.Value)}, proto={(byte)IpV4Protocol.TCP}," +
+                  $"destPort={message.DestinationPort}, srcPort={message.SourcePort})");
         var tcpPayload = ByteSerialiser.ToBytes(message);
         
         // prepare container
@@ -304,7 +306,7 @@ public class TcpSession
             HeaderLength = 5,
             ServiceType = 0,
             TotalLength = 20 + tcpPayload.Length,
-            PacketId = _rnd.Next(10, 32700),
+            PacketId = 123,//_rnd.Next(10, 32700),
             Flags = IpV4HeaderFlags.None,
             FragmentIndex = 0,
             Ttl = 64,
@@ -317,7 +319,7 @@ public class TcpSession
         };
         
         reply.UpdateChecksum();
-        Log.Debug($"IPv4 checksum={reply.Checksum:x4}");
+        Log.Info($"IPv4 checksum={reply.Checksum:x4}");
         
         _transport.Send(reply, Gateway);
     }
