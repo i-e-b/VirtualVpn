@@ -72,7 +72,7 @@ public class PayloadSa : MessagePayload
             var length = Bit.ReadUInt16(Data, ref idx);
             
             // and a variable quantity of data:
-            Proposals.Add(Proposal.Parse(Data, length, ref idx));
+            Proposals.Add(Proposal.Parse(Data, (ushort)(length-4), ref idx));
         }
     }
 

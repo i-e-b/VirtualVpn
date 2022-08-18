@@ -173,8 +173,6 @@ public class PayloadSerialisationTests
         Assert.That(restored.Type, Is.EqualTo(PayloadType.SA), "Payload type was wrong");
         Assert.That(idx, Is.EqualTo(written), "Not all bytes written were read"); // needs to be correct, otherwise the offset is wrong for next payload
         
-        // TODO: IEB: This should be working. Check and fix!
-        
         Assert.That(restored.Size, Is.EqualTo(original.Size), "Original and restored disagree on serialisation size");
         Assert.That(restored.Data, Is.EqualTo(original.Data).AsCollection, "Raw data does not match");
         
