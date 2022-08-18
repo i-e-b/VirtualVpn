@@ -157,7 +157,7 @@ public class VpnSession
         }
         catch (Exception ex)
         {
-            Log.Error($"Failed to handle IKE message. Error: {ex}");
+            Log.Error("Failed to handle IKE message", ex);
         }
     }
 

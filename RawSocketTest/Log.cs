@@ -92,6 +92,22 @@ public static class Log
         
         Console.WriteLine(msg);
     }
+    
+
+    public static void Error(string message, Exception ex)
+    {
+        if (_level < LogLevel.Error) return;
+        Timestamp();
+
+        if (_level >= LogLevel.Debug)
+        {
+            Console.WriteLine(message + ": " + ex); // full trace with debug
+        }
+        else
+        {
+            Console.WriteLine(message + ": " + ex.Message); // just the top message if not debug
+        }
+    }
 
     /// <summary>
     /// Always writes, regardless of log level

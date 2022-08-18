@@ -119,6 +119,11 @@ public enum TcpSegmentFlags
 {
     None = 0,
     
+    /// <summary>
+    /// Both Syn and Ack flags
+    /// </summary>
+    SynAck = Syn | Ack,
+    
     /// <summary> FIN: Last packet from sender </summary>
     Fin = 1 << 0,
     

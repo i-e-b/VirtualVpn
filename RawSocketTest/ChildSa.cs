@@ -85,7 +85,7 @@ public class ChildSa
             case IpV4Protocol.TCP:
             {
                 Log.Info("Regular TCP/IP packet");
-                if (HandleTcp(sender, incomingIpv4Message)) return;
+                HandleTcp(sender, incomingIpv4Message);
                 break;
             }
             case IpV4Protocol.UDP:
@@ -124,50 +124,62 @@ public class ChildSa
         }
     }
 
-    private bool HandleTcp(IPEndPoint sender, IpV4Packet incomingIpv4Message)
+    private void HandleTcp(IPEndPoint sender, IpV4Packet incomingIpv4Message)
     {
-        var key = TcpSession.ReadSenderAndPort(incomingIpv4Message);
-        if (key.DestinationPort == 0 || key.SenderAddress == 0)
+        try
         {
-            Log.Info("Invalid TCP/IP request: address or port not recognised");
-            return true;
-        }
-
-        // Is it a known session?
-        if (_tcpSessions.ContainsKey(key))
-        {
-            // check that this session is still coming through the original tunnel
-            var session = _tcpSessions[key];
-            if (!session.Gateway.Address.Equals(sender.Address))
+            var key = TcpSession.ReadSenderAndPort(incomingIpv4Message);
+            if (key.DestinationPort == 0 || key.SenderAddress == 0)
             {
-                Log.Warn($"Crossed connection in TCP? Expected gateway {session.Gateway.Address}, but got gateway {sender.Address} -- not replying");
-                return true;
+                Log.Info("Invalid TCP/IP request: address or port not recognised");
+                return;
             }
 
-            // continue existing session
-            session.Accept(incomingIpv4Message);
-        }
-        else
-        {
-            // start new session
-            var newSession = new TcpSession(this, sender);
-            var sessionOk = newSession.Start(incomingIpv4Message);
-            if (sessionOk) _tcpSessions.Add(key, newSession);
-        }
+            // Is it a known session?
+            if (_tcpSessions.ContainsKey(key))
+            {
+                // check that this session is still coming through the original tunnel
+                var session = _tcpSessions[key];
+                if (!session.Gateway.Address.Equals(sender.Address))
+                {
+                    Log.Warn($"Crossed connection in TCP? Expected gateway {session.Gateway.Address}, but got gateway {sender.Address} -- not replying");
+                    return;
+                }
 
-        return false;
+                // continue existing session
+                session.Accept(incomingIpv4Message);
+            }
+            else
+            {
+                // start new session
+                var newSession = new TcpSession(this, sender);
+                var sessionOk = newSession.Start(incomingIpv4Message);
+                if (sessionOk) _tcpSessions.Add(key, newSession);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Error in TCP path", ex);
+        }
     }
 
     private void HandleIcmp(IPEndPoint sender, IpV4Packet incomingIpv4Message)
     {
-        var ok = ByteSerialiser.FromBytes<IcmpPacket>(incomingIpv4Message.Payload, out var icmp);
-        if (!ok) throw new Exception("Could not read ICMP packet");
-
-        if (icmp.MessageType == IcmpType.EchoRequest) // this is a ping!
+        try
         {
-            ReplyToPing(sender, icmp, incomingIpv4Message);
+            var ok = ByteSerialiser.FromBytes<IcmpPacket>(incomingIpv4Message.Payload, out var icmp);
+            if (!ok) throw new Exception("Could not read ICMP packet");
+
+            if (icmp.MessageType == IcmpType.EchoRequest) // this is a ping!
+            {
+                ReplyToPing(sender, icmp, incomingIpv4Message);
+            }
+            else Log.Debug($"Unsupported ICMP message '{icmp.MessageType.ToString()}' -- not replying");
         }
-        else Log.Debug($"Unsupported ICMP message '{icmp.MessageType.ToString()}' -- not replying");
+        catch (Exception ex)
+        {
+            Log.Error("Error in ICMP path", ex);
+        }
     }
 
     private void ReplyToPing(IPEndPoint sender, IcmpPacket icmp, IpV4Packet incomingIpv4Message)
@@ -236,7 +248,8 @@ public class ChildSa
     
     /// <summary>
     /// Send a message through the gateway.
-    /// Used by protocol layer (e.g. TCP)
+    /// Used by protocol layer (e.g. TCP).
+    /// IPv4 checksum must be written before calling
     /// </summary>
     public void Send(IpV4Packet reply, IPEndPoint gateway)
     {

@@ -203,7 +203,7 @@ public class IkeCrypto
         }
         catch (Exception ex)
         {
-            Log.Error($"Failed to decrypt: {ex}");
+            Log.Error("Failed to decrypt", ex);
             throw;
         }
         
@@ -420,7 +420,7 @@ public class IkeCrypto
         }
         catch (Exception ex)
         {
-            Log.Error($"Failed to decrypt: {ex}");
+            Log.Error("Failed to decrypt", ex);
             throw;
         }
         

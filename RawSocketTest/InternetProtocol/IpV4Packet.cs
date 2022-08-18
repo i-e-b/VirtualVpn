@@ -18,7 +18,8 @@ public class IpV4Packet
     public IpV4Version Version;
     
     /// <summary>
-    /// Internet Header Length (IHL)
+    /// Internet Header Length (IHL).
+    /// Should be exactly 5 unless options are added
     /// <p></p>
     /// Length of header, as a count of 32-bit words.
     /// Byte length is this times 4

@@ -263,8 +263,7 @@ public class VpnServer : IDisposable
                     }
                     catch (Exception ex)
                     {
-                        Log.Error($"Event pump failure, VPN: {ex.Message}");
-                        Log.Debug($"Event pump failure stack, VPN: {ex}");
+                        Log.Error("Event pump failure, VPN", ex);
                     }
                 }
 
@@ -276,8 +275,7 @@ public class VpnServer : IDisposable
                     }
                     catch (Exception ex)
                     {
-                        Log.Error($"Event pump failure, ChildSA: {ex.Message}");
-                        Log.Debug($"Event pump failure stack, ChildSA: {ex}");
+                        Log.Error("Event pump failure, ChildSA", ex);
                     }
                 }
             }
