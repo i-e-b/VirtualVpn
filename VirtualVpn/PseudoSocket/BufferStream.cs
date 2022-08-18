@@ -73,8 +73,12 @@ public class BufferStream
 /// </summary>
 internal class FragmentBuffer
 {
+    private long _idx;
+    private readonly byte[] _data;
+
     public FragmentBuffer(byte[] data)
     {
-        throw new NotImplementedException();
+        _idx = 0;
+        _data = data;
     }
 }
