@@ -1,10 +1,10 @@
 ﻿using NUnit.Framework;
-using RawSocketTest;
-using RawSocketTest.Crypto;
-using RawSocketTest.Enums;
-using RawSocketTest.EspProtocol;
-using RawSocketTest.Helpers;
-using RawSocketTest.InternetProtocol;
+using VirtualVpn;
+using VirtualVpn.Crypto;
+using VirtualVpn.Enums;
+using VirtualVpn.EspProtocol;
+using VirtualVpn.Helpers;
+using VirtualVpn.InternetProtocol;
 
 namespace ProtocolTests;
 
@@ -121,6 +121,7 @@ public class ChildSaTests
     {
         Log.SetLevel(LogLevel.Everything);
         Settings.CodeModeForDescription = false;
+        Settings.CaptureTraffic = false;
 
         // Key sources --
         //prfId=PRF_HMAC_SHA2_256, integId=AUTH_HMAC_SHA2_256_128, cipherId=ENCR_AES_CBC, keyLength=128
@@ -199,6 +200,7 @@ public class ChildSaTests
     {
         Log.SetLevel(LogLevel.Everything);
         Settings.CodeModeForDescription = false;
+        Settings.CaptureTraffic = false;
 
         // Key sources --
         //prfId=PRF_HMAC_SHA2_256, integId=AUTH_HMAC_SHA2_256_128, cipherId=ENCR_AES_CBC, keyLength=128

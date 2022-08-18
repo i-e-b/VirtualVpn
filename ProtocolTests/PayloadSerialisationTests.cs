@@ -1,9 +1,8 @@
 ﻿using NUnit.Framework;
-using RawSocketTest;
-using RawSocketTest.Enums;
-using RawSocketTest.EspProtocol;
-using RawSocketTest.Payloads;
-using RawSocketTest.Payloads.PayloadSubunits;
+using VirtualVpn.Enums;
+using VirtualVpn.EspProtocol;
+using VirtualVpn.Payloads;
+using VirtualVpn.Payloads.PayloadSubunits;
 
 #pragma warning disable CS8602
 

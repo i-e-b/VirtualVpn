@@ -32,7 +32,7 @@
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\RawSocketTest\RawSocketTest.csproj" />
+      <ProjectReference Include="..\VirtualVpn\VirtualVpn.csproj" />
     </ItemGroup>
 
 </Project>

@@ -1,7 +1,7 @@
 ﻿using NUnit.Framework;
-using RawSocketTest.Crypto;
-using RawSocketTest.Enums;
-using RawSocketTest.Helpers;
+using VirtualVpn.Crypto;
+using VirtualVpn.Enums;
+using VirtualVpn.Helpers;
 
 namespace ProtocolTests;
 

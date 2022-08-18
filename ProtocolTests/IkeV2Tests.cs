@@ -1,7 +1,6 @@
 ﻿using NUnit.Framework;
-using RawSocketTest;
-using RawSocketTest.EspProtocol;
 using SkinnyJson;
+using VirtualVpn.EspProtocol;
 
 namespace ProtocolTests;
 

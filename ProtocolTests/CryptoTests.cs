@@ -1,13 +1,14 @@
 ﻿using System.Text;
 using NUnit.Framework;
-using RawSocketTest;
-using RawSocketTest.Crypto;
-using RawSocketTest.Enums;
-using RawSocketTest.EspProtocol;
-using RawSocketTest.Helpers;
-using RawSocketTest.Payloads;
-using RawSocketTest.Payloads.PayloadSubunits;
 using SkinnyJson;
+using VirtualVpn;
+using VirtualVpn.Crypto;
+using VirtualVpn.Enums;
+using VirtualVpn.EspProtocol;
+using VirtualVpn.Helpers;
+using VirtualVpn.Payloads;
+using VirtualVpn.Payloads.PayloadSubunits;
+
 // ReSharper disable InconsistentNaming
 
 namespace ProtocolTests;
