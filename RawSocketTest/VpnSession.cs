@@ -32,7 +32,7 @@ public class VpnSession
     private long _maxSeq = -1;
 
     /// <summary>sequence number for sending</summary>
-    private readonly long _seqOut;
+    private long _seqOut;
 
     private long _peerMsgId;
     private byte[]? _lastSentMessageBytes;
@@ -205,22 +205,26 @@ public class VpnSession
                 AssertState(SessionState.INITIAL, request);
                 Log.Info("IKE_SA_INIT received");
                 HandleSaInit(request, sender, sendZeroHeader);
+                _peerMsgId++;
                 break;
 
             case ExchangeType.IKE_AUTH: // pvpn/server.py:287
                 AssertState(SessionState.SA_SENT, request);
                 Log.Info("IKE_AUTH received");
                 HandleAuth(request, sender, sendZeroHeader);
+                _peerMsgId++;
                 break;
 
             case ExchangeType.INFORMATIONAL: // pvpn/server.py:315
                 AssertState(SessionState.ESTABLISHED, request);
                 Log.Info("INFORMATIONAL received");
                 HandleInformational(request, sender, sendZeroHeader);
+                _peerMsgId++;
                 break;
 
             case ExchangeType.CREATE_CHILD_SA: // pvpn/server.py:340
                 AssertState(SessionState.ESTABLISHED, request);
+                // TODO: Handle this -- for us as initiator, and for re-heat
                 Log.Info("CREATE_CHILD_SA received");
                 break;
 
@@ -590,7 +594,7 @@ public class VpnSession
         _lastContact = to;
         _lastSentMessageBytes = message;
         _server.SendRaw(message, to, out _);
-        _peerMsgId++;
+        _seqOut++;
 
         //var name = Settings.FileBase + $"IKEv2-Reply_{_peerMsgId}_Port-{to.Port}_IKE.bin";
         //File.WriteAllBytes(name, message);
