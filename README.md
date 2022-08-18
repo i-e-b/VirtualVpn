@@ -30,6 +30,7 @@ https://www.secfu.net/2017/12/23/the-ikev2-header-and-the-security-association-p
 - https://en.wikipedia.org/wiki/List_of_IP_protocol_numbers
 - https://en.wikipedia.org/wiki/Ping_(networking_utility)#Message_format
 
+`tcpdump -i vti_h -v`
 
 - [x] Read IP packets
 - [x] Encrypt ESP packets

@@ -294,6 +294,7 @@ public class TcpSession
         
         // Set message checksum
         message.UpdateChecksum(sender.Destination.Value, sender.Source.Value, IpV4Protocol.TCP);
+        Log.Debug($"Tcp checksum={message.Checksum:x4} (dest={Bit.HexString(sender.Destination.Value)}, src={Bit.HexString(sender.Source.Value)}, proto={(byte)IpV4Protocol.TCP})");
         var tcpPayload = ByteSerialiser.ToBytes(message);
         
         // prepare container
@@ -316,6 +317,7 @@ public class TcpSession
         };
         
         reply.UpdateChecksum();
+        Log.Debug($"IPv4 checksum={reply.Checksum:x4}");
         
         _transport.Send(reply, Gateway);
     }
