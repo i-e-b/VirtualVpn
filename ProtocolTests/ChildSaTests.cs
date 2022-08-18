@@ -51,7 +51,7 @@ public class ChildSaTests
             0x34, 0x35, 0x36, 0x37
         };
         
-        var expectedChecksum = IpV4Packet.CalculateChecksum(data);
+        var expectedChecksum = IpChecksum.CalculateChecksum(data);
         Assert.That(expectedChecksum, Is.EqualTo(0), $"Checksum (calculated = {expectedChecksum})");
         
         var ok = ByteSerialiser.FromBytes<IpV4Packet>(data, out var basicPacket);
@@ -61,7 +61,7 @@ public class ChildSaTests
         basicPacket.Checksum = 0;
         
         var newData = ByteSerialiser.ToBytes(basicPacket);
-        var finalChecksum = IpV4Packet.CalculateChecksum(newData);
+        var finalChecksum = IpChecksum.CalculateChecksum(newData);
 
         Console.WriteLine(Bit.Describe("original", data) + Bit.Describe("new", newData));
         
@@ -78,7 +78,7 @@ public class ChildSaTests
             0x34, 0x35, 0x36, 0x37
         };
 
-        var expectedChecksum = IpV4Packet.CalculateChecksum(data);
+        var expectedChecksum = IpChecksum.CalculateChecksum(data);
         Assert.That(expectedChecksum, Is.EqualTo(0), $"Checksum (calculated = {expectedChecksum})");
         
         var ok = ByteSerialiser.FromBytes<IpV4Packet>(data, out var basicPacket);

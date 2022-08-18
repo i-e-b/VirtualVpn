@@ -189,7 +189,7 @@ public class ChildSa
         icmp.MessageCode = 0;
         icmp.Checksum = 0;
 
-        var checksum = IpV4Packet.CalculateChecksum(ByteSerialiser.ToBytes(icmp));
+        var checksum = IpChecksum.CalculateChecksum(ByteSerialiser.ToBytes(icmp));
         icmp.Checksum = checksum;
 
         var icmpData = ByteSerialiser.ToBytes(icmp);
@@ -210,9 +210,8 @@ public class ChildSa
             Options = Array.Empty<byte>(),
             Payload = icmpData
         };
-
-        checksum = IpV4Packet.CalculateChecksum(ByteSerialiser.ToBytes(ipv4Reply));
-        ipv4Reply.Checksum = checksum;
+        
+        ipv4Reply.UpdateChecksum();
 
         var encryptedData = WriteSpe(ipv4Reply);
         Reply(encryptedData, sender);

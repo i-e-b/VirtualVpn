@@ -1,5 +1,7 @@
 ﻿using System.Diagnostics.CodeAnalysis;
+using RawSocketTest.Enums;
 using RawSocketTest.Helpers;
+using RawSocketTest.InternetProtocol;
 
 namespace RawSocketTest.TransmissionControlProtocol;
 
@@ -111,6 +113,39 @@ public class TcpSegment
     /// on length field (usually zero)
     /// </summary>
     public int OptionsLength() => (DataOffset - 5) * 4;
+
+    /// <summary>
+    /// Update the TCP checksum for current headers and payload,
+    /// this includes data from the outer wrapper.
+    /// </summary>
+    /// <remarks>this is honestly a *weird* checksum</remarks>
+    public void UpdateChecksum(byte[] sourceAddress, byte[] destAddress, IpV4Protocol protocol)
+    {
+        // Clear checksum
+        Checksum = 0;
+        
+        // capture message bytes
+        var tcpBytes = ByteSerialiser.ToBytes(this);
+        
+        // prepare a buffer
+        var idx = 0;
+        var data = new byte[12 + tcpBytes.Length];
+        
+        // write the pseudo-header
+        Bit.CopyOver(sourceAddress, data, ref idx);
+        Bit.CopyOver(destAddress, data, ref idx);
+        data[idx++] = 0;
+        data[idx++] = (byte)protocol;
+        Bit.WriteUInt16((ushort)tcpBytes.Length, data, ref idx);
+        
+        // copy payload data
+        Bit.CopyOver(tcpBytes, data, ref idx);
+        
+        // calculate and set
+        Checksum = IpChecksum.CalculateChecksum(data);
+    }
+    
+
 }
 
 [Flags]

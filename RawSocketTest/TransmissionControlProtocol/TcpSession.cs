@@ -229,11 +229,10 @@ public class TcpSession
         _localSeq++;
         
         // Set message checksum
-        message.Checksum = 0;
+        message.UpdateChecksum(sender.Destination.Value, sender.Source.Value, IpV4Protocol.TCP);
         var tcpPayload = ByteSerialiser.ToBytes(message);
-        message.Checksum = IpV4Packet.CalculateChecksum(tcpPayload);
-        tcpPayload = ByteSerialiser.ToBytes(message);
         
+        // prepare container
         var reply = new IpV4Packet
         {
             Version = IpV4Version.Version4,
@@ -252,8 +251,7 @@ public class TcpSession
             Payload = tcpPayload
         };
         
-        var ipv4Payload = ByteSerialiser.ToBytes(reply);
-        reply.Checksum = IpV4Packet.CalculateChecksum(ipv4Payload);
+        reply.UpdateChecksum();
         
         _transport.Send(reply, Gateway);
     }

@@ -150,37 +150,27 @@ public class IpV4Packet
     public int OptionsLength() => HeaderLength * 4 - 20;
 
     /// <summary>
-    /// Calculate the checksum of the raw data.
-    /// If the checksum is in place and correct, this will return zero.
-    /// If the checksum is zeroed, this will give the correct value to inject
+    /// Re-write the TCP header-checksum with current values.
+    /// This is not affected by payload data, but is affected by payload length.
     /// </summary>
-    public static ushort CalculateChecksum(byte[] raw)
+    public void UpdateChecksum()
     {
-        if (raw.Length < 2) throw new Exception($"Invalid IPv4 packet length {raw.Length}");
+        // Copy only header data, not payload
+        var justHeads = new IpV4Packet
+        {
+            Version = Version, HeaderLength = HeaderLength, ServiceType = ServiceType,
+            TotalLength = TotalLength, PacketId = PacketId, Flags = Flags,
+            FragmentIndex = FragmentIndex, Ttl = Ttl, Protocol = Protocol,
+            Source = Source, Destination = Destination, Options = Options,
+            
+            Checksum = 0,
+            Payload = Array.Empty<byte>()
+        };
+        // get bytes
+        var headerBytes = ByteSerialiser.ToBytes(justHeads);
         
-        ulong sum = 0;
-        var i = 0;
-        // main words
-        for (; i+1 < raw.Length; i+=2)
-        {
-            var word = (uint)((raw[i] << 8) | raw[i+1]);
-            sum += word;
-        }
-
-        // trailing byte
-        if (i < raw.Length - 1)
-        {
-            sum += raw[i];
-        }
-
-        // folding
-        while ((sum >> 16) > 0)
-        {
-            sum = (sum & 0xffff) + (sum >> 16);
-        }
-
-        // bitwise flip
-        return (ushort)~((ushort)sum);
+        // update our checksum
+        Checksum = IpChecksum.CalculateChecksum(headerBytes);
     }
 }
 
