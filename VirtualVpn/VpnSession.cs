@@ -178,7 +178,7 @@ public class VpnSession
             }
 
             Log.Info("    Asked to repeat a message we sent. Directly re-sending.");
-            _server.SendRaw(_lastSentMessageBytes, sender, out _); // don't add zero pad again?
+            _server.SendRaw(_lastSentMessageBytes, sender); // don't add zero pad again?
             return;
         }
 
@@ -594,7 +594,7 @@ public class VpnSession
     {
         _lastContact = to;
         _lastSentMessageBytes = message;
-        _server.SendRaw(message, to, out _);
+        _server.SendRaw(message, to);
         _seqOut++;
 
         //var name = Settings.FileBase + $"IKEv2-Reply_{_peerMsgId}_Port-{to.Port}_IKE.bin";

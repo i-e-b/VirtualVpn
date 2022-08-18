@@ -9,15 +9,26 @@ public class BufferStream
     private readonly object _lock = new();
     
     /// <summary>
+    /// Lowest sequence seen in this data.
+    /// </summary>
+    private long _minSequence;
+    
+    /// <summary>
     /// The sequence number the read-head is on
     /// </summary>
-    private long _readSequence;
+    private long? _readSequence;
+    
+    /// <summary>
+    /// If the remote side claimed that transmission is complete,
+    /// we store the end sequence number here.
+    /// </summary>
+    private long? _endSequence;
     
     /// <summary>
     /// Sequence number => sub-buffer.
     /// Items are removed as soon as all the data is read.
     /// </summary>
-    private readonly Dictionary<long, FragmentBuffer> _buffer = new();
+    private readonly Dictionary<long, FragmentBuffer> _fragments = new();
 
 
     /// <summary>
@@ -28,15 +39,26 @@ public class BufferStream
     /// Check <see cref="CanRead"/> to see if in-sequence
     /// data is available 
     /// </summary>
-    public bool HasData { get { lock (_lock) { return _buffer.Count > 0; } } }
+    public bool HasData { get { lock (_lock) { return _fragments.Count > 0; } } }
 
     /// <summary>
     /// Returns true if data can be read.
     /// Will return false if there is no data
     /// OR the data is beyond the current sequence.
     /// </summary>
-    public bool CanRead { get; set; }
+    public bool CanRead { get { lock (_lock) { return _fragments.Count > 0 && (_readSequence is null || _fragments.ContainsKey(_readSequence.Value)); } } }
+
+    /// <summary>
+    /// True if the sender has declared an end to the stream
+    /// </summary>
+    public bool Complete => _endSequence is not null;
     
+    /// <summary>
+    /// True if all available data has been read
+    /// up to the limit declared by the sender.
+    /// </summary>
+    public bool AllDataRead => _readSequence > _endSequence && _fragments.Count < 1;
+
     /// <summary>
     /// Write data into the buffer
     /// </summary>
@@ -44,27 +66,77 @@ public class BufferStream
     {
         lock (_lock)
         {
-            if (_buffer.Count < 1)
+            if (_fragments.Count < 1)
             {
-                _readSequence = sequence;
+                _endSequence = null;
+                _minSequence = sequence;
+            }
+            else
+            {
+                _minSequence = _minSequence < sequence ? _minSequence : sequence;
             }
 
-            if (_buffer.ContainsKey(sequence))
+            if (_fragments.ContainsKey(sequence))
             {
                 Log.Warn($"Received duplicate packet for sequence = {sequence}. Ignoring.");
                 return;
             }
 
-            _buffer.Add(sequence, new FragmentBuffer(data));
+            _fragments.Add(sequence, new FragmentBuffer(data));
         }
     }
 
     /// <summary>
-    /// Read available data into a buffer
+    /// Flags the buffer as complete, until the next fragment is written.
     /// </summary>
-    public long Read(byte[] buffer, int offset, int length)
+    public void SetComplete(long endSequence)
     {
-        throw new Exception("Not yet implemented");
+        _endSequence = endSequence;
+    }
+
+    /// <summary>
+    /// Read available data into a buffer.
+    /// Returns actual bytes read.
+    /// </summary>
+    /// <param name="buffer">buffer to read into</param>
+    /// <param name="offset">offset into buffer to start</param>
+    /// <param name="length">maximum number of bytes to read</param>
+    public int Read(byte[] buffer, int offset, int length)
+    {
+        if (offset >= buffer.Length) throw new Exception("Tried to write outside of buffer");
+        if (offset < 0) throw new Exception("Negative offset not allowed");
+        if (length <= 0) return 0;
+        
+        lock (_lock)
+        {
+            if (_fragments.Count < 1) return 0; // nothing to read
+            _readSequence ??= _minSequence;
+            if (!_fragments.ContainsKey(_readSequence.Value)) return 0; // next fragment isn't available yet
+            
+            // how many bytes could we fill?
+            var available = buffer.Length - offset;
+            var remains = available > length ? length : available;
+            
+            // Until we fill 'length', or run out of data, keep pulling slices
+            var total = 0;
+            var idx = offset;
+            while (remains > 0)
+            {
+                if (_fragments.Count < 1) break; // ran out of data
+                if ( ! _fragments.ContainsKey(_readSequence!.Value)) break; // hit a fragment gap
+                
+                var frag = _fragments[_readSequence.Value];
+                total += frag.Read(buffer, ref remains, ref idx);
+
+                if (frag.IsDone)
+                {
+                    _fragments.Remove(_readSequence.Value);
+                    _readSequence++;
+                }
+            }
+            
+            return total;
+        }
     }
 }
 
@@ -73,12 +145,33 @@ public class BufferStream
 /// </summary>
 internal class FragmentBuffer
 {
-    private long _idx;
+    private int _offset;
     private readonly byte[] _data;
 
     public FragmentBuffer(byte[] data)
     {
-        _idx = 0;
+        _offset = 0;
         _data = data;
+    }
+
+    public bool IsDone => _offset >= _data.Length;
+
+    /// <summary>
+    /// Read into a buffer
+    /// </summary>
+    /// <param name="buffer">target</param>
+    /// <param name="max">max number of bytes to copy. Reduced by amount copied</param>
+    /// <param name="idx">start offset, updated to end offset</param>
+    /// <returns>total bytes written</returns>
+    public int Read(byte[] buffer, ref int max, ref int idx)
+    {
+        var available = _data.Length - _offset;
+        var copy = available > max ? max : available;
+        for (int i = 0; i < copy; i++)
+        {
+            max--;
+            buffer[idx++] = _data[_offset++];
+        }
+        return copy;
     }
 }

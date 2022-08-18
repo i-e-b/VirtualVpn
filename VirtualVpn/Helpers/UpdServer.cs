@@ -42,8 +42,14 @@ public class UdpServer : IDisposable
         {
             Log.Info("Listening on 500...");
             var buffer = _ikeClient.Receive(ref sender);
-            Log.Info($"ListenPort=500 EphemeralPort={sender.Port} Caller={sender.Address} Data->{buffer.Length} bytes");
-            _ikeResponder?.Invoke(buffer, sender);
+            try
+            {
+                _ikeResponder?.Invoke(buffer, sender);
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Failure in IKE loop", ex);
+            }
         }
     }
     
@@ -54,35 +60,45 @@ public class UdpServer : IDisposable
         {
             Log.Info("Listening on 4500...");
             var buffer = _speClient.Receive(ref sender);
-            Log.Info($"ListenPort=4500 EphemeralPort={sender.Port} Caller={sender.Address} Data->{buffer.Length} bytes");
-            _speResponder?.Invoke(buffer, sender);
+            try
+            {
+                _speResponder?.Invoke(buffer, sender);
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Failure in SPE/ESP loop", ex);
+            }
         }
     }
 
     /// <summary>
     /// Send bytes to a target, matching the target port if 500 or 4500
     /// </summary>
-    public void SendRaw(byte[] data, IPEndPoint target, out int bytesSent)
+    public void SendRaw(byte[] data, IPEndPoint target)
     {
         // `UdpClient.Send()` seems to cause 500 port to be used on the way back,
         // unlike `Socket.SendTo(buf,flags,target)` which gives an ephemeral port
-        
-        if (target.Port == 4500)
+
+        switch (target.Port)
         {
-            var addr = _speClient.Client.LocalEndPoint as IPEndPoint;
-            Log.Debug($"    Sending from {addr?.Address}[{addr?.Port}] to {target.Address}[{target.Port}] ({data.Length} bytes)");
-            bytesSent = _speClient.Send(data, data.Length, target);
-        }
-        else if (target.Port == 500)
-        {
-            var addr = _ikeClient.Client.LocalEndPoint as IPEndPoint;
-            Log.Debug($"    Sending from {addr?.Address}[{addr?.Port}] to {target.Address}[{target.Port}] ({data.Length} bytes)");
-            bytesSent = _ikeClient.Send(data, data.Length, target);
-        }
-        else
-        {
-            Log.Warn($"WARNING: target port of {target.Port} is not recognised! Will send from source port of 500");
-            bytesSent = _ikeClient.Send(data, data.Length, target);
+            case 4500:
+            {
+                var addr = _speClient.Client.LocalEndPoint as IPEndPoint;
+                Log.Debug($"    Sending from {addr?.Address}[{addr?.Port}] to {target.Address}[{target.Port}] ({data.Length} bytes)");
+                _speClient.Send(data, data.Length, target);
+                break;
+            }
+            case 500:
+            {
+                var addr = _ikeClient.Client.LocalEndPoint as IPEndPoint;
+                Log.Debug($"    Sending from {addr?.Address}[{addr?.Port}] to {target.Address}[{target.Port}] ({data.Length} bytes)");
+                _ikeClient.Send(data, data.Length, target);
+                break;
+            }
+            default:
+                Log.Warn($"WARNING: target port of {target.Port} is not recognised! Will send from source port of 500");
+                _ikeClient.Send(data, data.Length, target);
+                break;
         }
     }
 

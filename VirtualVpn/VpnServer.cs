@@ -161,7 +161,7 @@ public class VpnServer : IDisposable
         if (data.Length < 4 && data[0] == 0xff)
         {
             Log.Info("    Looks like a keep-alive ping. Sending pong");
-            _server.SendRaw(data, sender, out _);
+            _server.SendRaw(data, sender);
             return;
         }
 
