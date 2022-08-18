@@ -20,8 +20,8 @@ public class IpTrafficTests
         );
         var replyPkt = new TcpSegment
         {
-            SourcePort = tcp.DestinationPort,
-            DestinationPort = tcp.SourcePort,
+            SourcePort = 80,
+            DestinationPort = 35034,
             SequenceNumber = _localSeq,
             AcknowledgmentNumber = _remoteSeq,
             DataOffset = 5,
