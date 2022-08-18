@@ -34,8 +34,10 @@ https://www.secfu.net/2017/12/23/the-ikev2-header-and-the-security-association-p
 - [x] Read IP packets
 - [x] Encrypt ESP packets
 - [x] Respond to ping (then dance around the room a bit)
-- [ ] TCP connection / handshake etc
+- [x] TCP connection / handshake etc
 - [ ] Read wget and give some kind of dummy response
+- [ ] Close connection
+- [ ] Read and write across fragments
 
 ### Next
 

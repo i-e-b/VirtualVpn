@@ -5,6 +5,7 @@ using VirtualVpn.Enums;
 using VirtualVpn.EspProtocol;
 using VirtualVpn.Helpers;
 using VirtualVpn.InternetProtocol;
+using VirtualVpn.PseudoSocket;
 
 namespace VirtualVpn.TransmissionControlProtocol;
 
@@ -18,6 +19,30 @@ namespace VirtualVpn.TransmissionControlProtocol;
 /// </remarks>
 public class TcpSession
 {
+    // ### Transmission Control Block (TCB) values ###
+    
+    /// <summary>
+    /// SEG.SEQ - segment sequence number
+    /// </summary>
+    private long _localSeq;
+    
+    /// <summary>
+    /// SEG.ACK - segment acknowledgment number
+    /// </summary>
+    private long _remoteSeq;
+    
+    private static readonly Random _rnd = new();
+
+    /// <summary>
+    /// Data received from remote side
+    /// </summary>
+    public BufferStream IncomingStream { get; private set; }
+
+    /// <summary>
+    /// Data queued to be sent from local side
+    /// </summary>
+    public BufferStream OutgoingStream { get; private set; }
+
     /// <summary>
     /// The tunnel gateway we expect to be talking to
     /// </summary>
@@ -58,9 +83,6 @@ public class TcpSession
     /// Local port requested for this session
     /// </summary>
     public int LocalPort { get; private set; }
-    
-    private long _localSeq, _remoteSeq;
-    private static Random _rnd = new();
 
     public TcpSession(ChildSa transport, IPEndPoint gateway)
     {
@@ -69,6 +91,9 @@ public class TcpSession
         
         State = TcpSocketState.Closed;
         LastContact = new Stopwatch();
+        
+        IncomingStream = new BufferStream();
+        OutgoingStream = new BufferStream();
     }
 
     /// <summary>
@@ -155,7 +180,7 @@ public class TcpSession
                 throw new Exception("Tried to communicate with a closed connection");
 
             case TcpSocketState.Listen: // Expect to receive a SYN message and move to SynReceived
-
+            {
                 if (tcp.Flags != TcpSegmentFlags.Syn) throw new Exception($"Invalid flags. Local state={State.ToString()}, request flags={tcp.Flags.ToString()}");
                 _remoteSeq = tcp.SequenceNumber + 1;
 
@@ -176,8 +201,9 @@ public class TcpSession
                 State = TcpSocketState.SynReceived; // other side should switch to Established.
 
                 break;
+            }
             case TcpSocketState.SynReceived: // Expect to receive an ACK message and move to Established
-
+            {
                 if (tcp.Flags != TcpSegmentFlags.Ack) throw new Exception($"Invalid flags. Local state={State.ToString()}, request flags={tcp.Flags.ToString()}");
 
                 if (tcp.SequenceNumber != _remoteSeq) Log.Warn($"Request out of sequence: Expected {_remoteSeq}, got {tcp.SequenceNumber}");
@@ -186,10 +212,14 @@ public class TcpSession
                 State = TcpSocketState.Established;
 
                 break;
-
+            }
             case TcpSocketState.Established:
+            {
                 // We should either get an empty ACK message (end of handshake)
                 // OR an ACK message with data (streaming)
+
+                if (tcp.SequenceNumber != _remoteSeq) Log.Warn($"Request out of sequence: Expected {_remoteSeq}, got {tcp.SequenceNumber}");
+                if (tcp.AcknowledgmentNumber != _localSeq) Log.Warn($"Acknowledgement out of sequence: Expected {_localSeq}, got {tcp.AcknowledgmentNumber}");
 
                 if (tcp.Flags == TcpSegmentFlags.Ack && tcp.Payload.Length < 1)
                 {
@@ -200,11 +230,37 @@ public class TcpSession
                 if (tcp.Payload.Length > 0)
                 {
                     Log.Info($"Tcp packet. Flags={tcp.Flags.ToString()}, Data length={tcp.Payload}");
-                    Log.Critical("PAY-DIRT!\r\n"+Encoding.ASCII.GetString(tcp.Payload));
+
+                    IncomingStream.Write(tcp.SequenceNumber, tcp.Payload);
+                    Log.Info("\r\n" + Encoding.ASCII.GetString(tcp.Payload) + "\r\n");
+
+                    // IEB: just a little test, send any old http junk back
+                    var data = Encoding.ASCII.GetBytes(
+                        "HTTP/1.1 200 OK\r\n" +
+                        "Content-Type: text/plain; charset=utf-8\r\n" +
+                        "Content-Length: 45\r\n" +
+                        "\r\n" +
+                        "Hello, world. How's it going? I'm VirtualVPN!"
+                        );
+                    var replyPkt = new TcpSegment
+                    {
+                        SourcePort = tcp.DestinationPort,
+                        DestinationPort = tcp.SourcePort,
+                        SequenceNumber = _localSeq,
+                        AcknowledgmentNumber = _remoteSeq,
+                        DataOffset = 5,
+                        Reserved = 0,
+                        Flags = TcpSegmentFlags.Ack | TcpSegmentFlags.Psh,
+                        WindowSize = tcp.WindowSize,
+                        Options = Array.Empty<byte>(),
+                        Payload = data
+                    };
+                    Reply(sender: ipv4, message: replyPkt);
                 }
 
                 break;
-            
+            }
+
             // TODO: manage these states
             case TcpSocketState.FinWait1:
             case TcpSocketState.FinWait2:
