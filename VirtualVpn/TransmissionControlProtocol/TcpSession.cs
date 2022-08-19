@@ -249,36 +249,36 @@ public class TcpSession
                         var msgStr = Encoding.UTF8.GetString(buffer, 0, read);
                         Log.Info($"Read {read} bytes from app: {msgStr}");
 
-                        // IEB: pass this request
-                        var data = Encoding.ASCII.GetBytes(
-                            "HTTP/1.1 200 OK\r\n" +
-                            "Content-Type: text/plain; charset=utf-8\r\n" +
-                            "Content-Length: 45\r\n" +
-                            "\r\n" +
-                            "Hello, world. How's it going? I'm VirtualVPN!"
-                        );
-                        var replyPkt = new TcpSegment
-                        {
-                            SourcePort = tcp.DestinationPort,
-                            DestinationPort = tcp.SourcePort,
-                            SequenceNumber = _localSeq,
-                            AcknowledgmentNumber = _remoteSeq,
-                            DataOffset = 5,
-                            Reserved = 0,
-                            Flags = TcpSegmentFlags.Ack | TcpSegmentFlags.Psh,
-                            WindowSize = tcp.WindowSize,
-                            Options = Array.Empty<byte>(),
-                            Payload = data
-                        };
-                        Reply(sender: ipv4, message: replyPkt);
                     }
                     else
                     {
                         // should I ACK here?
+                        Log.Info($"Tcp fragmented? has-data={IncomingStream.HasData}, complete={IncomingStream.Complete}");
                     }
 
                     //Log.Info("\r\n" + Encoding.ASCII.GetString(tcp.Payload) + "\r\n");
-
+                    // IEB: pass this request
+                    var data = Encoding.ASCII.GetBytes(
+                        "HTTP/1.1 200 OK\r\n" +
+                        "Content-Type: text/plain; charset=utf-8\r\n" +
+                        "Content-Length: 45\r\n" +
+                        "\r\n" +
+                        "Hello, world. How's it going? I'm VirtualVPN!"
+                    );
+                    var replyPkt = new TcpSegment
+                    {
+                        SourcePort = tcp.DestinationPort,
+                        DestinationPort = tcp.SourcePort,
+                        SequenceNumber = _localSeq,
+                        AcknowledgmentNumber = _remoteSeq,
+                        DataOffset = 5,
+                        Reserved = 0,
+                        Flags = TcpSegmentFlags.Ack | TcpSegmentFlags.Psh,
+                        WindowSize = tcp.WindowSize,
+                        Options = Array.Empty<byte>(),
+                        Payload = data
+                    };
+                    Reply(sender: ipv4, message: replyPkt);
                     
                 }
 
