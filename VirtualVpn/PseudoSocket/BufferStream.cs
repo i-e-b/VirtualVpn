@@ -74,6 +74,8 @@ public class BufferStream
         }
     }
 
+    public string Keys => string.Join(", ", _fragments.Keys);
+
     /// <summary>
     /// Write data into the buffer
     /// </summary>

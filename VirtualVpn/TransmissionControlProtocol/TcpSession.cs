@@ -159,22 +159,10 @@ public class TcpSession
         // TODO: shut down this connection
     }
 
-    private bool HandleMessage(IpV4Packet ipv4, out TcpSegment tcp)
-    {
-        _localSeq++;
-        
-        var ok = HandleMessageInternal(ipv4, out tcp);
-        
-        // Is this the place to advance?
-        if (ok) _remoteSeq++; 
-        
-        return ok;
-    }
-
     /// <summary>
     /// Feed incoming message through the TCP state machine
     /// </summary>
-    private bool HandleMessageInternal(IpV4Packet ipv4, out TcpSegment tcp)
+    private bool HandleMessage(IpV4Packet ipv4, out TcpSegment tcp)
     {
         // read the TCP segment
         var ok = ByteSerialiser.FromBytes(ipv4.Payload, out tcp);
@@ -241,13 +229,20 @@ public class TcpSession
                     break;
                 }
 
+                _remoteSeq++;
+                
                 Log.Info($"Tcp packet. Flags={tcp.Flags.ToString()}, Data length={tcp.Payload.Length}");
 
                 IncomingStream.Write(tcp.SequenceNumber, tcp.Payload);
                 if (tcp.Flags.HasFlag(TcpSegmentFlags.Fin)) IncomingStream.SetComplete(tcp.SequenceNumber);
 
-                if (IncomingStream.Complete && IncomingStream.SequenceComplete)
+                if (IncomingStream.Complete)
                 {
+                    if (!IncomingStream.SequenceComplete)
+                    {
+                        Log.Warn($"Stream thinks it's not complete? {IncomingStream.Keys}");
+                    }
+
                     // Pass to the app...
                     using var socks = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
                     socks.Connect(IPAddress.Loopback, Settings.WebAppPort);
@@ -327,7 +322,6 @@ public class TcpSession
     /// </summary>
     private void Reply(IpV4Packet sender, TcpSegment message)
     {
-        //_localSeq++;
         
         // Set message checksum
         message.UpdateChecksum(sender.Destination.Value, sender.Source.Value);
@@ -355,6 +349,8 @@ public class TcpSession
             Options = Array.Empty<byte>(),
             Payload = tcpPayload
         };
+        
+        _localSeq++;
         
         reply.UpdateChecksum();
         Log.Info($"IPv4 checksum={reply.Checksum:x4}");
