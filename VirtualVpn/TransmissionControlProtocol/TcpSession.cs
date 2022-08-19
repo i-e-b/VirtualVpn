@@ -229,6 +229,13 @@ public class TcpSession
                     break;
                 }
 
+                if (tcp.Flags.HasFlag(TcpSegmentFlags.Rst))
+                {
+                    Log.Info($"Other side wants to close? flags={tcp.Flags.ToString()}");
+                    State = TcpSocketState.FinWait1;
+                    break;
+                }
+
                 _remoteSeq++;
                 
                 Log.Info($"Tcp packet. Flags={tcp.Flags.ToString()}, Data length={tcp.Payload.Length}, Seq={tcp.SequenceNumber}");
