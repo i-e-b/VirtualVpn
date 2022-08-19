@@ -252,14 +252,25 @@ public class TcpSession
 
                 
                 
+                if (tcp.Payload.Length > 0)
+                {
+                    Log.Warn("Would write to web app?");
+                    Log.Info($"{Encoding.UTF8.GetString(tcp.Payload)} - {Bit.Describe("in", ipv4.Payload)}");
+                    
+                    var written = _socks?.Send(ipv4.Payload) ?? 0;
+                    Log.Info($"Send {written} bytes to app from {ipv4.Payload.Length} bytes in payload");
+                }
+                
+                
+                
                 
                 // IEB: This is picking up MY outgoing messages?
                 // IEB: OR, is this reading bits of my SSH session!?
                 // pump data available
                 var available = _socks?.Available ?? 0;
+                Log.Info($"{available} bytes on socket");
                 while (available > 0)
                 {
-                    Log.Info($"{available} bytes on socket");
                     var read = _socks!.Receive(_buffer);
                     available = _socks?.Available ?? 0;
                     
@@ -293,17 +304,6 @@ public class TcpSession
                         Reply(sender: ipv4, message: replyPkt);
                     }
                 }
-                
-                
-                if (tcp.Payload.Length > 0)
-                {
-                    Log.Warn("Would write to web app?");
-                    Log.Info($"{Encoding.UTF8.GetString(tcp.Payload)} - {Bit.Describe("in", ipv4.Payload)}");
-                    
-                    var written = _socks?.Send(ipv4.Payload) ?? 0;
-                    Log.Info($"Send {written} bytes to app from {ipv4.Payload.Length} bytes in payload");
-                }
-                
                 break;
             }
 
