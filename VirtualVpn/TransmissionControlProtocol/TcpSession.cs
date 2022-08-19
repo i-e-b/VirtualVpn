@@ -231,7 +231,7 @@ public class TcpSession
 
                 _remoteSeq++;
                 
-                Log.Info($"Tcp packet. Flags={tcp.Flags.ToString()}, Data length={tcp.Payload.Length}");
+                Log.Info($"Tcp packet. Flags={tcp.Flags.ToString()}, Data length={tcp.Payload.Length}, Seq={tcp.SequenceNumber}");
 
                 IncomingStream.Write(tcp.SequenceNumber, tcp.Payload);
                 if (tcp.Flags.HasFlag(TcpSegmentFlags.Fin)) IncomingStream.SetComplete(tcp.SequenceNumber);
@@ -280,7 +280,7 @@ public class TcpSession
                         SourcePort = tcp.DestinationPort,
                         DestinationPort = tcp.SourcePort,
                         SequenceNumber = _localSeq,
-                        AcknowledgmentNumber = _remoteSeq,
+                        AcknowledgmentNumber = _remoteSeq - 1, // IEB: ???
                         DataOffset = 5,
                         Reserved = 0,
                         Flags = TcpSegmentFlags.Ack,

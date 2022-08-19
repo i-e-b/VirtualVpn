@@ -81,6 +81,7 @@ public class BufferStream
     /// </summary>
     public void Write(long sequence, byte[] data)
     {
+        if (data.Length < 1) return;
         lock (_lock)
         {
             if (_fragments.Count < 1)
