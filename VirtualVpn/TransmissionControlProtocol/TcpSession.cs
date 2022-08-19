@@ -6,7 +6,6 @@ using VirtualVpn.Enums;
 using VirtualVpn.EspProtocol;
 using VirtualVpn.Helpers;
 using VirtualVpn.InternetProtocol;
-using VirtualVpn.PseudoSocket;
 
 namespace VirtualVpn.TransmissionControlProtocol;
 
@@ -35,16 +34,6 @@ public class TcpSession
     private static readonly Random _rnd = new();
 
     /// <summary>
-    /// Data received from remote side
-    /// </summary>
-    public BufferStream IncomingStream { get; private set; }
-
-    /// <summary>
-    /// Data queued to be sent from local side
-    /// </summary>
-    public BufferStream OutgoingStream { get; private set; }
-
-    /// <summary>
     /// The tunnel gateway we expect to be talking to
     /// </summary>
     public IPEndPoint Gateway { get; }
@@ -53,6 +42,11 @@ public class TcpSession
     /// The tunnel session we are connected to (used for sending replies)
     /// </summary>
     private readonly ChildSa _transport;
+
+    /// <summary>
+    /// Socket used to communicate with web app
+    /// </summary>
+    private Socket? _socks;
 
     /// <summary>
     /// Current session state
@@ -92,9 +86,6 @@ public class TcpSession
         
         State = TcpSocketState.Closed;
         LastContact = new Stopwatch();
-        
-        IncomingStream = new BufferStream();
-        OutgoingStream = new BufferStream();
     }
 
     /// <summary>
@@ -156,6 +147,9 @@ public class TcpSession
 
     public void Close()
     {
+        _socks?.Close();
+        _socks?.Dispose();
+        
         // TODO: shut down this connection
     }
 
@@ -211,6 +205,14 @@ public class TcpSession
                 if (tcp.SequenceNumber != _remoteSeq) Log.Warn($"Initial SYNC: Request out of sequence: Expected {_remoteSeq}, got {tcp.SequenceNumber}");
                 if (tcp.AcknowledgmentNumber != _localSeq) Log.Warn($"Initial SYNC: Acknowledgement out of sequence: Expected {_localSeq}, got {tcp.AcknowledgmentNumber}");
 
+                // Open our connection to the app
+                if (_socks is null)
+                {
+                    _socks = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+                    _socks.Connect(IPAddress.Loopback, Settings.WebAppPort);
+                }
+
+                // Set new state
                 State = TcpSocketState.Established;
 
                 break;
@@ -240,50 +242,40 @@ public class TcpSession
                 
                 Log.Info($"Tcp packet. Flags={tcp.Flags.ToString()}, Data length={tcp.Payload.Length}, Seq={tcp.SequenceNumber}");
 
-                IncomingStream.Write(tcp.SequenceNumber, tcp.Payload);
-                if (tcp.Flags.HasFlag(TcpSegmentFlags.Fin)) IncomingStream.SetComplete(tcp.SequenceNumber); // complete
-                if (tcp.Flags.HasFlag(TcpSegmentFlags.Psh)) IncomingStream.SetComplete(tcp.SequenceNumber); // push asap
-
-                if (IncomingStream.Complete)
+                if (tcp.Payload.Length > 0)
                 {
-                    Log.Info($"Ready to pass across");
-                    if (!IncomingStream.SequenceComplete)
-                    {
-                        Log.Warn($"Stream thinks it's not complete? {IncomingStream.Keys}");
-                    }
-
-                    // Pass to the app...
-                    using var socks = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-                    socks.Connect(IPAddress.Loopback, Settings.WebAppPort);
-                    var written = socks.Send(IncomingStream.AllBuffers());
-                    Log.Info($"Wrote {written} bytes to app");
+                    var written = _socks?.Send(tcp.Payload) ?? 0;
+                    Log.Info($"Send {written} bytes to app from {tcp.Payload.Length} bytes in payload");
 
                     var buffer = new byte[65536];
-                    var read = socks.Receive(buffer);
-
-                    var msgStr = Encoding.UTF8.GetString(buffer, 0, read);
-                    Log.Info($"Read {read} bytes from app: {msgStr}");
-
-                    var data = Encoding.ASCII.GetBytes(msgStr);
-                    var replyPkt = new TcpSegment
+                    var available = _socks?.Available ?? 0;
+                    if (available > 0)
                     {
-                        SourcePort = tcp.DestinationPort,
-                        DestinationPort = tcp.SourcePort,
-                        SequenceNumber = _localSeq,
-                        AcknowledgmentNumber = _remoteSeq,
-                        DataOffset = 5,
-                        Reserved = 0,
-                        Flags = TcpSegmentFlags.Ack | TcpSegmentFlags.Psh,
-                        WindowSize = tcp.WindowSize,
-                        Options = Array.Empty<byte>(),
-                        Payload = data
-                    };
-                    Reply(sender: ipv4, message: replyPkt);
+                        var read = _socks!.Receive(buffer);
+
+                        var msgStr = Encoding.UTF8.GetString(buffer, 0, read);
+                        Log.Info($"Read {read} bytes from app: {msgStr}");
+
+                        var data = Encoding.ASCII.GetBytes(msgStr);
+                        var replyPkt = new TcpSegment
+                        {
+                            SourcePort = tcp.DestinationPort,
+                            DestinationPort = tcp.SourcePort,
+                            SequenceNumber = _localSeq,
+                            AcknowledgmentNumber = _remoteSeq,
+                            DataOffset = 5,
+                            Reserved = 0,
+                            Flags = TcpSegmentFlags.Ack | TcpSegmentFlags.Psh,
+                            WindowSize = tcp.WindowSize,
+                            Options = Array.Empty<byte>(),
+                            Payload = data
+                        };
+                        Reply(sender: ipv4, message: replyPkt);
+                    }
                 }
-                else
+                else // no data in payload
                 {
                     // should I ACK here?
-                    Log.Info($"Tcp fragmented? has-data={IncomingStream.HasData}, complete={IncomingStream.Complete}");
                     var replyPkt = new TcpSegment
                     {
                         SourcePort = tcp.DestinationPort,

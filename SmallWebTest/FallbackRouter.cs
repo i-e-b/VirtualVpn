@@ -34,8 +34,19 @@ public class FallbackRouter : IRouter
 <h1>Hello</h1>
 <p>If you can see this message, you have successfully connected to the test server!</p>
 <p>Try visiting the Swagger UI and test API use at <a href=""/swagger/index.html"">/swagger/index.html</a></p>
-</body>
-</html>"));
+"));
+        
+        // Big transfer test
+        var url = context.Request.GetEncodedUrl().ToLowerInvariant();
+        if (url.Contains("/huge"))
+        {
+            for (int i = 0; i < 1000; i++)
+            {
+                await context.Response.Body.WriteAsync(Encoding.UTF8.GetBytes("I know a song that will get on your nerves, get on your nerves, get on your nerves.<br/>\r\n"));
+            }
+        }
+        
+        await context.Response.Body.WriteAsync(Encoding.UTF8.GetBytes("</body></html>\r\n"));
     }
 
     public VirtualPathData? GetVirtualPath(VirtualPathContext context)

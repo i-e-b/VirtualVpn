@@ -46,9 +46,9 @@ public static class Settings
     /// How long a TCP session is allowed to go without any traffic before being closed.
     /// </summary>
     public static TimeSpan TcpTimeout => TimeSpan.FromSeconds(30);
-    
+
     /// <summary>
     /// TCP port of the app we're tunnelling
     /// </summary>
-    public static int WebAppPort = 5223;
+    public const int WebAppPort = 5223;
 }
