@@ -189,6 +189,12 @@ public enum IpV4Protocol : byte
     OSPF=89,
     
     /// <summary>
+    /// Compaq Peer Protocol
+    /// </summary>
+    /// <remarks> Don't know why, but the Hetzner networks are full of these </remarks>
+    CompaqPeer=110,	
+    
+    /// <summary>
     /// (VPN) Virtual Router Redundancy Protocol
     /// </summary>
     VRRP=112,
