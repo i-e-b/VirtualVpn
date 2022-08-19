@@ -197,11 +197,14 @@ public class TcpSession
                  0x45, 0x00, 0x00, 0x3C, 0x2F, 0xC9, 0x40, 0x00, 0x40, 0x06, 0x0C, 0xF1, 0x7F, 0x00, 0x00, 0x01, 0x7F, 0x00, 0x00, 0x01, 0xAE, 0xAB, 0x14, 0x67, 0x05, 0x25, 0x37, 0x70, 0x00, 0x00, 0x00, 0x00, 0xA0, 0x02, 0xFD, 0x2D, 0x1E, 0xD4, 0x00, 0x00, 0x02, 0x04, 0x05, 0x63, 0x04, 0x02, 0x08, 0x0A, 0x85, 0xE7, 0xA8, 0xBD, 0x00, 0x00, 0x00, 0x00, 0x01, 0x03, 0x03, 0x07, 0x00, 0x00, 0x00, 0xF8, 0x35, 0xF8, 0xD7, };
 */
                 
-                // ok, it *might* be for us. Read the header properly
-                _ = ByteSerialiser.FromBytes<IpV4Packet>(buffer, 14, 20 /*only the headers*/, out var packet);
-                //if (!packet.Destination.IsLocalHost) continue; // junk
+                // it *might* be for us. Read the header properly
+                var ok1 = ByteSerialiser.FromBytes<IpV4Packet>(buffer, 14, -1, out var ipv4);
+                var ok2 = ByteSerialiser.FromBytes<TcpSegment>(ipv4.Payload, out var tcp);
                 
-                Log.Debug($"Captured {packet.Protocol.ToString()}: {packet.Source.AsString} -> {packet.Destination.AsString}; code={code.ToString()}");
+                Log.Debug($"(ok={ok1},{ok2}) Captured {ipv4.Protocol.ToString()}: {ipv4.Source.AsString} -> {ipv4.Destination.AsString}; code={code.ToString()}");
+                
+                Log.Debug(TypeDescriber.Describe(ipv4));
+                Log.Debug(TypeDescriber.Describe(tcp));
 
                 // TODO: unpack 'actual', and fix the headers and checksums.
                 // Then send down the tunnel

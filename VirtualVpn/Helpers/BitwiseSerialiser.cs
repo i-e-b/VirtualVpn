@@ -353,6 +353,7 @@ public static class ByteSerialiser
     /// <returns>True if source was long enough to complete the result, false if too short. Returns true if source is longer than needed.</returns>
     public static bool FromBytes<T>(byte[] source, int offset, int length, out T result) where T : new()
     {
+        if (length <= 0) length = source.Length - offset;
         var feed = source.Skip(offset).Take(length);
         var ok = FromBytes(typeof(T), feed, out var obj);
         result = (T)obj;
