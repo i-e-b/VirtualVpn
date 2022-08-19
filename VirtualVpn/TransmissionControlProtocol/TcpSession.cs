@@ -1,5 +1,6 @@
 ﻿using System.Diagnostics;
 using System.Net;
+using System.Net.Sockets;
 using System.Text;
 using VirtualVpn.Enums;
 using VirtualVpn.EspProtocol;
@@ -237,32 +238,48 @@ public class TcpSession
                     if (IncomingStream.Complete && IncomingStream.SequenceComplete)
                     {
                         // Pass to the app...
+                        using var socks = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+                        socks.Connect(IPAddress.Loopback, Settings.WebAppPort);
+                        var written = socks.Send(IncomingStream.AllBuffers());
+                        Log.Info($"Wrote {written} bytes to app");
+                        
+                        var buffer = new byte[65536];
+                        var read = socks.Receive(buffer);
+
+                        var msgStr = Encoding.UTF8.GetString(buffer, 0, read);
+                        Log.Info($"Read {read} bytes from app: {msgStr}");
+
+                        // IEB: pass this request
+                        var data = Encoding.ASCII.GetBytes(
+                            "HTTP/1.1 200 OK\r\n" +
+                            "Content-Type: text/plain; charset=utf-8\r\n" +
+                            "Content-Length: 45\r\n" +
+                            "\r\n" +
+                            "Hello, world. How's it going? I'm VirtualVPN!"
+                        );
+                        var replyPkt = new TcpSegment
+                        {
+                            SourcePort = tcp.DestinationPort,
+                            DestinationPort = tcp.SourcePort,
+                            SequenceNumber = _localSeq,
+                            AcknowledgmentNumber = _remoteSeq,
+                            DataOffset = 5,
+                            Reserved = 0,
+                            Flags = TcpSegmentFlags.Ack | TcpSegmentFlags.Psh,
+                            WindowSize = tcp.WindowSize,
+                            Options = Array.Empty<byte>(),
+                            Payload = data
+                        };
+                        Reply(sender: ipv4, message: replyPkt);
+                    }
+                    else
+                    {
+                        // should I ACK here?
                     }
 
-                    Log.Info("\r\n" + Encoding.ASCII.GetString(tcp.Payload) + "\r\n");
+                    //Log.Info("\r\n" + Encoding.ASCII.GetString(tcp.Payload) + "\r\n");
 
-                    // IEB: just a little test, send any old http junk back
-                    var data = Encoding.ASCII.GetBytes(
-                        "HTTP/1.1 200 OK\r\n" +
-                        "Content-Type: text/plain; charset=utf-8\r\n" +
-                        "Content-Length: 45\r\n" +
-                        "\r\n" +
-                        "Hello, world. How's it going? I'm VirtualVPN!"
-                        );
-                    var replyPkt = new TcpSegment
-                    {
-                        SourcePort = tcp.DestinationPort,
-                        DestinationPort = tcp.SourcePort,
-                        SequenceNumber = _localSeq,
-                        AcknowledgmentNumber = _remoteSeq,
-                        DataOffset = 5,
-                        Reserved = 0,
-                        Flags = TcpSegmentFlags.Ack | TcpSegmentFlags.Psh,
-                        WindowSize = tcp.WindowSize,
-                        Options = Array.Empty<byte>(),
-                        Payload = data
-                    };
-                    Reply(sender: ipv4, message: replyPkt);
+                    
                 }
 
                 break;

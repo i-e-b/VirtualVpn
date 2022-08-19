@@ -25,7 +25,6 @@ public class BufferStream
     /// </summary>
     private readonly Dictionary<long, FragmentBuffer> _fragments = new();
 
-
     /// <summary>
     /// Returns true if ANY data is stored.
     /// If the data has been written out of sequence,
@@ -155,6 +154,19 @@ public class BufferStream
         }
     }
 
+    /// <summary>
+    /// Read all fragments in order
+    /// </summary>
+    public IList<ArraySegment<byte>> AllBuffers()
+    {
+        var list = new List<ArraySegment<byte>>();
+        var keys = _fragments.Keys.OrderBy(k => k);
+        foreach (var key in keys)
+        {
+            list.Add(_fragments[key].Raw);
+        }
+        return list;
+    }
 }
 
 /// <summary>
@@ -172,6 +184,7 @@ internal class FragmentBuffer
     }
 
     public bool IsDone => _offset >= _data.Length;
+    public ArraySegment<byte> Raw => _data;
 
     /// <summary>
     /// Read into a buffer
