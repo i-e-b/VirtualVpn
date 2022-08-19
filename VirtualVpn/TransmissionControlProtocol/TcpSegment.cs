@@ -163,4 +163,13 @@ public class TcpSegment
         // calculate and set checksum
         Checksum = IpChecksum.TcpChecksum(sourceAddress, destAddress, 6, tcpBytes.Length, tcpBytes, 0);
     }
+
+    /// <summary>
+    /// Update the TCP checksum for current headers and payload,
+    /// this includes data from the outer wrapper.
+    /// </summary>
+    public void UpdateChecksum(IpV4Packet ipv4)
+    {
+        UpdateChecksum(ipv4.Source.Value, ipv4.Destination.Value);
+    }
 }

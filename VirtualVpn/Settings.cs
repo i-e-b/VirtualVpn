@@ -46,4 +46,11 @@ public static class Settings
     /// How long a TCP session is allowed to go without any traffic before being closed.
     /// </summary>
     public static TimeSpan TcpTimeout => TimeSpan.FromSeconds(30);
+    
+
+    /// <summary>
+    /// Port the target app is running on.
+    /// TODO: Handle http->https upgrade, etc.
+    /// </summary>
+    public static int HostedAppPort = 5223; // http://localhost:5223
 }

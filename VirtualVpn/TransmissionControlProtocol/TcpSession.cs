@@ -1,11 +1,10 @@
 ﻿using System.Diagnostics;
 using System.Net;
-using System.Text;
+using System.Net.Sockets;
 using VirtualVpn.Enums;
 using VirtualVpn.EspProtocol;
 using VirtualVpn.Helpers;
 using VirtualVpn.InternetProtocol;
-using VirtualVpn.PseudoSocket;
 
 namespace VirtualVpn.TransmissionControlProtocol;
 
@@ -19,29 +18,21 @@ namespace VirtualVpn.TransmissionControlProtocol;
 /// </remarks>
 public class TcpSession
 {
-    // ### Transmission Control Block (TCB) values ###
-    
     /// <summary>
-    /// SEG.SEQ - segment sequence number
+    /// The low-level socket we use to talk to our app
     /// </summary>
-    private long _localSeq;
-    
-    /// <summary>
-    /// SEG.ACK - segment acknowledgment number
-    /// </summary>
-    private long _remoteSeq;
-    
-    private static readonly Random _rnd = new();
+    private readonly Socket _comms;
 
+    private readonly Stopwatch _stopwatch = new ();
+    
+    private readonly Thread _listenerThread;
+    private volatile bool _running;
+    
     /// <summary>
-    /// Data received from remote side
+    /// Time since last packets sent or received.
+    /// Returns zero if the session has never started
     /// </summary>
-    public BufferStream IncomingStream { get; private set; }
-
-    /// <summary>
-    /// Data queued to be sent from local side
-    /// </summary>
-    public BufferStream OutgoingStream { get; private set; }
+    public TimeSpan LastContact => _stopwatch.IsRunning ? _stopwatch.Elapsed : TimeSpan.Zero;
 
     /// <summary>
     /// The tunnel gateway we expect to be talking to
@@ -52,17 +43,6 @@ public class TcpSession
     /// The tunnel session we are connected to (used for sending replies)
     /// </summary>
     private readonly ChildSa _transport;
-
-    /// <summary>
-    /// Current session state
-    /// </summary>
-    public TcpSocketState State { get; set; }
-
-    /// <summary>
-    /// Time since last packets send or received.
-    /// Only starts ticking when first packets transmitted.
-    /// </summary>
-    public Stopwatch LastContact { get; set; }
 
     /// <summary>
     /// Address of remote side
@@ -89,11 +69,9 @@ public class TcpSession
         _transport = transport;
         Gateway = gateway;
         
-        State = TcpSocketState.Closed;
-        LastContact = new Stopwatch();
-        
-        IncomingStream = new BufferStream();
-        OutgoingStream = new BufferStream();
+        _listenerThread = new Thread(ListenerThreadLoop){IsBackground = true};
+        _running = false;
+        _comms = new Socket(SocketType.Raw, ProtocolType.IPv4);
     }
 
     /// <summary>
@@ -101,28 +79,27 @@ public class TcpSession
     /// </summary>
     public bool Start(IpV4Packet ipv4)
     {
-        AssertState(TcpSocketState.Closed);
         Log.Debug("TCP session initiation");
 
         // ready to act as a server
-        _localSeq = _rnd.Next(100, 65000); // random sequence for our side
-        State = TcpSocketState.Listen;
+        _comms.Bind(new IPEndPoint(IPAddress.Loopback, 0));
 
         var ok = HandleMessage(ipv4, out var tcp);
         if (!ok)
         {
             Log.Debug("TCP session initiation failed");
-            State = TcpSocketState.Closed;
             return false;
         }
-
-        LastContact.Start(); // start counting. This gets reset every time we get another message
 
         // capture identity
         LocalAddress = ipv4.Destination.Value;
         LocalPort = tcp.DestinationPort;
         RemotePort = tcp.SourcePort;
         RemoteAddress = ipv4.Source.Value;
+        
+        // start listening thread
+        _running = true;
+        _listenerThread.Start();
 
         Log.Debug("TCP session initiation completed:" +
                   $" remote={Bit.ToIpAddressString(RemoteAddress)}:{RemotePort}," +
@@ -136,7 +113,6 @@ public class TcpSession
     /// </summary>
     public void Accept(IpV4Packet ipv4)
     {
-        LastContact.Restart(); // back to zero, keep counting
         HandleMessage(ipv4, out _);
     }
     
@@ -153,9 +129,44 @@ public class TcpSession
         return new SenderPort(message.Source.Value, tcpSeg.DestinationPort);
     }
 
+    private void ListenerThreadLoop()
+    {
+        var buffer = new byte[66000]; // a bit larger than the maximum TCP packet
+        _comms.Blocking = true; // wait for data
+        
+        while (_running)
+        {
+            if (_comms.IsBound)
+            {
+                try
+                {
+                    var actual = _comms.Receive(buffer, SocketFlags.None, out var code);
+                    Log.Warn($"Received {actual} bytes, code = {code.ToString()}");
+                    
+                    // TODO: unpack 'actual', and fix the headers and checksums.
+                    // Then send down the tunnel
+                    //_transport.Send(reply, Gateway);
+                }
+                catch (Exception ex)
+                {
+                    Log.Error("Error in TCP listener", ex);
+                }
+            }
+            else
+            {
+                Thread.Sleep(500);
+            }
+        }
+    }
+
     public void Close()
     {
-        // TODO: shut down this connection
+        Log.Info($"Ending: {Bit.ToIpAddressString(RemoteAddress)}:{RemotePort} -> {Bit.ToIpAddressString(LocalAddress)}:{LocalPort}");
+        _running = false;
+        _listenerThread.Join();
+        _comms.Close();
+        _comms.Dispose();
+        Log.Info($"TCP session ended: {Bit.ToIpAddressString(RemoteAddress)}:{RemotePort} -> {Bit.ToIpAddressString(LocalAddress)}:{LocalPort}");
     }
 
     /// <summary>
@@ -163,6 +174,8 @@ public class TcpSession
     /// </summary>
     private bool HandleMessage(IpV4Packet ipv4, out TcpSegment tcp)
     {
+        _stopwatch.Restart();
+        
         // read the TCP segment
         var ok = ByteSerialiser.FromBytes(ipv4.Payload, out tcp);
         if (!ok)
@@ -172,123 +185,33 @@ public class TcpSession
             return false;
         }
         
-        // TODO: double check that incoming is for the session we expect?
-
-        switch (State)
-        {
-            case TcpSocketState.Closed:
-                throw new Exception("Tried to communicate with a closed connection");
-
-            case TcpSocketState.Listen: // Expect to receive a SYN message and move to SynReceived
-            {
-                if (tcp.Flags != TcpSegmentFlags.Syn) throw new Exception($"Invalid flags. Local state={State.ToString()}, request flags={tcp.Flags.ToString()}");
-                _remoteSeq = tcp.SequenceNumber + 1;
-
-                var replyPkt = new TcpSegment
-                {
-                    SourcePort = tcp.DestinationPort,
-                    DestinationPort = tcp.SourcePort,
-                    SequenceNumber = _localSeq,
-                    AcknowledgmentNumber = _remoteSeq,
-                    DataOffset = 5,
-                    Reserved = 0,
-                    Flags = TcpSegmentFlags.SynAck,
-                    WindowSize = tcp.WindowSize,
-                    Options = Array.Empty<byte>(),
-                    Payload = Array.Empty<byte>()
-                };
-                Reply(sender: ipv4, message: replyPkt);
-                State = TcpSocketState.SynReceived; // other side should switch to Established.
-
-                break;
-            }
-            case TcpSocketState.SynReceived: // Expect to receive an ACK message and move to Established
-            {
-                if (tcp.Flags != TcpSegmentFlags.Ack) throw new Exception($"Invalid flags. Local state={State.ToString()}, request flags={tcp.Flags.ToString()}");
-
-                if (tcp.SequenceNumber != _remoteSeq) Log.Warn($"Request out of sequence: Expected {_remoteSeq}, got {tcp.SequenceNumber}");
-                if (tcp.AcknowledgmentNumber != _localSeq) Log.Warn($"Acknowledgement out of sequence: Expected {_localSeq}, got {tcp.AcknowledgmentNumber}");
-
-                State = TcpSocketState.Established;
-
-                break;
-            }
-            case TcpSocketState.Established:
-            {
-                // We should either get an empty ACK message (end of handshake)
-                // OR an ACK message with data (streaming)
-
-                if (tcp.SequenceNumber != _remoteSeq) Log.Warn($"Request out of sequence: Expected {_remoteSeq}, got {tcp.SequenceNumber}");
-                if (tcp.AcknowledgmentNumber != _localSeq) Log.Warn($"Acknowledgement out of sequence: Expected {_localSeq}, got {tcp.AcknowledgmentNumber}");
-
-                if (tcp.Flags == TcpSegmentFlags.Ack && tcp.Payload.Length < 1)
-                {
-                    Log.Info($"Handshake complete. Connected to {ipv4.Source.AsString}:{tcp.SourcePort}");
-                    break;
-                }
-
-                if (tcp.Payload.Length > 0)
-                {
-                    Log.Info($"Tcp packet. Flags={tcp.Flags.ToString()}, Data length={tcp.Payload}");
-
-                    IncomingStream.Write(tcp.SequenceNumber, tcp.Payload);
-                    if (tcp.Flags.HasFlag(TcpSegmentFlags.Fin)) IncomingStream.SetComplete(tcp.SequenceNumber);
-
-                    if (IncomingStream.Complete && IncomingStream.SequenceComplete)
-                    {
-                        // Pass to the app...
-                    }
-
-                    Log.Info("\r\n" + Encoding.ASCII.GetString(tcp.Payload) + "\r\n");
-
-                    // IEB: just a little test, send any old http junk back
-                    var data = Encoding.ASCII.GetBytes(
-                        "HTTP/1.1 200 OK\r\n" +
-                        "Content-Type: text/plain; charset=utf-8\r\n" +
-                        "Content-Length: 45\r\n" +
-                        "\r\n" +
-                        "Hello, world. How's it going? I'm VirtualVPN!"
-                        );
-                    var replyPkt = new TcpSegment
-                    {
-                        SourcePort = tcp.DestinationPort,
-                        DestinationPort = tcp.SourcePort,
-                        SequenceNumber = _localSeq,
-                        AcknowledgmentNumber = _remoteSeq,
-                        DataOffset = 5,
-                        Reserved = 0,
-                        Flags = TcpSegmentFlags.Ack | TcpSegmentFlags.Psh,
-                        WindowSize = tcp.WindowSize,
-                        Options = Array.Empty<byte>(),
-                        Payload = data
-                    };
-                    Reply(sender: ipv4, message: replyPkt);
-                }
-
-                break;
-            }
-
-            // TODO: manage these states
-            case TcpSocketState.FinWait1:
-            case TcpSocketState.FinWait2:
-            case TcpSocketState.CloseWait:
-            case TcpSocketState.Closing:
-            case TcpSocketState.LastAck:
-            case TcpSocketState.TimeWait:
-            case TcpSocketState.SynSent:
-                Log.Info($"state not yet managed: {State.ToString()}");
-                break;
-            default:
-                throw new ArgumentOutOfRangeException();
-        }
-
         Log.Warn($"From {ipv4.Source.AsString}:{tcp.SourcePort} to {ipv4.Destination.AsString}:{tcp.DestinationPort}");
-        Log.Warn($"Flags: {tcp.Flags.ToString()}, seq={tcp.SequenceNumber}, ack={tcp.AcknowledgmentNumber}");
 
+        // Re-target BOTH the ipv4 and tcp packets, and send them down our raw connection
+        tcp.SourcePort = GetMyPort();
+        ipv4.Destination = IpV4Address.LocalHost;
+        ipv4.Source = IpV4Address.LocalHost;
+        tcp.UpdateChecksum(ipv4);
+        
+        ipv4.Payload = ByteSerialiser.ToBytes(tcp);
+        ipv4.UpdateChecksum();
+        
+        Log.Warn($"Routing as {ipv4.Source.AsString}:{tcp.SourcePort} to {ipv4.Destination.AsString}:{tcp.DestinationPort}");
 
-        //var reply = new IpV4Packet();
-        //_transport.Send(reply, Gateway);
+        var raw = ByteSerialiser.ToBytes(ipv4);
+        var actual = _comms.Send(raw);
+        
+        Log.Warn($"Sent {actual} bytes from {raw.Length} byte message");
+        
         return true;
+    }
+
+    private int GetMyPort()
+    {
+        var endpoint = _comms.LocalEndPoint as IPEndPoint;
+        if (endpoint is null) throw new Exception("Failed to read TCP session local endpoint");
+        
+        return endpoint.Port;
     }
 
     /// <summary>
@@ -297,8 +220,6 @@ public class TcpSession
     /// </summary>
     private void Reply(IpV4Packet sender, TcpSegment message)
     {
-        _localSeq++;
-        
         // Set message checksum
         message.UpdateChecksum(sender.Destination.Value, sender.Source.Value);
         Log.Info($"Tcp checksum={message.Checksum:x4} (" +
@@ -330,11 +251,5 @@ public class TcpSession
         Log.Info($"IPv4 checksum={reply.Checksum:x4}");
         
         _transport.Send(reply, Gateway);
-    }
-
-
-    private void AssertState(TcpSocketState expected)
-    {
-        if (State != expected) throw new Exception($"Invalid state. Expected {expected.ToString()}, got {State.ToString()}");
     }
 }

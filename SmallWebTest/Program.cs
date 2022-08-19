@@ -15,7 +15,7 @@ var app = builder.Build();
 app.UseSwagger();
 app.UseSwaggerUI();
 
-app.UseHttpsRedirection();
+//app.UseHttpsRedirection(); // real app should do this
 
 app.UseAuthorization();
 

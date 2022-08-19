@@ -216,6 +216,12 @@ public class IpV4Address
 
     public string AsString => ToString();
     
+    /// <summary>
+    /// Return an address for localhost (127.0.0.1).
+    /// No DNS lookup is performed.
+    /// </summary>
+    public static IpV4Address LocalHost => new() {Value = new byte[]{127,0,0,1}};
+
     public override string ToString()
     {
         if (Value.Length < 4) return "<empty>";

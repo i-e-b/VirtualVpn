@@ -55,9 +55,9 @@ public class ChildSa
         foreach (var tcpKey in allSessions)
         {
             var tcp = _tcpSessions[tcpKey];
-            if (tcp.LastContact.Elapsed > Settings.TcpTimeout)
+            if (tcp.LastContact > Settings.TcpTimeout)
             {
-                Log.Debug($"Old session: {tcp.LastContact.Elapsed}; remote={Bit.ToIpAddressString(tcp.RemoteAddress)}:{tcp.RemotePort}," +
+                Log.Debug($"Old session: {tcp.LastContact}; remote={Bit.ToIpAddressString(tcp.RemoteAddress)}:{tcp.RemotePort}," +
                           $" local={Bit.ToIpAddressString(tcp.LocalAddress)}:{tcp.LocalPort}. Closing");
                 CloseConnection(tcpKey);
             }
