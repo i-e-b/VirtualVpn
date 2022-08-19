@@ -370,7 +370,14 @@ public class TcpSession
         Log.Info("Backflow started");
         while (_running)
         {
-            ReadFromWebApp();
+            try
+            {
+                ReadFromWebApp();
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Error in TCP session backflow loop", ex);
+            }
         }
         Log.Info("Backflow ended");
     }
@@ -401,17 +408,23 @@ public class TcpSession
                 Log.Info("Directing packet back through tunnel");
                 Log.Debug($"Message bytes:{Bit.Describe("msg", _buffer, 0, read)}");
                 Log.Debug(TypeDescriber.Describe(ipv4));
-                
-                ByteSerialiser.FromBytes<TcpSegment>(ipv4.Payload, out var tcp);
-                
+
                 ipv4.Destination = new IpV4Address(RemoteAddress);
                 ipv4.Source = new IpV4Address(LocalAddress);
-                tcp.DestinationPort = RemotePort;
-                tcp.SourcePort = LocalPort;
                 
-                tcp.UpdateChecksum(ipv4.Source.Value, ipv4.Destination.Value);
                 
-                ipv4.Payload = ByteSerialiser.ToBytes(tcp);
+                if (ipv4.Payload.Length > 0)
+                {
+                    ByteSerialiser.FromBytes<TcpSegment>(ipv4.Payload, out var tcp);
+
+                    tcp.DestinationPort = RemotePort;
+                    tcp.SourcePort = LocalPort;
+
+                    tcp.UpdateChecksum(ipv4.Source.Value, ipv4.Destination.Value);
+
+                    ipv4.Payload = ByteSerialiser.ToBytes(tcp);
+                }
+
                 ipv4.UpdateChecksum();
                 
                 _transport.Send(ipv4, Gateway);

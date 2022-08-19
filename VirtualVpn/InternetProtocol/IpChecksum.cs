@@ -18,6 +18,10 @@ public static class IpChecksum
     public static ushort TcpChecksum(byte[] sourceAddress, byte[] destAddress, byte protocol,
         int length, byte[] message, int offset)
     {
+        if (length < 1) return 0; // not valid
+        if (sourceAddress.Length != 4) throw new Exception("Source address invalid when updating TCP checksum");
+        if (destAddress.Length != 4) throw new Exception("Destination address invalid when updating TCP checksum");
+        
         var bufferLength = length + 12;
 
         var odd = length % 2 == 1;
