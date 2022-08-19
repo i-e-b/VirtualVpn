@@ -74,7 +74,7 @@ public class TcpSession
         
         
         
-        _comms = new Socket(AddressFamily.InterNetwork, SocketType.Raw, ProtocolType.IP) { Blocking = true };
+        //_comms = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.IP) { Blocking = true };
         
         //_comms = new Socket(AddressFamily.Packet, SocketType.Raw, ProtocolType.Raw) { Blocking = true }; // this is what I want, but it gives "invalid argument"
         //_comms = new Socket((AddressFamily)17, SocketType.Dgram, (ProtocolType)0x0004) { Blocking = true }; // https://github.com/dotnet/runtime/issues/24076
@@ -146,37 +146,22 @@ public class TcpSession
         
         while (_running)
         {
-            if (_comms.IsBound)
+            try
             {
-                try
-                {
-                    var actual = _comms.Receive(buffer, SocketFlags.None, out var code);
-                    Log.Warn($"Received {actual} bytes, code = {code.ToString()}");
-                    
-                    // TODO: unpack 'actual', and fix the headers and checksums.
-                    // Then send down the tunnel
-                    //_transport.Send(reply, Gateway);
-                }
-                catch (Exception ex)
-                {
-                    Log.Error("Error in TCP listener", ex);
-                }
+                Log.Info($"Listening for TCP traffic on port {GetMyPort()}...");
+                var actual = _comms.Receive(buffer, SocketFlags.None, out var code);
+                Log.Warn($"Received {actual} bytes, code = {code.ToString()}");
+
+                // TODO: unpack 'actual', and fix the headers and checksums.
+                // Then send down the tunnel
+                //_transport.Send(reply, Gateway);
             }
-            else
+            catch (Exception ex)
             {
+                Log.Error("Error in TCP listener", ex);
                 Thread.Sleep(500);
             }
         }
-    }
-
-    public void Close()
-    {
-        Log.Info($"Ending: {Bit.ToIpAddressString(RemoteAddress)}:{RemotePort} -> {Bit.ToIpAddressString(LocalAddress)}:{LocalPort}");
-        _running = false;
-        _listenerThread.Join();
-        _comms.Close();
-        _comms.Dispose();
-        Log.Info($"TCP session ended: {Bit.ToIpAddressString(RemoteAddress)}:{RemotePort} -> {Bit.ToIpAddressString(LocalAddress)}:{LocalPort}");
     }
 
     /// <summary>
@@ -215,10 +200,11 @@ public class TcpSession
 2022-08-19T09:11 (utc) Sent 0 bytes from 60 byte message*/
         
         var raw = ByteSerialiser.ToBytes(ipv4);
-        var actual = _comms.Send(raw, SocketFlags.None, out var errorCode);
-        Log.Debug($"Send status = {errorCode.ToString()}");
-        //var target = new IPEndPoint(IPAddress.Loopback, tcp.DestinationPort);
+        //var actual = _comms.Send(raw, SocketFlags.None, out var errorCode);
+        //Log.Debug($"Send status = {errorCode.ToString()}");
+        var target = new IPEndPoint(IPAddress.Loopback, tcp.DestinationPort);
         //var actual = _comms.SendTo(raw, target);
+        var actual = _comms.SendTo(ipv4.Payload, target);
         
         
         Log.Warn($"Sent {actual} bytes from {raw.Length} byte message");
@@ -271,5 +257,14 @@ public class TcpSession
         Log.Info($"IPv4 checksum={reply.Checksum:x4}");
         
         _transport.Send(reply, Gateway);
+    }
+
+    public void Close()
+    {
+        Log.Info($"Ending: {Bit.ToIpAddressString(RemoteAddress)}:{RemotePort} -> {Bit.ToIpAddressString(LocalAddress)}:{LocalPort}");
+        _running = false;
+        _comms.Close();
+        _comms.Dispose();
+        Log.Info($"TCP session ended: {Bit.ToIpAddressString(RemoteAddress)}:{RemotePort} -> {Bit.ToIpAddressString(LocalAddress)}:{LocalPort}");
     }
 }

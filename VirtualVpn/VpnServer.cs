@@ -262,5 +262,6 @@ public class VpnServer : IDisposable
                 Log.Warn($"Outer event pump failure: {ex.Message}"); // most likely a thread conflict
             }
         }
+        Log.Warn("Event pump ended?");
     }
 }
