@@ -191,7 +191,8 @@ public class TcpSession
         Log.Debug(Bit.Describe("raw transfer", raw));
         Log.Debug(Bit.SafeString(raw));
 
-        var written = _socks?.Send(raw) ?? 0;
+        //var written = _socks?.Send(raw) ?? 0;
+        var written = _socks?.SendTo(raw, new IPEndPoint(IPAddress.Loopback, Settings.WebAppPort)) ?? 0;
         Log.Info($"Send {written} bytes to app from {raw.Length} bytes in payload");
     }
 
@@ -417,14 +418,14 @@ public class TcpSession
         
         while (available > 0)
         {
-            Log.Info($"{available} bytes on socket");
+            //Log.Info($"{available} bytes on socket");
             var read = _socks!.Receive(_buffer);
             available = _socks?.Available ?? 0;
 
             ByteSerialiser.FromBytes<IpV4Packet>(_buffer.Take(read), out var ipv4);
             if (!ipv4.Destination.IsLocalhost)
             {
-                Log.Debug($"Noise {ipv4.Source.AsString} -> {ipv4.Destination.AsString}");
+                //Log.Debug($"Noise {ipv4.Source.AsString} -> {ipv4.Destination.AsString}");
             }
             else
             {
