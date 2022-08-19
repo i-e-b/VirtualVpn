@@ -81,12 +81,18 @@ public class TcpSession
     /// Local port requested for this session
     /// </summary>
     public int LocalPort { get; private set; }
+    
+    
+    private readonly Thread _backflowThread;
+    private volatile bool _running;
 
     public TcpSession(ChildSa transport, IPEndPoint gateway, SenderPort transportKey)
     {
         _transport = transport;
         _transportKey = transportKey;
         Gateway = gateway;
+        
+        _backflowThread = new Thread(BackflowLoop){IsBackground = true};
         
         State = TcpSocketState.Closed;
         LastContact = new Stopwatch();
@@ -104,6 +110,9 @@ public class TcpSession
             _socks.Connect(IPAddress.Loopback, Settings.WebAppPort);
         }
 
+        _running= true;
+        _backflowThread.Start();
+        
         LastContact.Start();
         
         RedirectPacket(ipv4);
@@ -189,6 +198,7 @@ public class TcpSession
 
     public void Close()
     {
+        _running = false;
         _socks?.Close();
         _socks?.Dispose();
         
@@ -353,15 +363,31 @@ public class TcpSession
         return true;
     }
 
+    
+
+    private void BackflowLoop()
+    {
+        Log.Info("Backflow started");
+        while (_running)
+        {
+            ReadFromWebApp();
+        }
+        Log.Info("Backflow ended");
+    }
+    
+    
     /// <summary>
     /// Read any data back from app to tunnel
     /// </summary>
     private void ReadFromWebApp()
     {
         var available = _socks?.Available ?? 0;
-        Log.Info($"{available} bytes on socket");
+        
+        if (available < 1) Thread.Sleep(100);
+        
         while (available > 0)
         {
+            Log.Info($"{available} bytes on socket");
             var read = _socks!.Receive(_buffer);
             available = _socks?.Available ?? 0;
 
