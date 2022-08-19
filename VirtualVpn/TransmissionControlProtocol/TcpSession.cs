@@ -71,7 +71,15 @@ public class TcpSession
         
         _listenerThread = new Thread(ListenerThreadLoop){IsBackground = true};
         _running = false;
-        _comms = new Socket(SocketType.Raw, ProtocolType.IPv4);
+        
+        
+        //_comms = new Socket(AddressFamily.Packet, SocketType.Raw, ProtocolType.Raw) { Blocking = true }; // this is what I want, but it gives "invalid argument"
+        //_comms = new Socket((AddressFamily)17, SocketType.Dgram, (ProtocolType)0x0004) { Blocking = true }; // https://github.com/dotnet/runtime/issues/24076
+        
+        // From https://github.com/dotnet/runtime/issues/26416
+        Int16 protocol = 0x800; // IP.
+        _comms = new Socket(AddressFamily.Packet, SocketType.Raw, (ProtocolType)IPAddress.HostToNetworkOrder(protocol));
+
     }
 
     /// <summary>
@@ -80,9 +88,10 @@ public class TcpSession
     public bool Start(IpV4Packet ipv4)
     {
         Log.Debug("TCP session initiation");
-
-        // ready to act as a server
-        _comms.Bind(new IPEndPoint(IPAddress.Loopback, 0));
+        
+        // start listening thread
+        _running = true;
+        _listenerThread.Start();
 
         var ok = HandleMessage(ipv4, out var tcp);
         if (!ok)
@@ -97,9 +106,6 @@ public class TcpSession
         RemotePort = tcp.SourcePort;
         RemoteAddress = ipv4.Source.Value;
         
-        // start listening thread
-        _running = true;
-        _listenerThread.Start();
 
         Log.Debug("TCP session initiation completed:" +
                   $" remote={Bit.ToIpAddressString(RemoteAddress)}:{RemotePort}," +
@@ -198,8 +204,12 @@ public class TcpSession
         
         Log.Warn($"Routing as {ipv4.Source.AsString}:{tcp.SourcePort} to {ipv4.Destination.AsString}:{tcp.DestinationPort}");
 
+        var target = new IPEndPoint(IPAddress.Loopback, tcp.DestinationPort);
         var raw = ByteSerialiser.ToBytes(ipv4);
-        var actual = _comms.Send(raw);
+        //var actual = _comms.Send(raw, SocketFlags.None, out var errorCode);
+        //Log.Debug($"Send status = {errorCode.ToString()}");
+        var actual = _comms.SendTo(raw, target);
+        
         
         Log.Warn($"Sent {actual} bytes from {raw.Length} byte message");
         
@@ -208,10 +218,11 @@ public class TcpSession
 
     private int GetMyPort()
     {
-        var endpoint = _comms.LocalEndPoint as IPEndPoint;
-        if (endpoint is null) throw new Exception("Failed to read TCP session local endpoint");
-        
-        return endpoint.Port;
+        return 255; // temp. Need to assign stuff. Maybe a dummy socket?
+        //var endpoint = _comms.LocalEndPoint as IPEndPoint;
+        //if (endpoint is null) throw new Exception("Failed to read TCP session local endpoint");
+        // 
+        //return endpoint.Port;
     }
 
     /// <summary>
