@@ -161,6 +161,8 @@ public class TcpSession
 
     private bool HandleMessage(IpV4Packet ipv4, out TcpSegment tcp)
     {
+        _localSeq++;
+        
         var ok = HandleMessageInternal(ipv4, out tcp);
         
         // Is this the place to advance?
@@ -218,8 +220,8 @@ public class TcpSession
             {
                 if (tcp.Flags != TcpSegmentFlags.Ack) throw new Exception($"Invalid flags. Local state={State.ToString()}, request flags={tcp.Flags.ToString()}");
 
-                if (tcp.SequenceNumber != _remoteSeq) Log.Warn($"Request out of sequence: Expected {_remoteSeq}, got {tcp.SequenceNumber}");
-                if (tcp.AcknowledgmentNumber != _localSeq) Log.Warn($"Acknowledgement out of sequence: Expected {_localSeq}, got {tcp.AcknowledgmentNumber}");
+                if (tcp.SequenceNumber != _remoteSeq) Log.Warn($"Initial SYNC: Request out of sequence: Expected {_remoteSeq}, got {tcp.SequenceNumber}");
+                if (tcp.AcknowledgmentNumber != _localSeq) Log.Warn($"Initial SYNC: Acknowledgement out of sequence: Expected {_localSeq}, got {tcp.AcknowledgmentNumber}");
 
                 State = TcpSocketState.Established;
 
@@ -230,8 +232,8 @@ public class TcpSession
                 // We should either get an empty ACK message (end of handshake)
                 // OR an ACK message with data (streaming)
 
-                if (tcp.SequenceNumber != _remoteSeq) Log.Warn($"Request out of sequence: Expected {_remoteSeq}, got {tcp.SequenceNumber}");
-                if (tcp.AcknowledgmentNumber != _localSeq) Log.Warn($"Acknowledgement out of sequence: Expected {_localSeq}, got {tcp.AcknowledgmentNumber}");
+                if (tcp.SequenceNumber != _remoteSeq) Log.Warn($"Established request out of sequence: Expected {_remoteSeq}, got {tcp.SequenceNumber}");
+                if (tcp.AcknowledgmentNumber != _localSeq) Log.Warn($"Established acknowledgement out of sequence: Expected {_localSeq}, got {tcp.AcknowledgmentNumber}");
 
                 if (tcp.Flags == TcpSegmentFlags.Ack && tcp.Payload.Length < 1)
                 {
@@ -258,6 +260,21 @@ public class TcpSession
                     var msgStr = Encoding.UTF8.GetString(buffer, 0, read);
                     Log.Info($"Read {read} bytes from app: {msgStr}");
 
+                    var data = Encoding.ASCII.GetBytes(msgStr);
+                    var replyPkt = new TcpSegment
+                    {
+                        SourcePort = tcp.DestinationPort,
+                        DestinationPort = tcp.SourcePort,
+                        SequenceNumber = _localSeq,
+                        AcknowledgmentNumber = _remoteSeq,
+                        DataOffset = 5,
+                        Reserved = 0,
+                        Flags = TcpSegmentFlags.Ack | TcpSegmentFlags.Psh,
+                        WindowSize = tcp.WindowSize,
+                        Options = Array.Empty<byte>(),
+                        Payload = data
+                    };
+                    Reply(sender: ipv4, message: replyPkt);
                 }
                 else
                 {
@@ -278,31 +295,6 @@ public class TcpSession
                     };
                     Reply(sender: ipv4, message: replyPkt);
                 }
-
-                //Log.Info("\r\n" + Encoding.ASCII.GetString(tcp.Payload) + "\r\n");
-                // IEB: pass this request
-                /*var data = Encoding.ASCII.GetBytes(
-                    "HTTP/1.1 200 OK\r\n" +
-                    "Content-Type: text/plain; charset=utf-8\r\n" +
-                    "Content-Length: 45\r\n" +
-                    "\r\n" +
-                    "Hello, world. How's it going? I'm VirtualVPN!"
-                );
-                var replyPkt = new TcpSegment
-                {
-                    SourcePort = tcp.DestinationPort,
-                    DestinationPort = tcp.SourcePort,
-                    SequenceNumber = _localSeq,
-                    AcknowledgmentNumber = _remoteSeq,
-                    DataOffset = 5,
-                    Reserved = 0,
-                    Flags = TcpSegmentFlags.Ack | TcpSegmentFlags.Psh,
-                    WindowSize = tcp.WindowSize,
-                    Options = Array.Empty<byte>(),
-                    Payload = data
-                };
-                Reply(sender: ipv4, message: replyPkt);
-*/
                 break;
             }
 
@@ -335,7 +327,7 @@ public class TcpSession
     /// </summary>
     private void Reply(IpV4Packet sender, TcpSegment message)
     {
-        _localSeq++;
+        //_localSeq++;
         
         // Set message checksum
         message.UpdateChecksum(sender.Destination.Value, sender.Source.Value);
@@ -352,7 +344,7 @@ public class TcpSession
             HeaderLength = 5,
             ServiceType = 0,
             TotalLength = 20 + tcpPayload.Length,
-            PacketId = 123,//_rnd.Next(10, 32700),
+            PacketId = _rnd.Next(10, 32700),
             Flags = IpV4HeaderFlags.None,
             FragmentIndex = 0,
             Ttl = 64,
