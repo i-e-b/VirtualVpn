@@ -204,7 +204,7 @@ public class TcpSession
             }
             case TcpSocketState.SynReceived: // Expect to receive an ACK message and move to Established
             {
-                if (tcp.Flags != TcpSegmentFlags.Ack) throw new Exception($"Invalid flags. Local state={State.ToString()}, request flags={tcp.Flags.ToString()}");
+                if (tcp.Flags != TcpSegmentFlags.Ack) Log.Warn($"Invalid flags. Local state={State.ToString()}, request flags={tcp.Flags.ToString()}");
 
                 if (tcp.SequenceNumber != _remoteSeq) Log.Warn($"Initial SYNC: Request out of sequence: Expected {_remoteSeq}, got {tcp.SequenceNumber}");
                 if (tcp.AcknowledgmentNumber != _localSeq) Log.Warn($"Initial SYNC: Acknowledgement out of sequence: Expected {_localSeq}, got {tcp.AcknowledgmentNumber}");
