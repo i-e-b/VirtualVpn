@@ -111,9 +111,11 @@ public class TcpSession
         //_comms.Bind(new IPEndPoint(IPAddress.Loopback, 0));
         //var interfaces = NetworkInterface.GetAllNetworkInterfaces();
         //interfaces[NetworkInterface.LoopbackInterfaceIndex]
-        _comms.Bind(LowLevelEndPoint.GetFirstLoopback());
-        _appListenSocket.Bind(new IPEndPoint(IPAddress.Loopback, 0));
         
+        _comms.Bind(LowLevelEndPoint.GetFirstLoopback());
+        _appListenSocket.Bind(new IPEndPoint(IPAddress.Loopback, 0)); // gets us a port to use
+        
+        // IEB: not listening, to see if I'm stealing my own messages
         _listenerThread.Start();
 
         var ok = HandleMessage(ipv4, out var tcp);
@@ -174,6 +176,10 @@ public class TcpSession
         {
             try
             {
+                var act1 = _appListenSocket.Receive(buffer);
+                Log.Info($"Read {act1} bytes from app socket?");
+                
+                
                 // This receives from *everything*
                 var actual = _comms.Receive(buffer, SocketFlags.None, out var code);
                 

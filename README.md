@@ -37,6 +37,8 @@ Next thing to attempt is re-wrap TCP packets so they are local-to-local.
 Each TCP "session" on the V-vpn side should have a low-level connection
 to a server on localhost.
 
+I'm capturing my own loopback packets, but they're not getting to the web server
+
 - [ ] TCP session starts a socket listener with a new ephemeral port.
 - [ ] Re-target TCP packets as local-to-local, with one side at the target, one at the socket listener.
 - [ ] Pass packets back and forth from the app to the tunnel
