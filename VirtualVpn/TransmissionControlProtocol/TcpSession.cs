@@ -257,8 +257,28 @@ public class TcpSession
                     Log.Warn("Would write to web app?");
                     Log.Info($"{Encoding.UTF8.GetString(tcp.Payload)} - {Bit.Describe("in", ipv4.Payload)}");
                     
-                    var written = _socks?.Send(ipv4.Payload) ?? 0;
-                    Log.Info($"Send {written} bytes to app from {ipv4.Payload.Length} bytes in payload");
+                    var newIpv4 = new IpV4Packet
+                    {
+                        Version = IpV4Version.Version4,
+                        HeaderLength = 5,
+                        ServiceType = 0,
+                        TotalLength = 20,
+                        PacketId = 0,
+                        Flags = IpV4HeaderFlags.DontFragment,
+                        FragmentIndex = 0,
+                        Ttl = 64,
+                        Protocol = IpV4Protocol.TCP,
+                        Checksum = 0,
+                        Source = IpV4Address.Localhost,
+                        Destination = IpV4Address.Localhost,
+                        Options = new byte[] { },
+                        Payload = new byte[] { }
+                    };
+                    newIpv4.UpdateChecksum();
+                    var test = ByteSerialiser.ToBytes(newIpv4);
+                    
+                    var written = _socks?.Send(test) ?? 0;
+                    Log.Info($"Send {written} bytes to app from {test} bytes in payload");
                 }
                 
                 

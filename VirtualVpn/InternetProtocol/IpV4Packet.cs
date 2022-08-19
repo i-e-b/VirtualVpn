@@ -216,6 +216,8 @@ public class IpV4Address
 
     public string AsString => ToString();
     public bool IsLocalhost => Value.Length == 4 && Value[0] == 127 && Value[1] == 0 && Value[2] == 0 && Value[3] == 1;
+    
+    public static IpV4Address Localhost => new() { Value = new byte[]{127,0,0,1}};
 
     public override string ToString()
     {
