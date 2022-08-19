@@ -213,6 +213,7 @@ public class TcpSession
                 if (_socks is null)
                 {
                     _socks = new Socket(AddressFamily.InterNetwork, SocketType.Raw, ProtocolType.Tcp);
+                    _socks.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.HeaderIncluded, true);
                     _socks.Connect(IPAddress.Loopback, Settings.WebAppPort);
                 }
 
@@ -249,31 +250,10 @@ public class TcpSession
                 
                 Log.Info($"Tcp packet. Flags={tcp.Flags.ToString()}, Data length={tcp.Payload.Length}, Seq={tcp.SequenceNumber}");
 
-                //if (tcp.Payload.Length > 0)
-                {
-                    var written = _socks?.Send(tcp.Payload) ?? 0;
-                    Log.Info($"Send {written} bytes to app from {tcp.Payload.Length} bytes in payload");
-                }
-                //else // no data in payload
-                {
-                    // should I ACK here?
-                    /*var replyPkt = new TcpSegment
-                    {
-                        SourcePort = tcp.DestinationPort,
-                        DestinationPort = tcp.SourcePort,
-                        SequenceNumber = _localSeq,
-                        AcknowledgmentNumber = _remoteSeq - 1, // IEB: ???
-                        DataOffset = 5,
-                        Reserved = 0,
-                        Flags = TcpSegmentFlags.Ack,
-                        WindowSize = tcp.WindowSize,
-                        Options = Array.Empty<byte>(),
-                        Payload = Array.Empty<byte>()
-                    };
-                    Reply(sender: ipv4, message: replyPkt);
-                    */
-                }
                 
+                
+                
+                // IEB: This is picking up MY outgoing messages!
                 // pump data available
                 var available = _socks?.Available ?? 0;
                 while (available > 0)
@@ -302,6 +282,14 @@ public class TcpSession
                     };
                     Reply(sender: ipv4, message: replyPkt);
                 }
+                
+                
+                if (tcp.Payload.Length > 0)
+                {
+                    var written = _socks?.Send(ipv4.Payload) ?? 0;
+                    Log.Info($"Send {written} bytes to app from {ipv4.Payload.Length} bytes in payload");
+                }
+                
                 break;
             }
 
