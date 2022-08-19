@@ -19,10 +19,18 @@ namespace VirtualVpn.TransmissionControlProtocol;
 public class TcpSession
 {
     /// <summary>
-    /// The low-level socket we use to talk to our app
+    /// The low-level socket we use to send messages to our app.
+    /// We listen on a different socket for reading.
     /// </summary>
     private readonly Socket _comms;
-
+    
+    /*
+    /// <summary>
+    /// The socket we use to capture traffic from our app.
+    /// We send messages with a different port.
+    /// </summary>
+    private readonly Socket _appListenSocket;
+*/
     private readonly Stopwatch _stopwatch = new ();
     
     private readonly Thread _listenerThread;
@@ -63,7 +71,12 @@ public class TcpSession
     /// Local port requested for this session
     /// </summary>
     public int LocalPort { get; private set; }
-
+    
+    /// <summary>
+    /// Start a new tunnelled TCP connection
+    /// </summary>
+    /// <param name="transport">VPN tunnel session</param>
+    /// <param name="gateway">Gateway for VPN</param>
     public TcpSession(ChildSa transport, IPEndPoint gateway)
     {
         _transport = transport;
@@ -96,6 +109,10 @@ public class TcpSession
         // start listening thread
         _running = true;
         //_comms.Bind(new IPEndPoint(IPAddress.Loopback, 0));
+        //var interfaces = NetworkInterface.GetAllNetworkInterfaces();
+        //interfaces[NetworkInterface.LoopbackInterfaceIndex]
+        _comms.Bind(LowLevelEndPoint.GetFirstLoopback());
+        
         _listenerThread.Start();
 
         var ok = HandleMessage(ipv4, out var tcp);
@@ -205,7 +222,7 @@ public class TcpSession
 
         // Re-target BOTH the ipv4 and tcp packets, and send them down our raw connection
         tcp.SourcePort = GetMyPort();
-        ipv4.Destination = IpV4Address.LocalHost;
+        ipv4.Destination = new IpV4Address{Value = new byte[]{0,0,0,0}};
         ipv4.Source = IpV4Address.LocalHost;
         tcp.UpdateChecksum(ipv4);
         
@@ -223,7 +240,7 @@ public class TcpSession
         var raw = ByteSerialiser.ToBytes(ipv4);
         
         // IEB: un-bound mode --
-        var actual = _comms.Send(raw, SocketFlags.None, out var errorCode);
+        var actual = _comms.Send(raw, SocketFlags.None, out var errorCode); // HostNotFound?
         Log.Debug($"{actual} bytes sent. Send status = {errorCode.ToString()}");
         
         
