@@ -178,16 +178,27 @@ public class TcpSession
                 var actual = _comms.Receive(buffer, SocketFlags.None, out var code);
                 
                 // so we filter aggressively
-                if (actual < 20) continue; // junk packets
+                if (actual < 14) continue; // junk packets
                 if (code != SocketError.Success) continue;
                 
-                // fast check for protocol (no deserialisation)
-                //if (buffer[9] != (byte)IpV4Protocol.TCP) continue; // junk
+                // fast check for IP Ether-type protocol (no deserialisation)
+                if (buffer[12] != 0x08 || buffer[13] != 0x00 ) continue; // junk
                 
-                Log.Debug(Bit.Describe("incoming packet", buffer, 0, actual));
+                //Log.Debug(Bit.Describe("incoming packet", buffer, 0, actual));
+                /*
+                 var incoming_packet = new byte[] {
+                 [ MAC                            ]   [ MAC                            ]
+                 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,  0x00, 0x20, 0x01, 0x02, 0x03, 0x04,
+                 
+                 [ IP Ether-type]
+                 0x08, 0x00,
+                 
+                 [ IPv4 packet...
+                 0x45, 0x00, 0x00, 0x3C, 0x2F, 0xC9, 0x40, 0x00, 0x40, 0x06, 0x0C, 0xF1, 0x7F, 0x00, 0x00, 0x01, 0x7F, 0x00, 0x00, 0x01, 0xAE, 0xAB, 0x14, 0x67, 0x05, 0x25, 0x37, 0x70, 0x00, 0x00, 0x00, 0x00, 0xA0, 0x02, 0xFD, 0x2D, 0x1E, 0xD4, 0x00, 0x00, 0x02, 0x04, 0x05, 0x63, 0x04, 0x02, 0x08, 0x0A, 0x85, 0xE7, 0xA8, 0xBD, 0x00, 0x00, 0x00, 0x00, 0x01, 0x03, 0x03, 0x07, 0x00, 0x00, 0x00, 0xF8, 0x35, 0xF8, 0xD7, };
+*/
                 
                 // ok, it *might* be for us. Read the header properly
-                _ = ByteSerialiser.FromBytes<IpV4Packet>(buffer, 0, 20 /*only the headers*/, out var packet);
+                _ = ByteSerialiser.FromBytes<IpV4Packet>(buffer, 14, 20 /*only the headers*/, out var packet);
                 //if (!packet.Destination.IsLocalHost) continue; // junk
                 
                 Log.Debug($"Captured {packet.Protocol.ToString()}: {packet.Source.AsString} -> {packet.Destination.AsString}; code={code.ToString()}");
