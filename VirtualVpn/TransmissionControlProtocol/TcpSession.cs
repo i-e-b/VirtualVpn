@@ -106,10 +106,10 @@ public class TcpSession
     {
         if (_socks is null)
         {
-            _socks = new Socket(AddressFamily.InterNetwork, SocketType.Raw, ProtocolType.Tcp);
+            _socks = new Socket(AddressFamily.InterNetwork, SocketType.Raw, ProtocolType.Raw);
             _socks.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.HeaderIncluded, true);
             _socks.Bind(new IPEndPoint(IPAddress.Loopback, 0));
-            _socks.Connect(IPAddress.Loopback, Settings.WebAppPort);
+            //_socks.Connect(IPAddress.Loopback, Settings.WebAppPort);
             try
             {
                 _port = (_socks.LocalEndPoint as IPEndPoint)?.Port ?? -1;
