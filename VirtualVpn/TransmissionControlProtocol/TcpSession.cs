@@ -272,11 +272,14 @@ public class TcpSession
                 var available = _socks?.Available ?? 0;
                 while (available > 0)
                 {
-                    var read = _socks!.Receive(_buffer);
+                    //var read = _socks!.Receive(_buffer);
+                    EndPoint endPoint = new IPEndPoint(IPAddress.Loopback, 0);
+                    var socketFlags = SocketFlags.None;
+                    var read = _socks!.ReceiveMessageFrom(_buffer, ref socketFlags, ref endPoint, out var packetInfo);
                     available = _socks?.Available ?? 0;
 
                     var msgStr = Encoding.UTF8.GetString(_buffer, 0, read);
-                    Log.Info($"Read {read} bytes from app: {msgStr}");
+                    Log.Info($"Read {read} bytes from app: if={packetInfo.Interface} message={msgStr}");
 
                     var data = Encoding.ASCII.GetBytes(msgStr);
                     var replyPkt = new TcpSegment
