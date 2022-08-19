@@ -139,7 +139,7 @@ public class IpV4Packet
     /// <p></p>
     /// Note: The packet payload should not be included in the checksum, but often is.
     /// </summary>
-    [RemainingBytes(order: 13)]
+    [VariableByteString(source: nameof(PayloadLength), order:13)]
     public byte[] Payload = Array.Empty<byte>();
 
     
@@ -148,6 +148,11 @@ public class IpV4Packet
     /// on length field (usually zero)
     /// </summary>
     public int OptionsLength() => HeaderLength * 4 - 20;
+    
+    /// <summary>
+    /// Calculate how many bytes of payload we have
+    /// </summary>
+    public int PayloadLength() => TotalLength - 20;
 
     /// <summary>
     /// Re-write the TCP header-checksum with current values.

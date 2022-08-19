@@ -157,7 +157,7 @@ public class ChildSaTests
             Version = IpV4Version.Version4,
             HeaderLength = 5,
             ServiceType = 1,
-            TotalLength = 0x0203,
+            TotalLength = 23,
             PacketId = 0x0405,
             Flags = (IpV4HeaderFlags)0x07, // 0xE0 when shifted
             FragmentIndex = 0x1FFF, // with above, comes out to FF FF if correct
