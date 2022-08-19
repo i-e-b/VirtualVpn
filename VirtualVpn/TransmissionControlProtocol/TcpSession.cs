@@ -108,6 +108,7 @@ public class TcpSession
         {
             _socks = new Socket(AddressFamily.InterNetwork, SocketType.Raw, ProtocolType.Tcp);
             _socks.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.HeaderIncluded, true);
+            _socks.Bind(new IPEndPoint(IPAddress.Loopback, 0));
             _socks.Connect(IPAddress.Loopback, Settings.WebAppPort);
             try
             {
@@ -135,6 +136,8 @@ public class TcpSession
         _backflowThread.Start();
         
         LastContact.Start(); // start counting. This gets reset every time we get another message
+        
+        _socks.Send(new byte[100]); // test
 
         // TODO: try nothing here and see if we still connect
         RedirectPacket(ipv4);
