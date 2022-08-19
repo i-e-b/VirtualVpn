@@ -270,7 +270,7 @@ public class TcpSession
                 
                 // pump data available
                 var available = _socks?.Available ?? 0;
-                if (available > 0)
+                while (available > 0)
                 {
                     var read = _socks!.Receive(_buffer);
 
@@ -282,7 +282,7 @@ public class TcpSession
                     {
                         SourcePort = tcp.DestinationPort,
                         DestinationPort = tcp.SourcePort,
-                        SequenceNumber = _localSeq,
+                        SequenceNumber = _localSeq++,
                         AcknowledgmentNumber = _remoteSeq,
                         DataOffset = 5,
                         Reserved = 0,
@@ -292,6 +292,7 @@ public class TcpSession
                         Payload = data
                     };
                     Reply(sender: ipv4, message: replyPkt);
+                    available = _socks?.Available ?? 0;
                 }
                 break;
             }
