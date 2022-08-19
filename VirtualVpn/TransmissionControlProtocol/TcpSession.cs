@@ -30,7 +30,8 @@ public class TcpSession
     /// SEG.ACK - segment acknowledgment number
     /// </summary>
     private long _remoteSeq;
-    
+
+    private readonly byte[] _buffer = new byte[1800];
     private static readonly Random _rnd = new();
 
     /// <summary>
@@ -246,37 +247,11 @@ public class TcpSession
                 {
                     var written = _socks?.Send(tcp.Payload) ?? 0;
                     Log.Info($"Send {written} bytes to app from {tcp.Payload.Length} bytes in payload");
-
-                    var buffer = new byte[65536];
-                    var available = _socks?.Available ?? 0;
-                    if (available > 0)
-                    {
-                        var read = _socks!.Receive(buffer);
-
-                        var msgStr = Encoding.UTF8.GetString(buffer, 0, read);
-                        Log.Info($"Read {read} bytes from app: {msgStr}");
-
-                        var data = Encoding.ASCII.GetBytes(msgStr);
-                        var replyPkt = new TcpSegment
-                        {
-                            SourcePort = tcp.DestinationPort,
-                            DestinationPort = tcp.SourcePort,
-                            SequenceNumber = _localSeq,
-                            AcknowledgmentNumber = _remoteSeq,
-                            DataOffset = 5,
-                            Reserved = 0,
-                            Flags = TcpSegmentFlags.Ack | TcpSegmentFlags.Psh,
-                            WindowSize = tcp.WindowSize,
-                            Options = Array.Empty<byte>(),
-                            Payload = data
-                        };
-                        Reply(sender: ipv4, message: replyPkt);
-                    }
                 }
                 else // no data in payload
                 {
                     // should I ACK here?
-                    var replyPkt = new TcpSegment
+                    /*var replyPkt = new TcpSegment
                     {
                         SourcePort = tcp.DestinationPort,
                         DestinationPort = tcp.SourcePort,
@@ -288,6 +263,33 @@ public class TcpSession
                         WindowSize = tcp.WindowSize,
                         Options = Array.Empty<byte>(),
                         Payload = Array.Empty<byte>()
+                    };
+                    Reply(sender: ipv4, message: replyPkt);
+                    */
+                }
+                
+                // pump data available
+                var available = _socks?.Available ?? 0;
+                if (available > 0)
+                {
+                    var read = _socks!.Receive(_buffer);
+
+                    var msgStr = Encoding.UTF8.GetString(_buffer, 0, read);
+                    Log.Info($"Read {read} bytes from app: {msgStr}");
+
+                    var data = Encoding.ASCII.GetBytes(msgStr);
+                    var replyPkt = new TcpSegment
+                    {
+                        SourcePort = tcp.DestinationPort,
+                        DestinationPort = tcp.SourcePort,
+                        SequenceNumber = _localSeq,
+                        AcknowledgmentNumber = _remoteSeq,
+                        DataOffset = 5,
+                        Reserved = 0,
+                        Flags = TcpSegmentFlags.Ack | TcpSegmentFlags.Psh,
+                        WindowSize = tcp.WindowSize,
+                        Options = Array.Empty<byte>(),
+                        Payload = data
                     };
                     Reply(sender: ipv4, message: replyPkt);
                 }
