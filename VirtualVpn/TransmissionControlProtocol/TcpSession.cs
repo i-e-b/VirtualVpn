@@ -156,9 +156,19 @@ public class TcpSession
         {
             try
             {
-                Log.Info($"Listening for TCP traffic on port {GetMyPort()}...");
+                Log.Debug($"Listening for TCP traffic on port {GetMyPort()}...");
                 var actual = _comms.Receive(buffer, SocketFlags.None, out var code);
-                Log.Warn($"Received {actual} bytes, code = {code.ToString()}");
+                Log.Debug($"Received {actual} bytes, code = {code.ToString()}");
+
+                var ok = ByteSerialiser.FromBytes<IpV4Packet>(buffer, 0, actual, out var packet);
+                if (!ok)
+                {
+                    Log.Debug("Could not read input packet");
+                }
+                else
+                {
+                    Log.Debug($"Captured {packet.Protocol.ToString()}: {packet.Source.AsString} -> {packet.Destination.AsString}");
+                }
 
                 // TODO: unpack 'actual', and fix the headers and checksums.
                 // Then send down the tunnel
@@ -211,7 +221,7 @@ public class TcpSession
         var raw = ByteSerialiser.ToBytes(ipv4);
         
         // IEB: un-bound mode --
-        var actual = _comms.Send(raw, SocketFlags.None, out var errorCode);
+        var actual = _comms.Send(raw, SocketFlags.Broadcast, out var errorCode);
         Log.Debug($"{actual} bytes sent. Send status = {errorCode.ToString()}");
         
         

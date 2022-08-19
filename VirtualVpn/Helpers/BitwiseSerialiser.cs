@@ -341,6 +341,24 @@ public static class ByteSerialiser
         return ok;
     }
 
+    /// <summary>
+    /// Deserialise a subset of a byte array into a [ByteLayout] object.
+    /// If the byte array is too short to fill the object, a partially complete object is returned.
+    /// </summary>
+    /// <param name="source">Byte array to be deserialised</param>
+    /// <param name="length">Maximum bytes to read</param>
+    /// <param name="result">New instance of T</param>
+    /// <param name="offset">Offset into source to start reading</param>
+    /// <typeparam name="T">Target type. Must be marked with the [ByteLayout] attribute, and obey the rules of the attribute</typeparam>
+    /// <returns>True if source was long enough to complete the result, false if too short. Returns true if source is longer than needed.</returns>
+    public static bool FromBytes<T>(byte[] source, int offset, int length, out T result) where T : new()
+    {
+        var feed = source.Skip(offset).Take(length);
+        var ok = FromBytes(typeof(T), feed, out var obj);
+        result = (T)obj;
+        return ok;
+    }
+
 
     /// <summary>
     /// Deserialise a byte array into a [ByteLayout] object.
@@ -350,7 +368,7 @@ public static class ByteSerialiser
     /// <param name="source">Byte array to be deserialised</param>
     /// <param name="result">New instance of T</param>
     /// <returns>True if source was long enough to complete the result, false if too short. Returns true if source is longer than needed.</returns>
-    public static bool FromBytes(Type type, byte[] source, out object result)
+    public static bool FromBytes(Type type, IEnumerable<byte> source, out object result)
     {
         // Plan:
         // 1. get all BigEndianAttribute fields recursively, ordered appropriately
