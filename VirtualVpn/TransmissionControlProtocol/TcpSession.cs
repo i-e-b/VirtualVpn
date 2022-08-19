@@ -74,14 +74,15 @@ public class TcpSession
         
         
         
-        _comms = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.IP) { Blocking = true };
+        // IP localhost > localhost: ICMP localhost udp port 5223 unreachable, length 76
+        //_comms = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.IP) { Blocking = true };
         
         //_comms = new Socket(AddressFamily.Packet, SocketType.Raw, ProtocolType.Raw) { Blocking = true }; // this is what I want, but it gives "invalid argument"
         //_comms = new Socket((AddressFamily)17, SocketType.Dgram, (ProtocolType)0x0004) { Blocking = true }; // https://github.com/dotnet/runtime/issues/24076
         
         // From https://github.com/dotnet/runtime/issues/26416
-        //Int16 protocol = 0x800; // IP.
-        //_comms = new Socket(AddressFamily.Packet, SocketType.Raw, (ProtocolType)IPAddress.HostToNetworkOrder(protocol));
+        Int16 protocol = 0x800; // IP.
+        _comms = new Socket(AddressFamily.Packet, SocketType.Raw, (ProtocolType)IPAddress.HostToNetworkOrder(protocol));
 
     }
 
@@ -94,7 +95,7 @@ public class TcpSession
         
         // start listening thread
         _running = true;
-        _comms.Bind(new IPEndPoint(IPAddress.Loopback, 0));
+        //_comms.Bind(new IPEndPoint(IPAddress.Loopback, 0));
         _listenerThread.Start();
 
         var ok = HandleMessage(ipv4, out var tcp);
@@ -169,6 +170,7 @@ public class TcpSession
                 Thread.Sleep(500);
             }
         }
+        Log.Info("TCP listener ended");
     }
 
     /// <summary>
@@ -207,14 +209,17 @@ public class TcpSession
 2022-08-19T09:11 (utc) Sent 0 bytes from 60 byte message*/
         
         var raw = ByteSerialiser.ToBytes(ipv4);
-        //var actual = _comms.Send(raw, SocketFlags.None, out var errorCode);
-        //Log.Debug($"Send status = {errorCode.ToString()}");
-        var target = new IPEndPoint(IPAddress.Loopback, tcp.DestinationPort);
+        
+        // IEB: un-bound mode --
+        var actual = _comms.Send(raw, SocketFlags.None, out var errorCode);
+        Log.Debug($"{actual} bytes sent. Send status = {errorCode.ToString()}");
+        
+        
+        // IEB: bound mode--
+        //var target = new IPEndPoint(IPAddress.Loopback, tcp.DestinationPort);
         //var actual = _comms.SendTo(raw, target);
-        var actual = _comms.SendTo(ipv4.Payload, target);
-        
-        
-        Log.Warn($"Sent {actual} bytes from {raw.Length} byte message");
+        //var actual = _comms.SendTo(ipv4.Payload, target);
+        //Log.Warn($"Sent {actual} bytes from {raw.Length} byte message");
         
         return true;
     }
@@ -222,8 +227,12 @@ public class TcpSession
     private int GetMyPort()
     {
         var endpoint = _comms.LocalEndPoint as IPEndPoint;
-        if (endpoint is null) throw new Exception("Failed to read TCP session local endpoint");
-         
+        if (endpoint is null)
+        {
+            Log.Info("Unbound");
+            return 58255;
+        }
+
         return endpoint.Port;
     }
 
