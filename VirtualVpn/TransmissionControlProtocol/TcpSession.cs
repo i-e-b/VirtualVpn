@@ -169,7 +169,7 @@ public class TcpSession
         Log.Debug(Bit.Describe("raw transfer", raw));
 
         var written = _socks?.Send(raw) ?? 0;
-        Log.Info($"Send {written} bytes to app from {raw} bytes in payload");
+        Log.Info($"Send {written} bytes to app from {raw.Length} bytes in payload");
     }
 
     /// <summary>
@@ -391,18 +391,30 @@ public class TcpSession
             var read = _socks!.Receive(_buffer);
             available = _socks?.Available ?? 0;
 
-            ByteSerialiser.FromBytes<IpV4Packet>(_buffer.Take(read), out var pkz);
-            if (!pkz.Destination.IsLocalhost)
+            ByteSerialiser.FromBytes<IpV4Packet>(_buffer.Take(read), out var ipv4);
+            if (!ipv4.Destination.IsLocalhost)
             {
-                Log.Debug($"Noise {pkz.Source.AsString} -> {pkz.Destination.AsString}");
+                Log.Debug($"Noise {ipv4.Source.AsString} -> {ipv4.Destination.AsString}");
             }
             else
             {
-                var msgStr = Encoding.UTF8.GetString(_buffer, 0, read);
-                Log.Info($"Read {read} bytes from app: message={msgStr}");
+                Log.Info("Directing packet back through tunnel");
                 Log.Debug($"Message bytes:{Bit.Describe("msg", _buffer, 0, read)}");
+                Log.Debug(TypeDescriber.Describe(ipv4));
                 
-                Log.Debug(TypeDescriber.Describe(pkz));
+                ByteSerialiser.FromBytes<TcpSegment>(ipv4.Payload, out var tcp);
+                
+                ipv4.Destination = new IpV4Address(RemoteAddress);
+                ipv4.Source = new IpV4Address(LocalAddress);
+                tcp.DestinationPort = RemotePort;
+                tcp.SourcePort = LocalPort;
+                
+                tcp.UpdateChecksum(ipv4.Source.Value, ipv4.Destination.Value);
+                
+                ipv4.Payload = ByteSerialiser.ToBytes(tcp);
+                ipv4.UpdateChecksum();
+                
+                _transport.Send(ipv4, Gateway);
 
                 //var data = Encoding.ASCII.GetBytes(msgStr);
                 /*

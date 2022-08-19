@@ -214,6 +214,9 @@ public class IpV4Address
     [ByteString(bytes:4, order:0)]
     public byte[] Value = Array.Empty<byte>();
 
+    public IpV4Address() { }
+    public IpV4Address(byte[] address) { Value = address; }
+
     public string AsString => ToString();
     public bool IsLocalhost => Value.Length == 4 && Value[0] == 127 && Value[1] == 0 && Value[2] == 0 && Value[3] == 1;
     
