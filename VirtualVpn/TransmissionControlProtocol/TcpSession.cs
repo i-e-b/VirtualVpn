@@ -176,8 +176,8 @@ public class TcpSession
         {
             try
             {
-                var act1 = _appListenSocket.Receive(buffer);
-                Log.Info($"Read {act1} bytes from app socket?");
+                //var act1 = _appListenSocket.Receive(buffer);
+                //Log.Info($"Read {act1} bytes from app socket?");
                 
                 
                 // This receives from *everything*
