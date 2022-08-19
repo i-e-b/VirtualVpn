@@ -3,64 +3,28 @@
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using VirtualVpn.Helpers;
 
-Console.WriteLine("I will listen for UDP messages on ports 500 and 4500 and list them...");
+Console.WriteLine("I will listen for TCP messages on port 5223 and list them...");
 
+var localEp = new IPEndPoint(IPAddress.Any, 5223);
+var tcpListener = new TcpListener(localEp);
 
-var commsThreadIke = new Thread(IkeLoop){IsBackground = true};
-var commsThreadSpe = new Thread(SpeLoop){IsBackground = true};
-commsThreadIke.Start();
-commsThreadSpe.Start();
+var buffer = new byte[65536];
+tcpListener.Start();
 
 while (true)
 {
-    Console.WriteLine("Listening...");
-    Thread.Sleep(5000);
-    Console.WriteLine("...Listening");
-    Thread.Sleep(5000);
-}
-
-
-void IkeLoop()
-{
-    var localEp = new IPEndPoint(IPAddress.Any, 500);
-    using var client = new UdpClient(localEp);
-
-    Console.WriteLine("Listen on 500...");
-
-    var sender = new IPEndPoint(IPAddress.Any, 0);
-
-    while(true)
-    {
-        var buffer = client.Receive(ref sender);
-
-        Console.WriteLine($"Expected=500 Real Port={sender.Port}  Caller={sender.Address} Data={Encoding.UTF8.GetString(buffer, 0, buffer.Length)}");
-        Console.Write("Echoing back to sender...");
+    Console.WriteLine("Waiting for a connection");
+    using var client = tcpListener.AcceptTcpClient();
+    Console.WriteLine("Got a connection. Reading...");
         
-        var returnToSender = new IPEndPoint(sender.Address, 500);
-        var sent = client.Send(buffer, buffer.Length, returnToSender);
-        Console.WriteLine($"Done ({sent} bytes).");
-    }
-}
+    using var stream = client.GetStream();
     
-void SpeLoop()
-{
-    var localEp = new IPEndPoint(IPAddress.Any, 4500);
-    using var client = new UdpClient(localEp);
-
-    Console.WriteLine("Listen on 4500...");
-
-    var sender = new IPEndPoint(IPAddress.Any, 0);
-
-    while(true)
-    {
-        var buffer = client.Receive(ref sender);
-
-        Console.WriteLine($"Expected=4500 Real Port={sender.Port}  Caller={sender.Address} Data={Encoding.UTF8.GetString(buffer, 0, buffer.Length)}");
-        Console.Write("Echoing back to sender...");
-        
-        var returnToSender = new IPEndPoint(sender.Address, 4500);
-        var sent = client.Send(buffer, buffer.Length, returnToSender);
-        Console.WriteLine($"Done ({sent} bytes).");
-    }
+    var read = stream.Read(buffer, 0, buffer.Length);
+    
+    Console.WriteLine(Bit.SafeString(buffer.Take(read)));
+    
+    stream.Write(Encoding.UTF8.GetBytes("HTTP/1.1 200 OK\r\nContent-Length: 6\r\n\r\nHello!"));
 }
+

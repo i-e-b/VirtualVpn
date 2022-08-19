@@ -379,13 +379,13 @@ public static class Bit
         return HexString(bytes);
     }
 
-    public static string SafeString(byte[] bytes)
+    public static string SafeString(IEnumerable<byte> bytes)
     {
         var sb = new StringBuilder();
 
-        for (int i = 0; i < bytes.Length; i++)
+        foreach (var t in bytes)
         {
-            var c = (char)bytes[i];
+            var c = (char)t;
             if (c == '\r' || c == '\n') sb.Append(c);
             else if (c >= ' ' && c <= '~') sb.Append(c);
             else sb.Append('.');
