@@ -241,10 +241,12 @@ public class TcpSession
                 Log.Info($"Tcp packet. Flags={tcp.Flags.ToString()}, Data length={tcp.Payload.Length}, Seq={tcp.SequenceNumber}");
 
                 IncomingStream.Write(tcp.SequenceNumber, tcp.Payload);
-                if (tcp.Flags.HasFlag(TcpSegmentFlags.Fin)) IncomingStream.SetComplete(tcp.SequenceNumber);
+                if (tcp.Flags.HasFlag(TcpSegmentFlags.Fin)) IncomingStream.SetComplete(tcp.SequenceNumber); // complete
+                if (tcp.Flags.HasFlag(TcpSegmentFlags.Psh)) IncomingStream.SetComplete(tcp.SequenceNumber); // push asap
 
                 if (IncomingStream.Complete)
                 {
+                    Log.Info($"Ready to pass across");
                     if (!IncomingStream.SequenceComplete)
                     {
                         Log.Warn($"Stream thinks it's not complete? {IncomingStream.Keys}");
