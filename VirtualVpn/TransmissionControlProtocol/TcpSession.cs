@@ -145,29 +145,30 @@ public class TcpSession
         var buffer = new byte[66000]; // a bit larger than the maximum TCP packet
         _comms.Blocking = true; // wait for data
 
-
         while (!_running)
         {
             Log.Info("Listener thread waiting to come up");
             Thread.Sleep(500);
         }
 
+        Log.Debug($"Listening for TCP traffic on {GetMyPort()}...");
         while (_running)
         {
             try
             {
                 // This receives from *everything*
-                
-                Log.Debug($"Listening for TCP traffic on port {GetMyPort()}...");
                 var actual = _comms.Receive(buffer, SocketFlags.None, out var code);
+                
+                // so we filter aggressively
                 if (actual < 20) continue; // junk packets
                 if (code != SocketError.Success) continue;
                 
                 // fast check for protocol (no deserialisation)
                 if (buffer[9] != (byte)IpV4Protocol.TCP) continue; // junk
                 
+                // ok, it *might* be for us. Read the header properly
                 _ = ByteSerialiser.FromBytes<IpV4Packet>(buffer, 0, 20 /*only the headers*/, out var packet);
-                if (!packet.Destination.IsLocalHost) continue; // junk
+                //if (!packet.Destination.IsLocalHost) continue; // junk
                 
                 Log.Debug($"Captured {packet.Protocol.ToString()}: {packet.Source.AsString} -> {packet.Destination.AsString}; code={code.ToString()}");
 
@@ -222,7 +223,7 @@ public class TcpSession
         var raw = ByteSerialiser.ToBytes(ipv4);
         
         // IEB: un-bound mode --
-        var actual = _comms.Send(raw, SocketFlags.Broadcast, out var errorCode);
+        var actual = _comms.Send(raw, SocketFlags.None, out var errorCode);
         Log.Debug($"{actual} bytes sent. Send status = {errorCode.ToString()}");
         
         
@@ -240,7 +241,6 @@ public class TcpSession
         var endpoint = _comms.LocalEndPoint as IPEndPoint;
         if (endpoint is null)
         {
-            Log.Info("Unbound");
             return 58255;
         }
 
