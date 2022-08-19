@@ -97,6 +97,19 @@ public class TcpSession
     /// </summary>
     public bool Start(IpV4Packet ipv4)
     {
+        if (_socks is null)
+        {
+            _socks = new Socket(AddressFamily.InterNetwork, SocketType.Raw, ProtocolType.Tcp);
+            _socks.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.HeaderIncluded, true);
+            _socks.Connect(IPAddress.Loopback, Settings.WebAppPort);
+        }
+
+        LastContact.Start();
+        
+        RedirectPacket(ipv4);
+        return true;
+
+        /*
         AssertState(TcpSocketState.Closed);
         Log.Debug("TCP session initiation");
 
@@ -125,6 +138,29 @@ public class TcpSession
                   $" local={Bit.ToIpAddressString(LocalAddress)}:{LocalPort}");
 
         return true;
+        */
+    }
+
+    private void RedirectPacket(IpV4Packet ipv4)
+    {
+        ipv4.Destination = IpV4Address.Localhost;
+        ipv4.Source = IpV4Address.Localhost;
+
+        _ = ByteSerialiser.FromBytes<TcpSegment>(ipv4.Payload, out var tcp);
+        tcp.DestinationPort = Settings.WebAppPort;
+        tcp.SourcePort = 78945;
+
+        tcp.UpdateChecksum(ipv4.Source.Value, ipv4.Destination.Value);
+
+        ipv4.Payload = ByteSerialiser.ToBytes(tcp);
+        ipv4.UpdateChecksum();
+
+        var raw = ByteSerialiser.ToBytes(ipv4);
+
+        Log.Debug(Bit.Describe("raw transfer", raw));
+
+        var written = _socks?.Send(raw) ?? 0;
+        Log.Info($"Send {written} bytes to app from {raw} bytes in payload");
     }
 
     /// <summary>
@@ -133,7 +169,9 @@ public class TcpSession
     public void Accept(IpV4Packet ipv4)
     {
         LastContact.Restart(); // back to zero, keep counting
-        HandleMessage(ipv4, out _);
+        RedirectPacket(ipv4);
+        
+        //HandleMessage(ipv4, out _);
     }
     
     /// <summary>
@@ -287,43 +325,7 @@ public class TcpSession
                 // IEB: This is picking up MY outgoing messages?
                 // IEB: OR, is this reading bits of my SSH session!?
                 // pump data available
-                var available = _socks?.Available ?? 0;
-                Log.Info($"{available} bytes on socket");
-                while (available > 0)
-                {
-                    var read = _socks!.Receive(_buffer);
-                    available = _socks?.Available ?? 0;
-                    
-                    ByteSerialiser.FromBytes<IpV4Packet>(_buffer.Take(read), out var pkz);
-                    if (!pkz.Destination.IsLocalhost)
-                    {
-                        Log.Debug($"Noise {pkz.Source.AsString} -> {pkz.Destination.AsString}");
-                    }
-                    else
-                    {
-
-                        var msgStr = Encoding.UTF8.GetString(_buffer, 0, read);
-                        Log.Info($"Read {read} bytes from app: message={msgStr}");
-                        Log.Debug($"Message bytes:{Bit.Describe("msg", _buffer, 0, read)}");
-                        Log.Debug(TypeDescriber.Describe(pkz));
-
-                        var data = Encoding.ASCII.GetBytes(msgStr);
-                        var replyPkt = new TcpSegment
-                        {
-                            SourcePort = tcp.DestinationPort,
-                            DestinationPort = tcp.SourcePort,
-                            SequenceNumber = _localSeq++,
-                            AcknowledgmentNumber = _remoteSeq,
-                            DataOffset = 5,
-                            Reserved = 0,
-                            Flags = available > 0 ? TcpSegmentFlags.None : (TcpSegmentFlags.Ack | TcpSegmentFlags.Psh),
-                            WindowSize = tcp.WindowSize,
-                            Options = Array.Empty<byte>(),
-                            Payload = data
-                        };
-                        Reply(sender: ipv4, message: replyPkt);
-                    }
-                }
+                ReadFromWebApp();
                 break;
             }
 
@@ -349,6 +351,52 @@ public class TcpSession
         //var reply = new IpV4Packet();
         //_transport.Send(reply, Gateway);
         return true;
+    }
+
+    /// <summary>
+    /// Read any data back from app to tunnel
+    /// </summary>
+    private void ReadFromWebApp()
+    {
+        var available = _socks?.Available ?? 0;
+        Log.Info($"{available} bytes on socket");
+        while (available > 0)
+        {
+            var read = _socks!.Receive(_buffer);
+            available = _socks?.Available ?? 0;
+
+            ByteSerialiser.FromBytes<IpV4Packet>(_buffer.Take(read), out var pkz);
+            if (!pkz.Destination.IsLocalhost)
+            {
+                Log.Debug($"Noise {pkz.Source.AsString} -> {pkz.Destination.AsString}");
+            }
+            else
+            {
+                var msgStr = Encoding.UTF8.GetString(_buffer, 0, read);
+                Log.Info($"Read {read} bytes from app: message={msgStr}");
+                Log.Debug($"Message bytes:{Bit.Describe("msg", _buffer, 0, read)}");
+                
+                Log.Debug(TypeDescriber.Describe(pkz));
+
+                //var data = Encoding.ASCII.GetBytes(msgStr);
+                /*
+                var replyPkt = new TcpSegment
+                {
+                    SourcePort = LocalPort,
+                    DestinationPort = RemotePort,
+                    SequenceNumber = _localSeq++,
+                    AcknowledgmentNumber = _remoteSeq,
+                    DataOffset = 5,
+                    Reserved = 0,
+                    Flags = available > 0 ? TcpSegmentFlags.None : (TcpSegmentFlags.Ack | TcpSegmentFlags.Psh),
+                    WindowSize = tcp.WindowSize,
+                    Options = Array.Empty<byte>(),
+                    Payload = data
+                };
+                Reply(sender: ipv4, message: replyPkt);
+                */
+            }
+        }
     }
 
     /// <summary>
