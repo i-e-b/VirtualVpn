@@ -182,7 +182,9 @@ public class TcpSession
                 if (code != SocketError.Success) continue;
                 
                 // fast check for protocol (no deserialisation)
-                if (buffer[9] != (byte)IpV4Protocol.TCP) continue; // junk
+                //if (buffer[9] != (byte)IpV4Protocol.TCP) continue; // junk
+                
+                Log.Debug(Bit.Describe("incoming packet", buffer, 0, actual));
                 
                 // ok, it *might* be for us. Read the header properly
                 _ = ByteSerialiser.FromBytes<IpV4Packet>(buffer, 0, 20 /*only the headers*/, out var packet);
@@ -252,9 +254,15 @@ public class TcpSession
         // then a CRC at the end
         // Broadcast address is 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF ???
         
-        var headed = testPattern.Concat(raw).ToArray();
+        var encapsulated = testPattern.Concat(raw).Concat(new byte[7]).ToArray();
+        var crc = Crc32.Compute(encapsulated);
         
-        var actual = _comms.Send(headed, SocketFlags.None, out var errorCode);
+        encapsulated[^1] = (byte)((crc >>  0) & 0xff);
+        encapsulated[^2] = (byte)((crc >>  8) & 0xff);
+        encapsulated[^3] = (byte)((crc >> 16) & 0xff);
+        encapsulated[^4] = (byte)((crc >> 24) & 0xff);
+        
+        var actual = _comms.Send(encapsulated, SocketFlags.None, out var errorCode);
         Log.Debug($"{actual} bytes sent. Send status = {errorCode.ToString()}");
         
         return true;

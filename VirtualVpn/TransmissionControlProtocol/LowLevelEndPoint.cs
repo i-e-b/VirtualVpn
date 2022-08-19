@@ -25,7 +25,7 @@ public class LowLevelEndPoint : EndPoint
         var socketAddress = new SocketAddress(AddressFamily.Packet, 20);
 
         var indexProperty = _networkInterface.GetType().GetProperty("Index", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-        var nicIndex = (int)indexProperty.GetValue(_networkInterface);
+        var nicIndex = (int)(indexProperty?.GetValue(_networkInterface) ?? 0);
         var asBytes = BitConverter.GetBytes(nicIndex);
 
         socketAddress[4] = asBytes[0];
@@ -35,9 +35,9 @@ public class LowLevelEndPoint : EndPoint
 
         if (_networkInterface.NetworkInterfaceType != NetworkInterfaceType.Loopback)
         {
-            var eth_p_all = BitConverter.GetBytes(IPAddress.HostToNetworkOrder((short)3));   // ETH_P_ALL
-            socketAddress[2] = eth_p_all[0];
-            socketAddress[3] = eth_p_all[1];
+            var ethPAll = BitConverter.GetBytes(IPAddress.HostToNetworkOrder((short)3));   // ETH_P_ALL
+            socketAddress[2] = ethPAll[0];
+            socketAddress[3] = ethPAll[1];
             //socketAddress[10] = 4;  // PACKET_OUTGOING
         }
         return socketAddress;
