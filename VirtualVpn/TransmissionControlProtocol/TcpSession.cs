@@ -297,10 +297,11 @@ public class TcpSession
                 
                 if (tcp.Payload.Length > 0)
                 {
-                    //var written = _socks?.Send(ipv4.Payload) ?? 0;
-                    //Log.Info($"Send {written} bytes to app from {ipv4.Payload.Length} bytes in payload");
                     Log.Warn("Would write to web app?");
-                    Log.Info($"{Encoding.UTF8.GetString(ipv4.Payload)} - {Bit.Describe("in", ipv4.Payload)}");
+                    Log.Info($"{Encoding.UTF8.GetString(tcp.Payload)} - {Bit.Describe("in", ipv4.Payload)}");
+                    
+                    var written = _socks?.Send(ipv4.Payload) ?? 0;
+                    Log.Info($"Send {written} bytes to app from {ipv4.Payload.Length} bytes in payload");
                 }
                 
                 break;
