@@ -273,6 +273,7 @@ public class TcpSession
                 while (available > 0)
                 {
                     var read = _socks!.Receive(_buffer);
+                    available = _socks?.Available ?? 0;
 
                     var msgStr = Encoding.UTF8.GetString(_buffer, 0, read);
                     Log.Info($"Read {read} bytes from app: {msgStr}");
@@ -286,13 +287,12 @@ public class TcpSession
                         AcknowledgmentNumber = _remoteSeq,
                         DataOffset = 5,
                         Reserved = 0,
-                        Flags = TcpSegmentFlags.Ack | TcpSegmentFlags.Psh,
+                        Flags = available > 0 ? TcpSegmentFlags.None : (TcpSegmentFlags.Ack | TcpSegmentFlags.Psh),
                         WindowSize = tcp.WindowSize,
                         Options = Array.Empty<byte>(),
                         Payload = data
                     };
                     Reply(sender: ipv4, message: replyPkt);
-                    available = _socks?.Available ?? 0;
                 }
                 break;
             }
