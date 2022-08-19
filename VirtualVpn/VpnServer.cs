@@ -38,9 +38,9 @@ public class VpnServer : IDisposable
 //var target = new IPEndPoint(new IPAddress(new byte[]{197,250,65,132}), 500); // M-P
 //var target = new IPEndPoint(new IPAddress(new byte[] { 159, 69, 13, 126 }), 500); // Gerty
 
+        _running = true;
         _server.Start();
         _eventPumpThread.Start();
-        _running = true;
 
 
         while (_running)
@@ -226,6 +226,12 @@ public class VpnServer : IDisposable
 
     private void EventPumpLoop()
     {
+        while (!_running)
+        {
+            Thread.Sleep(Settings.EventPumpRate);
+            Log.Debug("Event pump waiting");
+        }
+
         while (_running)
         {
             try

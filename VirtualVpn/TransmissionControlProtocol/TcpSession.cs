@@ -74,7 +74,7 @@ public class TcpSession
         
         
         
-        //_comms = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.IP) { Blocking = true };
+        _comms = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.IP) { Blocking = true };
         
         //_comms = new Socket(AddressFamily.Packet, SocketType.Raw, ProtocolType.Raw) { Blocking = true }; // this is what I want, but it gives "invalid argument"
         //_comms = new Socket((AddressFamily)17, SocketType.Dgram, (ProtocolType)0x0004) { Blocking = true }; // https://github.com/dotnet/runtime/issues/24076
@@ -93,8 +93,8 @@ public class TcpSession
         Log.Debug("TCP session initiation");
         
         // start listening thread
-        _comms.Bind(new IPEndPoint(IPAddress.Loopback, 0));
         _running = true;
+        _comms.Bind(new IPEndPoint(IPAddress.Loopback, 0));
         _listenerThread.Start();
 
         var ok = HandleMessage(ipv4, out var tcp);
@@ -143,7 +143,14 @@ public class TcpSession
     {
         var buffer = new byte[66000]; // a bit larger than the maximum TCP packet
         _comms.Blocking = true; // wait for data
-        
+
+
+        while (!_running)
+        {
+            Log.Info("Listener thread waiting to come up");
+            Thread.Sleep(500);
+        }
+
         while (_running)
         {
             try
