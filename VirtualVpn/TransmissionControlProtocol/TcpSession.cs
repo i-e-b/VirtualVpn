@@ -108,10 +108,11 @@ public class TcpSession
         {
             _socks = new Socket(AddressFamily.InterNetwork, SocketType.Raw, ProtocolType.Tcp);
             _socks.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.HeaderIncluded, true);
-            _socks.Connect(IPAddress.Loopback, Settings.WebAppPort);
+            //_socks.Connect(IPAddress.Loopback, Settings.WebAppPort);
             try
             {
-                _port = (_socks.LocalEndPoint as IPEndPoint)?.Port ?? -1;
+                _port = 445577;//(_socks.LocalEndPoint as IPEndPoint)?.Port ?? -1;
+                
                 Log.Critical($"Connected to web app. Local port={_port}");
             }
             catch (Exception ex)
@@ -188,6 +189,7 @@ public class TcpSession
         var raw = ByteSerialiser.ToBytes(ipv4);
 
         Log.Debug(Bit.Describe("raw transfer", raw));
+        Log.Debug(Bit.SafeString(raw));
 
         var written = _socks?.Send(raw) ?? 0;
         Log.Info($"Send {written} bytes to app from {raw.Length} bytes in payload");
@@ -411,7 +413,7 @@ public class TcpSession
     {
         var available = _socks?.Available ?? 0;
         
-        if (available < 1) Thread.Sleep(100);
+        if (available < 1) Thread.Sleep(10);
         
         while (available > 0)
         {
