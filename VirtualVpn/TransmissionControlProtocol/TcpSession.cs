@@ -209,7 +209,7 @@ public class TcpSession
                 // Open our connection to the app
                 if (_socks is null)
                 {
-                    _socks = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+                    _socks = new Socket(AddressFamily.InterNetwork, SocketType.Raw, ProtocolType.Tcp);
                     _socks.Connect(IPAddress.Loopback, Settings.WebAppPort);
                 }
 
@@ -243,12 +243,12 @@ public class TcpSession
                 
                 Log.Info($"Tcp packet. Flags={tcp.Flags.ToString()}, Data length={tcp.Payload.Length}, Seq={tcp.SequenceNumber}");
 
-                if (tcp.Payload.Length > 0)
+                //if (tcp.Payload.Length > 0)
                 {
                     var written = _socks?.Send(tcp.Payload) ?? 0;
                     Log.Info($"Send {written} bytes to app from {tcp.Payload.Length} bytes in payload");
                 }
-                else // no data in payload
+                //else // no data in payload
                 {
                     // should I ACK here?
                     /*var replyPkt = new TcpSegment
