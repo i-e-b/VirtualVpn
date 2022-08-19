@@ -159,10 +159,20 @@ public class TcpSession
         // TODO: shut down this connection
     }
 
+    private bool HandleMessage(IpV4Packet ipv4, out TcpSegment tcp)
+    {
+        var ok = HandleMessageInternal(ipv4, out tcp);
+        
+        // Is this the place to advance?
+        if (ok) _remoteSeq++; 
+        
+        return ok;
+    }
+
     /// <summary>
     /// Feed incoming message through the TCP state machine
     /// </summary>
-    private bool HandleMessage(IpV4Packet ipv4, out TcpSegment tcp)
+    private bool HandleMessageInternal(IpV4Packet ipv4, out TcpSegment tcp)
     {
         // read the TCP segment
         var ok = ByteSerialiser.FromBytes(ipv4.Payload, out tcp);
@@ -174,6 +184,7 @@ public class TcpSession
         }
         
         // TODO: double check that incoming is for the session we expect?
+        
 
         switch (State)
         {
@@ -228,43 +239,30 @@ public class TcpSession
                     break;
                 }
 
-                if (tcp.Payload.Length > 0)
+                Log.Info($"Tcp packet. Flags={tcp.Flags.ToString()}, Data length={tcp.Payload.Length}");
+
+                IncomingStream.Write(tcp.SequenceNumber, tcp.Payload);
+                if (tcp.Flags.HasFlag(TcpSegmentFlags.Fin)) IncomingStream.SetComplete(tcp.SequenceNumber);
+
+                if (IncomingStream.Complete && IncomingStream.SequenceComplete)
                 {
-                    Log.Info($"Tcp packet. Flags={tcp.Flags.ToString()}, Data length={tcp.Payload}");
+                    // Pass to the app...
+                    using var socks = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+                    socks.Connect(IPAddress.Loopback, Settings.WebAppPort);
+                    var written = socks.Send(IncomingStream.AllBuffers());
+                    Log.Info($"Wrote {written} bytes to app");
 
-                    IncomingStream.Write(tcp.SequenceNumber, tcp.Payload);
-                    if (tcp.Flags.HasFlag(TcpSegmentFlags.Fin)) IncomingStream.SetComplete(tcp.SequenceNumber);
+                    var buffer = new byte[65536];
+                    var read = socks.Receive(buffer);
 
-                    if (IncomingStream.Complete && IncomingStream.SequenceComplete)
-                    {
-                        // Pass to the app...
-                        using var socks = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-                        socks.Connect(IPAddress.Loopback, Settings.WebAppPort);
-                        var written = socks.Send(IncomingStream.AllBuffers());
-                        Log.Info($"Wrote {written} bytes to app");
-                        
-                        var buffer = new byte[65536];
-                        var read = socks.Receive(buffer);
+                    var msgStr = Encoding.UTF8.GetString(buffer, 0, read);
+                    Log.Info($"Read {read} bytes from app: {msgStr}");
 
-                        var msgStr = Encoding.UTF8.GetString(buffer, 0, read);
-                        Log.Info($"Read {read} bytes from app: {msgStr}");
-
-                    }
-                    else
-                    {
-                        // should I ACK here?
-                        Log.Info($"Tcp fragmented? has-data={IncomingStream.HasData}, complete={IncomingStream.Complete}");
-                    }
-
-                    //Log.Info("\r\n" + Encoding.ASCII.GetString(tcp.Payload) + "\r\n");
-                    // IEB: pass this request
-                    var data = Encoding.ASCII.GetBytes(
-                        "HTTP/1.1 200 OK\r\n" +
-                        "Content-Type: text/plain; charset=utf-8\r\n" +
-                        "Content-Length: 45\r\n" +
-                        "\r\n" +
-                        "Hello, world. How's it going? I'm VirtualVPN!"
-                    );
+                }
+                else
+                {
+                    // should I ACK here?
+                    Log.Info($"Tcp fragmented? has-data={IncomingStream.HasData}, complete={IncomingStream.Complete}");
                     var replyPkt = new TcpSegment
                     {
                         SourcePort = tcp.DestinationPort,
@@ -273,15 +271,38 @@ public class TcpSession
                         AcknowledgmentNumber = _remoteSeq,
                         DataOffset = 5,
                         Reserved = 0,
-                        Flags = TcpSegmentFlags.Ack | TcpSegmentFlags.Psh,
+                        Flags = TcpSegmentFlags.Ack,
                         WindowSize = tcp.WindowSize,
                         Options = Array.Empty<byte>(),
-                        Payload = data
+                        Payload = Array.Empty<byte>()
                     };
                     Reply(sender: ipv4, message: replyPkt);
-                    
                 }
 
+                //Log.Info("\r\n" + Encoding.ASCII.GetString(tcp.Payload) + "\r\n");
+                // IEB: pass this request
+                /*var data = Encoding.ASCII.GetBytes(
+                    "HTTP/1.1 200 OK\r\n" +
+                    "Content-Type: text/plain; charset=utf-8\r\n" +
+                    "Content-Length: 45\r\n" +
+                    "\r\n" +
+                    "Hello, world. How's it going? I'm VirtualVPN!"
+                );
+                var replyPkt = new TcpSegment
+                {
+                    SourcePort = tcp.DestinationPort,
+                    DestinationPort = tcp.SourcePort,
+                    SequenceNumber = _localSeq,
+                    AcknowledgmentNumber = _remoteSeq,
+                    DataOffset = 5,
+                    Reserved = 0,
+                    Flags = TcpSegmentFlags.Ack | TcpSegmentFlags.Psh,
+                    WindowSize = tcp.WindowSize,
+                    Options = Array.Empty<byte>(),
+                    Payload = data
+                };
+                Reply(sender: ipv4, message: replyPkt);
+*/
                 break;
             }
 
