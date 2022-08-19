@@ -108,12 +108,22 @@ public class TcpSession
             _socks = new Socket(AddressFamily.InterNetwork, SocketType.Raw, ProtocolType.Tcp);
             _socks.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.HeaderIncluded, true);
             _socks.Connect(IPAddress.Loopback, Settings.WebAppPort);
+            try
+            {
+                var port = (_socks.LocalEndPoint as IPEndPoint)?.Port ?? -1;
+                Log.Critical($"Connected to web app. Local port={port}");
+            }
+            catch (Exception ex)
+            {
+                Log.Critical("COULDN'T READ BINDING"+ex);
+            }
         }
 
         _running= true;
         _backflowThread.Start();
         
-        LastContact.Start();
+        LastContact.Start(); // start counting. This gets reset every time we get another message
+
         
         RedirectPacket(ipv4);
         return true;
@@ -163,6 +173,12 @@ public class TcpSession
 
         ipv4.Payload = ByteSerialiser.ToBytes(tcp);
         ipv4.UpdateChecksum();
+        
+        // capture identity (we will write it back when we tunnel the reply)
+        LocalAddress = ipv4.Destination.Value;
+        LocalPort = tcp.DestinationPort;
+        RemotePort = tcp.SourcePort;
+        RemoteAddress = ipv4.Source.Value;
 
         var raw = ByteSerialiser.ToBytes(ipv4);
 
