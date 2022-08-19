@@ -178,7 +178,7 @@ public class TcpSession
         var dstPre = ipv4.Destination;
         var srcPre = ipv4.Source;
         
-        ipv4.Destination = IpV4Address.Localhost;
+        ipv4.Destination = new IpV4Address(Settings.JumpIpAddress);
         ipv4.Source = IpV4Address.Localhost;
 
         _ = ByteSerialiser.FromBytes<TcpSegment>(ipv4.Payload, out var tcp);
@@ -203,7 +203,7 @@ public class TcpSession
         Log.Debug(Bit.SafeString(raw));
 
         //var written = _socks?.Send(raw) ?? 0;
-        var written = _socks?.SendTo(raw, new IPEndPoint(IPAddress.Loopback, Settings.WebAppPort)) ?? 0;
+        var written = _socks?.SendTo(raw, new IPEndPoint(new IPAddress(Settings.JumpIpAddress), Settings.WebAppPort)) ?? 0;
         Log.Info($"Send {written} bytes to app from {raw.Length} bytes in payload");
     }
 

@@ -51,4 +51,9 @@ public static class Settings
     /// TCP port of the app we're tunnelling
     /// </summary>
     public const int WebAppPort = 5223;
+    
+    /// <summary>
+    /// Jump address
+    /// </summary>
+    public static readonly byte[] JumpIpAddress = { 192, 168, 0, 2 }; // Hans
 }
