@@ -165,4 +165,31 @@ public class BufferStreamTests
         Assert.That(subject.HasData, Is.False);
         Assert.That(subject.AllDataRead, Is.True);
     }
+    
+    [Test]
+    public void sequence_completion()
+    {
+        var subject = new BufferStream();
+        
+        Assert.That(subject.SequenceComplete, Is.False);
+        Assert.That(subject.StartSequence, Is.EqualTo(0));
+        
+        
+        subject.Write(11, Encoding.ASCII.GetBytes("there. "));
+        Assert.That(subject.SequenceComplete, Is.True);
+        Assert.That(subject.StartSequence, Is.EqualTo(11));
+        
+        subject.Write(13, Encoding.ASCII.GetBytes(" Kenobi"));
+        subject.SetComplete(13);
+        Assert.That(subject.SequenceComplete, Is.False);
+        Assert.That(subject.StartSequence, Is.EqualTo(11));
+        
+        subject.Write(10, Encoding.ASCII.GetBytes("Hello, "));
+        Assert.That(subject.SequenceComplete, Is.False);
+        Assert.That(subject.StartSequence, Is.EqualTo(10));
+        
+        subject.Write(12, Encoding.ASCII.GetBytes("General"));
+        Assert.That(subject.SequenceComplete, Is.True);
+        Assert.That(subject.StartSequence, Is.EqualTo(10));
+    }
 }

@@ -220,30 +220,6 @@ public class VpnServer : IDisposable
             Log.Warn($"Failed to handle SPE message from {sender.Address}: {ex.Message}");
             Log.Debug(ex.ToString());
         }
-        // TODO: HMAC-SHA2-256-96 fix ?  See pvpn/server.py:411
-
-        /*
-        idx = 4;
-        var seq = Bit.ReadUInt32(data, ref idx);
-        Log.Debug($"    Packet has sequence #{seq}");
-        if (childSa.OutOfSequence(seq))
-        {
-            Log.Warn($"    Received out of sequence packet: {seq} -- not replying");
-            return;
-        }
-        
-        
-        // verify the checksum
-        var ok = childSa.VerifyMessage(data);
-        if (!ok)
-        {
-            Log.Warn($"    Received packet with bad checksum: {seq} -- not replying");
-            return;
-        }
-        
-        // looks ok. Step the sequence number forward
-        childSa.IncrementSequence(seq);*/
-
         
         Log.Debug("    Looks like a fully valid message. Other side will expect a reply.");
     }
@@ -252,11 +228,11 @@ public class VpnServer : IDisposable
     {
         while (_running)
         {
-            Thread.Sleep(Settings.EventPumpRate);
-            Log.Debug("Triggering event pump");
-
             try
             {
+                Thread.Sleep(Settings.EventPumpRate);
+                Log.Debug("Triggering event pump");
+
                 foreach (var session in _sessions.Values)
                 {
                     try

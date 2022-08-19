@@ -2,7 +2,15 @@
 
 An IKEv2 VPN gateway that presents an application as if it was on a private network
 
-This is currently not even slightly working
+This is currently in progress.
+
+## Projects and parts
+
+- **VirtualVpn** - This is the VPN utility. See `VirtualVpn.Settings` for configurable options. You will need to run this as root/admin.
+- **JustListen** - A small test utility that echos UDP activity
+- **SmallWebTest** - A minimal ASP.Net application to test routing from VirtualVpn
+
+## Notes
 
 If your ports are in use on Windows, use `netstat -ano` to get the
 process id. It's probably the IKE service, which you'll need to turn off.
@@ -36,7 +44,7 @@ https://www.secfu.net/2017/12/23/the-ikev2-header-and-the-security-association-p
 - [x] Encrypt ESP packets
 - [x] Respond to ping (then dance around the room a bit)
 - [x] TCP connection / handshake etc
-- [ ] Read wget and give some kind of dummy response
+- [x] Read wget and give some kind of dummy response
 - [ ] Close connection
 - [ ] Read and write across fragments
 

@@ -232,6 +232,13 @@ public class TcpSession
                     Log.Info($"Tcp packet. Flags={tcp.Flags.ToString()}, Data length={tcp.Payload}");
 
                     IncomingStream.Write(tcp.SequenceNumber, tcp.Payload);
+                    if (tcp.Flags.HasFlag(TcpSegmentFlags.Fin)) IncomingStream.SetComplete(tcp.SequenceNumber);
+
+                    if (IncomingStream.Complete && IncomingStream.SequenceComplete)
+                    {
+                        // Pass to the app...
+                    }
+
                     Log.Info("\r\n" + Encoding.ASCII.GetString(tcp.Payload) + "\r\n");
 
                     // IEB: just a little test, send any old http junk back

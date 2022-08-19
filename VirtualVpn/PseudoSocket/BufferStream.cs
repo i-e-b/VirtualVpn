@@ -7,12 +7,7 @@
 public class BufferStream
 {
     private readonly object _lock = new();
-    
-    /// <summary>
-    /// Lowest sequence seen in this data.
-    /// </summary>
-    private long _minSequence;
-    
+
     /// <summary>
     /// The sequence number the read-head is on
     /// </summary>
@@ -60,6 +55,27 @@ public class BufferStream
     public bool AllDataRead => _readSequence > _endSequence && _fragments.Count < 1;
 
     /// <summary>
+    /// Lowest sequence seen in the feed so far, or zero if no data
+    /// </summary>
+    public long StartSequence { get; private set; }
+
+    /// <summary>
+    /// Return true if all stored fragments have no gaps
+    /// </summary>
+    public bool SequenceComplete {
+        get {
+            if (_fragments.Count < 1) return false;
+            var min = StartSequence;
+            var end = min + _fragments.Count;
+            for (var i = min; i < end; i++)
+            {
+                if ( ! _fragments.ContainsKey(i)) return false;
+            }
+            return true;
+        }
+    }
+
+    /// <summary>
     /// Write data into the buffer
     /// </summary>
     public void Write(long sequence, byte[] data)
@@ -69,11 +85,11 @@ public class BufferStream
             if (_fragments.Count < 1)
             {
                 _endSequence = null;
-                _minSequence = sequence;
+                StartSequence = sequence;
             }
             else
             {
-                _minSequence = _minSequence < sequence ? _minSequence : sequence;
+                StartSequence = StartSequence < sequence ? StartSequence : sequence;
             }
 
             if (_fragments.ContainsKey(sequence))
@@ -110,7 +126,7 @@ public class BufferStream
         lock (_lock)
         {
             if (_fragments.Count < 1) return 0; // nothing to read
-            _readSequence ??= _minSequence;
+            _readSequence ??= StartSequence;
             if (!_fragments.ContainsKey(_readSequence.Value)) return 0; // next fragment isn't available yet
             
             // how many bytes could we fill?
@@ -138,6 +154,7 @@ public class BufferStream
             return total;
         }
     }
+
 }
 
 /// <summary>
