@@ -119,6 +119,16 @@ public class TcpSession
                 Log.Critical("COULDN'T READ BINDING"+ex);
             }
         }
+        
+        
+        // capture identity (we will write it back when we tunnel the reply)
+        ByteSerialiser.FromBytes<TcpSegment>(ipv4.Payload, out var tcp);
+        LocalAddress = ipv4.Destination.Value;
+        LocalPort = tcp.DestinationPort;
+        RemotePort = tcp.SourcePort;
+        RemoteAddress = ipv4.Source.Value;
+
+        Log.Critical($"Captured session identity: {ipv4.Source.AsString}:{tcp.SourcePort} -> {ipv4.Destination.AsString}:{tcp.DestinationPort}");
 
         _running= true;
         _backflowThread.Start();
@@ -174,12 +184,6 @@ public class TcpSession
 
         ipv4.Payload = ByteSerialiser.ToBytes(tcp);
         ipv4.UpdateChecksum();
-        
-        // capture identity (we will write it back when we tunnel the reply)
-        LocalAddress = ipv4.Destination.Value;
-        LocalPort = tcp.DestinationPort;
-        RemotePort = tcp.SourcePort;
-        RemoteAddress = ipv4.Source.Value;
 
         var raw = ByteSerialiser.ToBytes(ipv4);
 
@@ -445,8 +449,8 @@ public class TcpSession
 
                     tcp.UpdateChecksum(ipv4.Source.Value, ipv4.Destination.Value);
 
-                    Log.Info(    $"    From web-app: {srcPre.AsString}:{srcPPre} -> {dstPre.AsString}:{dstPPre}" +
-                             $"\r\n    To tunnel:    {ipv4.Source.AsString}:{tcp.SourcePort} -> {ipv4.Destination.AsString}:{tcp.DestinationPort}");
+                    Log.Info(    $">>>>From web-app: {srcPre.AsString}:{srcPPre} -> {dstPre.AsString}:{dstPPre}" +
+                             $"\r\n>>>>To tunnel:    {ipv4.Source.AsString}:{tcp.SourcePort} -> {ipv4.Destination.AsString}:{tcp.DestinationPort}");
                     
                     ipv4.Payload = ByteSerialiser.ToBytes(tcp);
                 }
