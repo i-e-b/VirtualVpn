@@ -93,7 +93,7 @@ public class TcpSession
         //_comms = new Socket((AddressFamily)17, SocketType.Dgram, (ProtocolType)0x0004) { Blocking = true }; // https://github.com/dotnet/runtime/issues/24076
         
         // From https://github.com/dotnet/runtime/issues/26416
-        Int16 protocol = 0x800; // IP.
+        Int16 protocol = 0x0800; // IP.
         _comms = new Socket(AddressFamily.Packet, SocketType.Raw, (ProtocolType)IPAddress.HostToNetworkOrder(protocol));
 
         _appListenSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
@@ -238,9 +238,23 @@ public class TcpSession
         // https://github.com/dotpcap/packetnet
         // https://en.wikipedia.org/wiki/Ethernet_frame
 
-        var testPattern = new byte[] { 0xFF, 0x01, 0x80, 0x00, 0xFF, 0x01, 0x80, 0x00, 0xFF, 0x01, 0x80, 0x00, 0xFF, 0x01, 0x80, 0x00, 0xFF, 0x01, 0x80, 0x00, 0xFF, 0x01, 0x80, 0x00 };
+        /*
+11:06:34.009558 IP localhost.49615 > localhost.domain: 46740+ [1au] PTR? 53.0.0.127.in-addr.arpa. (52)
+11:06:34.009861 IP localhost.domain > localhost.49615: 46740*$ 1/0/1 PTR localhost. (75)
+11:06:47.684389 07:08:09:10:11:12 (oui Unknown) > 01:02:03:04:05:06 (oui Unknown), ethertype Unknown (0x1314), length 24:
+        0x0000:  1516 1718 1920 2122 2324                 ......!"#$
+11:06:48.611624 07:08:09:10:11:12 (oui Unknown) > 01:02:03:04:05:06 (oui Unknown), ethertype Unknown (0x1314), length 24:
+        0x0000:  1516 1718 1920 2122 2324                 ......!"#$
+*/
+        // IPv4 is type 0x0800
+        //                             [ --- destination MAC ---------- ]  [ --- source MAC --------------- ]  [ type   ]  [ --- data ...
+        var testPattern = new byte[] { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x20, 0x01, 0x02, 0x03, 0x04, 0x08, 0x00 };
+        // then a CRC at the end
+        // Broadcast address is 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF ???
         
-        var actual = _comms.Send(testPattern, SocketFlags.None, out var errorCode);
+        var headed = testPattern.Concat(raw).ToArray();
+        
+        var actual = _comms.Send(headed, SocketFlags.None, out var errorCode);
         Log.Debug($"{actual} bytes sent. Send status = {errorCode.ToString()}");
         
         return true;
