@@ -378,4 +378,19 @@ public static class Bit
         if (bytes.Length == 4) return $"{bytes[0]}.{bytes[1]}.{bytes[2]}.{bytes[3]}";
         return HexString(bytes);
     }
+
+    public static string SafeString(byte[] bytes)
+    {
+        var sb = new StringBuilder();
+
+        for (int i = 0; i < bytes.Length; i++)
+        {
+            var c = (char)bytes[i];
+            if (c == '\r' || c == '\n') sb.Append(c);
+            else if (c >= ' ' && c <= '~') sb.Append(c);
+            else sb.Append('.');
+        }
+        
+        return sb.ToString();
+    }
 }

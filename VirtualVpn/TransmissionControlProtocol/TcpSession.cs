@@ -85,6 +85,7 @@ public class TcpSession
     
     private readonly Thread _backflowThread;
     private volatile bool _running;
+    private int _port;
 
     public TcpSession(ChildSa transport, IPEndPoint gateway, SenderPort transportKey)
     {
@@ -110,8 +111,8 @@ public class TcpSession
             _socks.Connect(IPAddress.Loopback, Settings.WebAppPort);
             try
             {
-                var port = (_socks.LocalEndPoint as IPEndPoint)?.Port ?? -1;
-                Log.Critical($"Connected to web app. Local port={port}");
+                _port = (_socks.LocalEndPoint as IPEndPoint)?.Port ?? -1;
+                Log.Critical($"Connected to web app. Local port={_port}");
             }
             catch (Exception ex)
             {
@@ -167,7 +168,7 @@ public class TcpSession
 
         _ = ByteSerialiser.FromBytes<TcpSegment>(ipv4.Payload, out var tcp);
         tcp.DestinationPort = Settings.WebAppPort;
-        tcp.SourcePort = 78945;
+        tcp.SourcePort = _port;
 
         tcp.UpdateChecksum(ipv4.Source.Value, ipv4.Destination.Value);
 
@@ -422,22 +423,31 @@ public class TcpSession
             else
             {
                 Log.Info("Directing packet back through tunnel");
-                Log.Debug($"Message bytes:{Bit.Describe("msg", _buffer, 0, read)}");
+                
                 Log.Debug(TypeDescriber.Describe(ipv4));
+                
+                var dstPre = ipv4.Destination;
+                var srcPre = ipv4.Source;
 
                 ipv4.Destination = new IpV4Address(RemoteAddress);
                 ipv4.Source = new IpV4Address(LocalAddress);
                 
-                
                 if (ipv4.Payload.Length > 0)
                 {
                     ByteSerialiser.FromBytes<TcpSegment>(ipv4.Payload, out var tcp);
+                    Log.Debug($">>>>>  Inner message >>>>>  {Bit.SafeString(tcp.Payload)}");
 
+                    var dstPPre = tcp.DestinationPort;
+                    var srcPPre = tcp.SourcePort;
+                    
                     tcp.DestinationPort = RemotePort;
                     tcp.SourcePort = LocalPort;
 
                     tcp.UpdateChecksum(ipv4.Source.Value, ipv4.Destination.Value);
 
+                    Log.Info(    $"    From web-app: {srcPre.AsString}:{srcPPre} -> {dstPre.AsString}:{dstPPre}" +
+                             $"\r\n    To tunnel:    {ipv4.Source.AsString}:{tcp.SourcePort} -> {ipv4.Destination.AsString}:{tcp.DestinationPort}");
+                    
                     ipv4.Payload = ByteSerialiser.ToBytes(tcp);
                 }
 
