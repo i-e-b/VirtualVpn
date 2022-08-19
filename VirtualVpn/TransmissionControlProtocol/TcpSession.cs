@@ -24,13 +24,12 @@ public class TcpSession
     /// </summary>
     private readonly Socket _comms;
     
-    /*
     /// <summary>
     /// The socket we use to capture traffic from our app.
     /// We send messages with a different port.
     /// </summary>
     private readonly Socket _appListenSocket;
-*/
+
     private readonly Stopwatch _stopwatch = new ();
     
     private readonly Thread _listenerThread;
@@ -97,6 +96,7 @@ public class TcpSession
         Int16 protocol = 0x800; // IP.
         _comms = new Socket(AddressFamily.Packet, SocketType.Raw, (ProtocolType)IPAddress.HostToNetworkOrder(protocol));
 
+        _appListenSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
     }
 
     /// <summary>
@@ -112,6 +112,7 @@ public class TcpSession
         //var interfaces = NetworkInterface.GetAllNetworkInterfaces();
         //interfaces[NetworkInterface.LoopbackInterfaceIndex]
         _comms.Bind(LowLevelEndPoint.GetFirstLoopback());
+        _appListenSocket.Bind(new IPEndPoint(IPAddress.Loopback, 0));
         
         _listenerThread.Start();
 
@@ -222,7 +223,7 @@ public class TcpSession
 
         // Re-target BOTH the ipv4 and tcp packets, and send them down our raw connection
         tcp.SourcePort = GetMyPort();
-        ipv4.Destination = new IpV4Address{Value = new byte[]{0,0,0,0}};
+        ipv4.Destination = IpV4Address.LocalHost;
         ipv4.Source = IpV4Address.LocalHost;
         tcp.UpdateChecksum(ipv4);
         
@@ -230,38 +231,24 @@ public class TcpSession
         ipv4.UpdateChecksum();
         
         Log.Warn($"Routing as {ipv4.Source.AsString}:{tcp.SourcePort} to {ipv4.Destination.AsString}:{tcp.DestinationPort}");
-
-        /*
-2022-08-19T09:11 (utc) From 192.168.0.40:44378 to 55.55.55.55:5223
-2022-08-19T09:11 (utc) Routing as 127.0.0.1:255 to 127.0.0.1:5223
-2022-08-19T09:11 (utc) Send status = HostNotFound
-2022-08-19T09:11 (utc) Sent 0 bytes from 60 byte message*/
         
         var raw = ByteSerialiser.ToBytes(ipv4);
         
-        // IEB: un-bound mode --
-        var actual = _comms.Send(raw, SocketFlags.None, out var errorCode); // HostNotFound?
+        // IEB: this might need an ethernet frame on it?
+        // https://github.com/dotpcap/packetnet
+        // https://en.wikipedia.org/wiki/Ethernet_frame
+
+        var testPattern = new byte[] { 0xFF, 0x01, 0x80, 0x00, 0xFF, 0x01, 0x80, 0x00, 0xFF, 0x01, 0x80, 0x00, 0xFF, 0x01, 0x80, 0x00, 0xFF, 0x01, 0x80, 0x00, 0xFF, 0x01, 0x80, 0x00 };
+        
+        var actual = _comms.Send(testPattern, SocketFlags.None, out var errorCode);
         Log.Debug($"{actual} bytes sent. Send status = {errorCode.ToString()}");
-        
-        
-        // IEB: bound mode--
-        //var target = new IPEndPoint(IPAddress.Loopback, tcp.DestinationPort);
-        //var actual = _comms.SendTo(raw, target);
-        //var actual = _comms.SendTo(ipv4.Payload, target);
-        //Log.Warn($"Sent {actual} bytes from {raw.Length} byte message");
         
         return true;
     }
 
     private int GetMyPort()
     {
-        var endpoint = _comms.LocalEndPoint as IPEndPoint;
-        if (endpoint is null)
-        {
-            return 58255;
-        }
-
-        return endpoint.Port;
+        return (_appListenSocket.LocalEndPoint as IPEndPoint)?.Port ?? 58111;
     }
 
     /// <summary>
