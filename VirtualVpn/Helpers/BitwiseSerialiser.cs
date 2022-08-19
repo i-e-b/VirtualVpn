@@ -334,7 +334,7 @@ public static class ByteSerialiser
     /// <param name="result">New instance of T</param>
     /// <typeparam name="T">Target type. Must be marked with the [ByteLayout] attribute, and obey the rules of the attribute</typeparam>
     /// <returns>True if source was long enough to complete the result, false if too short. Returns true if source is longer than needed.</returns>
-    public static bool FromBytes<T>(byte[] source, out T result) where T : new()
+    public static bool FromBytes<T>(IEnumerable<byte> source, out T result) where T : new()
     {
         var ok = FromBytes(typeof(T), source, out var obj);
         result = (T)obj;
@@ -350,7 +350,7 @@ public static class ByteSerialiser
     /// <param name="source">Byte array to be deserialised</param>
     /// <param name="result">New instance of T</param>
     /// <returns>True if source was long enough to complete the result, false if too short. Returns true if source is longer than needed.</returns>
-    public static bool FromBytes(Type type, byte[] source, out object result)
+    public static bool FromBytes(Type type, IEnumerable<byte> source, out object result)
     {
         // Plan:
         // 1. get all BigEndianAttribute fields recursively, ordered appropriately

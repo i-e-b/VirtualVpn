@@ -265,6 +265,9 @@ public class TcpSession
                     var msgStr = Encoding.UTF8.GetString(_buffer, 0, read);
                     Log.Info($"Read {read} bytes from app: message={msgStr}");
                     Log.Debug($"Message bytes:{Bit.Describe("msg", _buffer, 0, read)}");
+                    
+                    ByteSerialiser.FromBytes<TcpSegment>(_buffer.Take(read), out var pkz);
+                    Log.Debug(TypeDescriber.Describe(pkz));
 
                     var data = Encoding.ASCII.GetBytes(msgStr);
                     var replyPkt = new TcpSegment
@@ -286,8 +289,10 @@ public class TcpSession
                 
                 if (tcp.Payload.Length > 0)
                 {
-                    var written = _socks?.Send(ipv4.Payload) ?? 0;
-                    Log.Info($"Send {written} bytes to app from {ipv4.Payload.Length} bytes in payload");
+                    //var written = _socks?.Send(ipv4.Payload) ?? 0;
+                    //Log.Info($"Send {written} bytes to app from {ipv4.Payload.Length} bytes in payload");
+                    Log.Warn("Would write to web app?");
+                    Log.Info($"{Encoding.UTF8.GetString(ipv4.Payload)} - {Bit.Describe("in", ipv4.Payload)}");
                 }
                 
                 break;
