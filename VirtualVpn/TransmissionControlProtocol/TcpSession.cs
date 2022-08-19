@@ -108,10 +108,10 @@ public class TcpSession
         {
             _socks = new Socket(AddressFamily.InterNetwork, SocketType.Raw, ProtocolType.Tcp);
             _socks.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.HeaderIncluded, true);
-            //_socks.Connect(IPAddress.Loopback, Settings.WebAppPort);
+            _socks.Connect(IPAddress.Loopback, Settings.WebAppPort);
             try
             {
-                _port = 445577;//(_socks.LocalEndPoint as IPEndPoint)?.Port ?? -1;
+                _port = (_socks.LocalEndPoint as IPEndPoint)?.Port ?? -1;
                 
                 Log.Critical($"Connected to web app. Local port={_port}");
             }
@@ -136,7 +136,7 @@ public class TcpSession
         
         LastContact.Start(); // start counting. This gets reset every time we get another message
 
-        
+        // TODO: try nothing here and see if we still connect
         RedirectPacket(ipv4);
         return true;
 
@@ -174,10 +174,17 @@ public class TcpSession
 
     private void RedirectPacket(IpV4Packet ipv4)
     {
+        var dstPre = ipv4.Destination;
+        var srcPre = ipv4.Source;
+        
         ipv4.Destination = IpV4Address.Localhost;
         ipv4.Source = IpV4Address.Localhost;
 
         _ = ByteSerialiser.FromBytes<TcpSegment>(ipv4.Payload, out var tcp);
+        
+        var dstPPre = tcp.DestinationPort;
+        var srcPPre = tcp.SourcePort;
+        
         tcp.DestinationPort = Settings.WebAppPort;
         tcp.SourcePort = _port;
 
@@ -187,12 +194,15 @@ public class TcpSession
         ipv4.UpdateChecksum();
 
         var raw = ByteSerialiser.ToBytes(ipv4);
+        
+        Log.Info($">>>>From web-app: {srcPre.AsString}:{srcPPre} -> {dstPre.AsString}:{dstPPre}" +
+                 $"\r\n>>>>To tunnel:    {ipv4.Source.AsString}:{tcp.SourcePort} -> {ipv4.Destination.AsString}:{tcp.DestinationPort}");
 
         Log.Debug(Bit.Describe("raw transfer", raw));
         Log.Debug(Bit.SafeString(raw));
 
-        //var written = _socks?.Send(raw) ?? 0;
-        var written = _socks?.SendTo(raw, new IPEndPoint(IPAddress.Loopback, Settings.WebAppPort)) ?? 0;
+        var written = _socks?.Send(raw) ?? 0;
+        //var written = _socks?.SendTo(raw, new IPEndPoint(IPAddress.Loopback, Settings.WebAppPort)) ?? 0;
         Log.Info($"Send {written} bytes to app from {raw.Length} bytes in payload");
     }
 
@@ -418,14 +428,14 @@ public class TcpSession
         
         while (available > 0)
         {
-            //Log.Info($"{available} bytes on socket");
+            Log.Info($"{available} bytes on socket");
             var read = _socks!.Receive(_buffer);
             available = _socks?.Available ?? 0;
 
             ByteSerialiser.FromBytes<IpV4Packet>(_buffer.Take(read), out var ipv4);
             if (!ipv4.Destination.IsLocalhost)
             {
-                //Log.Debug($"Noise {ipv4.Source.AsString} -> {ipv4.Destination.AsString}");
+                Log.Debug($"Noise {ipv4.Source.AsString} -> {ipv4.Destination.AsString}");
             }
             else
             {
@@ -452,7 +462,7 @@ public class TcpSession
 
                     tcp.UpdateChecksum(ipv4.Source.Value, ipv4.Destination.Value);
 
-                    Log.Info(    $">>>>From web-app: {srcPre.AsString}:{srcPPre} -> {dstPre.AsString}:{dstPPre}" +
+                    Log.Info($"\r\n>>>>From web-app: {srcPre.AsString}:{srcPPre} -> {dstPre.AsString}:{dstPPre}" +
                              $"\r\n>>>>To tunnel:    {ipv4.Source.AsString}:{tcp.SourcePort} -> {ipv4.Destination.AsString}:{tcp.DestinationPort}");
                     
                     ipv4.Payload = ByteSerialiser.ToBytes(tcp);
