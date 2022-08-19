@@ -222,6 +222,8 @@ public class IpV4Address
     /// </summary>
     public static IpV4Address LocalHost => new() {Value = new byte[]{127,0,0,1}};
 
+    public bool IsLocalHost => Value.Length == 4 && Value[0] == 127 && Value[1] == 0 && Value[2] == 0 && Value[3] == 1;
+
     public override string ToString()
     {
         if (Value.Length < 4) return "<empty>";

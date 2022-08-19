@@ -157,27 +157,19 @@ public class TcpSession
             try
             {
                 // This receives from *everything*
-                /*
+                
                 Log.Debug($"Listening for TCP traffic on port {GetMyPort()}...");
                 var actual = _comms.Receive(buffer, SocketFlags.None, out var code);
-                Log.Debug($"Received {actual} bytes, code = {code.ToString()}");
-
-                var ok = ByteSerialiser.FromBytes<IpV4Packet>(buffer, 0, actual, out var packet);
-                if (!ok)
-                {
-                    Log.Debug("Could not read input packet");
-                }
-                else
-                {
-                    Log.Debug($"Captured {packet.Protocol.ToString()}: {packet.Source.AsString} -> {packet.Destination.AsString}");
-                }*/
+                if (actual < 20) continue; // junk packets
+                if (code != SocketError.Success) continue;
                 
-                var flags = SocketFlags.None;
-                EndPoint endpoint = new IPEndPoint(IPAddress.Loopback, LocalPort);
-                var actual = _comms.ReceiveMessageFrom(buffer, ref flags, ref endpoint, out var info);
+                // fast check for protocol (no deserialisation)
+                if (buffer[9] != (byte)IpV4Protocol.TCP) continue; // junk
                 
-                Log.Debug($"Received {actual} bytes from {endpoint.ToString()}; address={info.Address}, interface={info.Interface}");
+                _ = ByteSerialiser.FromBytes<IpV4Packet>(buffer, 0, 20 /*only the headers*/, out var packet);
+                if (!packet.Destination.IsLocalHost) continue; // junk
                 
+                Log.Debug($"Captured {packet.Protocol.ToString()}: {packet.Source.AsString} -> {packet.Destination.AsString}; code={code.ToString()}");
 
                 // TODO: unpack 'actual', and fix the headers and checksums.
                 // Then send down the tunnel
