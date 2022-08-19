@@ -221,8 +221,6 @@ public class VpnServer : IDisposable
             Log.Warn($"Failed to handle SPE message from {sender.Address}: {ex.Message}");
             Log.Debug(ex.ToString());
         }
-        
-        Log.Debug("    Looks like a fully valid message. Other side will expect a reply.");
     }
 
     private void EventPumpLoop()

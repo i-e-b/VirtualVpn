@@ -215,12 +215,20 @@ public static class Bit
         
         return result;
     }
-
     /// <summary>
     /// Generate a description string in the same format as StrongSwan logs
     /// </summary>
     public static string Describe(string name, byte[]? bytes)
     {
+        return Describe(name, bytes, 0, bytes?.Length ?? 0);
+    }
+    
+    /// <summary>
+    /// Generate a description string in the same format as StrongSwan logs
+    /// </summary>
+    public static string Describe(string name, byte[]? bytes, int offset, int length)
+    {
+        var end = offset+length;
         if (Settings.CodeModeForDescription)
         {
             name = Safe(name);
@@ -232,7 +240,8 @@ public static class Bit
             sb.Append(name);
             sb.Append(" = new byte[] {");
             
-            for (int b = 0; b < bytes.Length; b++)
+            if (end > bytes.Length) end = bytes.Length;
+            for (int b = offset; b < end; b++)
             {
                 sb.Append($"0x{bytes[b]:X2}, ");
             }
@@ -256,8 +265,9 @@ public static class Bit
             sb.Append(bytes.Length);
             sb.Append("bytes");
 
-            var idx = 0;
-            while (idx < bytes.Length)
+            var idx = offset;
+            if (end > bytes.Length) end = bytes.Length;
+            while (idx < end)
             {
                 sb.AppendLine();
                 sb.Append($"{idx:d4}: ");

@@ -44,6 +44,8 @@ public class TcpSession
     /// </summary>
     private readonly ChildSa _transport;
 
+    private readonly SenderPort _transportKey;
+
     /// <summary>
     /// Socket used to communicate with web app
     /// </summary>
@@ -80,9 +82,10 @@ public class TcpSession
     /// </summary>
     public int LocalPort { get; private set; }
 
-    public TcpSession(ChildSa transport, IPEndPoint gateway)
+    public TcpSession(ChildSa transport, IPEndPoint gateway, SenderPort transportKey)
     {
         _transport = transport;
+        _transportKey = transportKey;
         Gateway = gateway;
         
         State = TcpSocketState.Closed;
@@ -223,21 +226,24 @@ public class TcpSession
                 // We should either get an empty ACK message (end of handshake)
                 // OR an ACK message with data (streaming)
 
-                if (tcp.SequenceNumber != _remoteSeq) Log.Warn($"Established request out of sequence: Expected {_remoteSeq}, got {tcp.SequenceNumber}");
-                if (tcp.AcknowledgmentNumber != _localSeq) Log.Warn($"Established acknowledgement out of sequence: Expected {_localSeq}, got {tcp.AcknowledgmentNumber}");
-
+                if (tcp.Flags.HasFlag(TcpSegmentFlags.Rst))
+                {
+                    Log.Info($"Other side wants to close? flags={tcp.Flags.ToString()}");
+                    State = TcpSocketState.FinWait1;
+                    // TODO: clean termination
+                    _transport.EndSession(_transportKey);
+                    
+                    break;
+                }
                 if (tcp.Flags == TcpSegmentFlags.Ack && tcp.Payload.Length < 1)
                 {
                     Log.Info($"Handshake complete. Connected to {ipv4.Source.AsString}:{tcp.SourcePort}");
                     break;
                 }
+                
+                if (tcp.SequenceNumber != _remoteSeq) Log.Warn($"Established request out of sequence: Expected {_remoteSeq}, got {tcp.SequenceNumber}");
+                if (tcp.AcknowledgmentNumber != _localSeq) Log.Warn($"Established acknowledgement out of sequence: Expected {_localSeq}, got {tcp.AcknowledgmentNumber}");
 
-                if (tcp.Flags.HasFlag(TcpSegmentFlags.Rst))
-                {
-                    Log.Info($"Other side wants to close? flags={tcp.Flags.ToString()}");
-                    State = TcpSocketState.FinWait1;
-                    break;
-                }
 
                 _remoteSeq++;
                 
@@ -272,14 +278,13 @@ public class TcpSession
                 var available = _socks?.Available ?? 0;
                 while (available > 0)
                 {
-                    //var read = _socks!.Receive(_buffer);
-                    EndPoint endPoint = new IPEndPoint(IPAddress.Loopback, 0);
-                    var socketFlags = SocketFlags.None;
-                    var read = _socks!.ReceiveMessageFrom(_buffer, ref socketFlags, ref endPoint, out var packetInfo);
+                    Log.Info($"{available} bytes on socket");
+                    var read = _socks!.Receive(_buffer);
                     available = _socks?.Available ?? 0;
-
+                    
                     var msgStr = Encoding.UTF8.GetString(_buffer, 0, read);
-                    Log.Info($"Read {read} bytes from app: if={packetInfo.Interface} message={msgStr}");
+                    Log.Info($"Read {read} bytes from app: message={msgStr}");
+                    Log.Debug($"Message bytes:{Bit.Describe("msg", _buffer, 0, read)}");
 
                     var data = Encoding.ASCII.GetBytes(msgStr);
                     var replyPkt = new TcpSegment
@@ -308,7 +313,8 @@ public class TcpSession
             case TcpSocketState.LastAck:
             case TcpSocketState.TimeWait:
             case TcpSocketState.SynSent:
-                Log.Info($"state not yet managed: {State.ToString()}");
+                Log.Info($"Immediate end of session from state: {State.ToString()}");
+                _transport.EndSession(_transportKey);
                 break;
             default:
                 throw new ArgumentOutOfRangeException();

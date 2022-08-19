@@ -152,7 +152,7 @@ public class ChildSa
             else
             {
                 // start new session
-                var newSession = new TcpSession(this, sender);
+                var newSession = new TcpSession(this, sender, key);
                 var sessionOk = newSession.Start(incomingIpv4Message);
                 if (sessionOk) _tcpSessions.Add(key, newSession);
             }
@@ -314,5 +314,10 @@ public class ChildSa
         
         File.WriteAllText(Settings.FileBase + $"IPv4_{_captureNumber}_{direction}.txt", Bit.Describe($"ipv4_{_captureNumber}_{direction}", plain));
         _captureNumber++;
+    }
+
+    public void EndSession(SenderPort tcpKey)
+    {
+        CloseConnection(tcpKey);
     }
 }
