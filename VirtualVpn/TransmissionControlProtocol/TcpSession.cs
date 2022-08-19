@@ -266,7 +266,7 @@ public class TcpSession
                     Log.Info($"Read {read} bytes from app: message={msgStr}");
                     Log.Debug($"Message bytes:{Bit.Describe("msg", _buffer, 0, read)}");
                     
-                    ByteSerialiser.FromBytes<TcpSegment>(_buffer.Take(read), out var pkz);
+                    ByteSerialiser.FromBytes<IpV4Packet>(_buffer.Take(read), out var pkz);
                     Log.Debug(TypeDescriber.Describe(pkz));
 
                     var data = Encoding.ASCII.GetBytes(msgStr);
