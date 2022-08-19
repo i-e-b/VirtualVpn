@@ -213,7 +213,7 @@ public class TcpSession
                 if (_socks is null)
                 {
                     _socks = new Socket(AddressFamily.InterNetwork, SocketType.Raw, ProtocolType.Tcp);
-                    _socks.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.HeaderIncluded, true);
+                    _socks.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.HeaderIncluded, true);
                     _socks.Connect(IPAddress.Loopback, Settings.WebAppPort);
                 }
 
@@ -253,7 +253,8 @@ public class TcpSession
                 
                 
                 
-                // IEB: This is picking up MY outgoing messages!
+                // IEB: This is picking up MY outgoing messages?
+                // IEB: OR, is this reading bits of my SSH session!?
                 // pump data available
                 var available = _socks?.Available ?? 0;
                 while (available > 0)
@@ -262,28 +263,35 @@ public class TcpSession
                     var read = _socks!.Receive(_buffer);
                     available = _socks?.Available ?? 0;
                     
-                    var msgStr = Encoding.UTF8.GetString(_buffer, 0, read);
-                    Log.Info($"Read {read} bytes from app: message={msgStr}");
-                    Log.Debug($"Message bytes:{Bit.Describe("msg", _buffer, 0, read)}");
-                    
                     ByteSerialiser.FromBytes<IpV4Packet>(_buffer.Take(read), out var pkz);
-                    Log.Debug(TypeDescriber.Describe(pkz));
-
-                    var data = Encoding.ASCII.GetBytes(msgStr);
-                    var replyPkt = new TcpSegment
+                    if (!pkz.Destination.IsLocalhost)
                     {
-                        SourcePort = tcp.DestinationPort,
-                        DestinationPort = tcp.SourcePort,
-                        SequenceNumber = _localSeq++,
-                        AcknowledgmentNumber = _remoteSeq,
-                        DataOffset = 5,
-                        Reserved = 0,
-                        Flags = available > 0 ? TcpSegmentFlags.None : (TcpSegmentFlags.Ack | TcpSegmentFlags.Psh),
-                        WindowSize = tcp.WindowSize,
-                        Options = Array.Empty<byte>(),
-                        Payload = data
-                    };
-                    Reply(sender: ipv4, message: replyPkt);
+                        Log.Debug($"Noise {pkz.Source.AsString} -> {pkz.Destination.AsString}");
+                    }
+                    else
+                    {
+
+                        var msgStr = Encoding.UTF8.GetString(_buffer, 0, read);
+                        Log.Info($"Read {read} bytes from app: message={msgStr}");
+                        Log.Debug($"Message bytes:{Bit.Describe("msg", _buffer, 0, read)}");
+                        Log.Debug(TypeDescriber.Describe(pkz));
+
+                        var data = Encoding.ASCII.GetBytes(msgStr);
+                        var replyPkt = new TcpSegment
+                        {
+                            SourcePort = tcp.DestinationPort,
+                            DestinationPort = tcp.SourcePort,
+                            SequenceNumber = _localSeq++,
+                            AcknowledgmentNumber = _remoteSeq,
+                            DataOffset = 5,
+                            Reserved = 0,
+                            Flags = available > 0 ? TcpSegmentFlags.None : (TcpSegmentFlags.Ack | TcpSegmentFlags.Psh),
+                            WindowSize = tcp.WindowSize,
+                            Options = Array.Empty<byte>(),
+                            Payload = data
+                        };
+                        Reply(sender: ipv4, message: replyPkt);
+                    }
                 }
                 
                 
