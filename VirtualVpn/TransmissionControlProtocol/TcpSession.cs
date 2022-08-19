@@ -137,8 +137,6 @@ public class TcpSession
         
         LastContact.Start(); // start counting. This gets reset every time we get another message
         
-        _socks.Send(new byte[100]); // test
-
         // TODO: try nothing here and see if we still connect
         RedirectPacket(ipv4);
         return true;
@@ -204,8 +202,8 @@ public class TcpSession
         Log.Debug(Bit.Describe("raw transfer", raw));
         Log.Debug(Bit.SafeString(raw));
 
-        var written = _socks?.Send(raw) ?? 0;
-        //var written = _socks?.SendTo(raw, new IPEndPoint(IPAddress.Loopback, Settings.WebAppPort)) ?? 0;
+        //var written = _socks?.Send(raw) ?? 0;
+        var written = _socks?.SendTo(raw, new IPEndPoint(IPAddress.Loopback, Settings.WebAppPort)) ?? 0;
         Log.Info($"Send {written} bytes to app from {raw.Length} bytes in payload");
     }
 
