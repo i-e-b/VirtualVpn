@@ -217,7 +217,7 @@ public class ChildSa
         Reply(encryptedData, sender);
     }
 
-    private void CloseConnection(SenderPort key)
+    internal void CloseConnection(SenderPort key)
     {
         try
         {
