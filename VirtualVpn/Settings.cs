@@ -55,5 +55,5 @@ public static class Settings
     /// <summary>
     /// Jump address
     /// </summary>
-    public static readonly byte[] JumpIpAddress = { 192, 168, 0, 2 }; // Hans
+    public static readonly byte[] JumpIpAddress = { 159,69,13,126}; // Gerty
 }
