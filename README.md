@@ -28,8 +28,16 @@ https://security.stackexchange.com/questions/56434/understanding-the-details-of-
 http://unixwiz.net/techtips/iguide-ipsec.html
 
 https://www.secfu.net/2017/12/23/the-ikev2-header-and-the-security-association-payload/
+https://www.rfc-editor.org/rfc/rfc9293
 
 ## Current issues & work-face
+
+### Run web-app on non-socket interface?
+
+https://gist.github.com/abgoswam/025bbf7b845259e6cbfb0671c12b51ac
+https://github.com/atlascode/Kestrel.Transport.Streams
+https://github.com/jacqueskang/IpcServiceFramework
+
 
 ### Now
 
