@@ -281,7 +281,7 @@ public class TcpSession
                         var more = socks.Available > 0; // if this is not reliable, we can try `read >= buffer.Length`
 
                         var msgStr = Encoding.UTF8.GetString(buffer, 0, read);
-                        Log.Info($"Read {read} bytes from app: {msgStr}");
+                        Log.Info($"    ### Read {read} bytes from app: {msgStr}");
 
                         var flag = TcpSegmentFlags.Ack;
                         if (!more)
@@ -289,7 +289,8 @@ public class TcpSession
                             flag |= TcpSegmentFlags.Psh;
                         }
 
-                        var data = Encoding.ASCII.GetBytes(msgStr);
+                        var idx = 0;
+                        var data = Bit.Subset(read, buffer, ref idx);
                         var replyPkt = new TcpSegment
                         {
                             SourcePort = tcp.DestinationPort,
@@ -303,13 +304,15 @@ public class TcpSession
                             Options = Array.Empty<byte>(),
                             Payload = data
                         };
+                        
+                        Log.Info($"    ### Sending through tunnel  {ipv4.Source.AsString}:{tcp.SourcePort} -> {ipv4.Destination.AsString}:{tcp.DestinationPort} via {Gateway}");
                         Reply(sender: ipv4, message: replyPkt);
                     }
                 }
                 else
                 {
                     // should I ACK here?
-                    Log.Info($"Tcp fragmented? has-data={IncomingStream.HasData}, complete={IncomingStream.Complete}");
+                    Log.Info($"Tcp fragmented? Sending ACK; Has data={IncomingStream.HasData}, complete={IncomingStream.Complete}");
                     var replyPkt = new TcpSegment
                     {
                         SourcePort = tcp.DestinationPort,
