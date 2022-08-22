@@ -271,18 +271,18 @@ public class TcpSession
                     // If we don't get the format exactly correct, we risk breaking the
                     // protocol beneath.
 
-                    Thread.Sleep(100); // give the app some time
+                    Thread.Sleep(50); // give the app some time to respond before we start really waiting
                     while (socks.Available < 1)
                     {
                         Log.Info("    ### No data returned by web app yet");
-                        Thread.Sleep(500);
+                        Thread.Sleep(250);
                     }
 
 
-                    //var buffer = new byte[5120]; // small buffer, makes it easier to chunk up for transport.
-                    var buffer = new byte[128]; // tiny buffer for testing
+                    var buffer = new byte[5120]; // small buffer, makes it easier to chunk up for transport.
+                    //var buffer = new byte[128]; // tiny buffer for testing
 
-                    var bytes = 0;
+                    var byteSequence = 0;
                     while (socks.Available > 0)
                     {
                         var read = socks.Receive(buffer);
@@ -294,7 +294,7 @@ public class TcpSession
                         var flag = TcpSegmentFlags.Ack;
                         if (!more)
                         {
-                            flag |= TcpSegmentFlags.Fin;
+                            flag |= TcpSegmentFlags.Psh;
                         }
 
                         var idx = 0;
@@ -303,7 +303,7 @@ public class TcpSession
                         {
                             SourcePort = tcp.DestinationPort,
                             DestinationPort = tcp.SourcePort,
-                            SequenceNumber = bytes,
+                            SequenceNumber = byteSequence,
                             AcknowledgmentNumber = _remoteSeq++,
                             DataOffset = 5,
                             Reserved = 0,
@@ -313,7 +313,7 @@ public class TcpSession
                             Payload = data
                         };
                         
-                        bytes += read;
+                        byteSequence++;
                         
                         Log.Info($"    ### Sending through tunnel  {ipv4.Source.AsString}:{tcp.SourcePort} <-- {ipv4.Destination.AsString}:{tcp.DestinationPort} via {Gateway}");
                         Reply(sender: ipv4, message: replyPkt);
@@ -368,7 +368,8 @@ public class TcpSession
     /// Send a reply through the connected gateway, back to original sender,
     /// with a new message. This increments local sequence number.
     ///
-    /// The 'sender' should be left as it came in, we will flip src+dst and update checksums
+    /// The IPv4 'sender' and 'destination' should be left as it came in, we will flip src+dst and update checksums.
+    /// The Ports on the tcp message should be correct for the reply (these are not flipped here)
     /// </summary>
     private void Reply(IpV4Packet sender, TcpSegment message)
     {
@@ -377,7 +378,7 @@ public class TcpSession
         message.UpdateChecksum(sender.Destination.Value, sender.Source.Value);
         Log.Info($"Tcp checksum={message.Checksum:x4} (" +
                   $"virtualSender={sender.Destination.AsString}, replyDest={sender.Source.AsString}, proto={(byte)IpV4Protocol.TCP}, " +
-                  $"virtualPort={message.DestinationPort}, replyPort={message.SourcePort}, " +
+                  $"virtualPort={message.SourcePort}, replyPort={message.DestinationPort}, " +
                   $"seq={message.SequenceNumber}, ack#={message.AcknowledgmentNumber})");
         var tcpPayload = ByteSerialiser.ToBytes(message);
         
