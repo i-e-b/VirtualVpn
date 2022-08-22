@@ -189,7 +189,7 @@ public class TcpSession
             case TcpSocketState.Listen: // Expect to receive a SYN message and move to SynReceived
             {
                 if (tcp.Flags != TcpSegmentFlags.Syn) Log.Warn($"Invalid flags? Local state={State.ToString()}, request flags={tcp.Flags.ToString()}");
-                _remoteSeq = tcp.SequenceNumber;
+                _remoteSeq = tcp.SequenceNumber + tcp.AcknowledgmentNumber;
 
                 var replyPkt = new TcpSegment
                 {
