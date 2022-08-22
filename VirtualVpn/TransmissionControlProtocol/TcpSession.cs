@@ -269,9 +269,15 @@ public class TcpSession
                     // and turn the response stream into a set of packets.
                     // If we don't get the format exactly correct, we risk breaking the
                     // protocol beneath.
-                    
-                    
-                    
+
+                    Thread.Sleep(100); // give the app some time
+                    while (socks.Available < 1)
+                    {
+                        Log.Info("    ### No data returned by web app yet");
+                        Thread.Sleep(500);
+                    }
+
+
                     //var buffer = new byte[5120]; // small buffer, makes it easier to chunk up for transport.
                     var buffer = new byte[128]; // tiny buffer for testing
 
