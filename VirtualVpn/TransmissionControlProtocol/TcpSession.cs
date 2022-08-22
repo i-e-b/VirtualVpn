@@ -189,7 +189,7 @@ public class TcpSession
             case TcpSocketState.Listen: // Expect to receive a SYN message and move to SynReceived
             {
                 if (tcp.Flags != TcpSegmentFlags.Syn) Log.Warn($"Invalid flags? Local state={State.ToString()}, request flags={tcp.Flags.ToString()}");
-                _remoteSeq = tcp.SequenceNumber + 1;
+                _remoteSeq = tcp.SequenceNumber;
 
                 var replyPkt = new TcpSegment
                 {
@@ -241,12 +241,11 @@ public class TcpSession
                     Close();
                     break;
                 }
-
-                _remoteSeq++;
                 
                 Log.Info($"Tcp packet. Flags={tcp.Flags.ToString()}, Data length={tcp.Payload.Length}, Seq={tcp.SequenceNumber}");
 
                 IncomingStream.Write(tcp.SequenceNumber, tcp.Payload);
+                _remoteSeq += tcp.Payload.Length;
                 if (tcp.Flags.HasFlag(TcpSegmentFlags.Fin)) IncomingStream.SetComplete(tcp.SequenceNumber); // complete
                 if (tcp.Flags.HasFlag(TcpSegmentFlags.Psh)) IncomingStream.SetComplete(tcp.SequenceNumber); // push asap
 
@@ -327,7 +326,7 @@ public class TcpSession
                         SourcePort = tcp.DestinationPort,
                         DestinationPort = tcp.SourcePort,
                         SequenceNumber = _localSeq,
-                        AcknowledgmentNumber = _remoteSeq - 1, // IEB: ???
+                        AcknowledgmentNumber = _remoteSeq,
                         DataOffset = 5,
                         Reserved = 0,
                         Flags = TcpSegmentFlags.Ack,
@@ -399,8 +398,6 @@ public class TcpSession
             Options = Array.Empty<byte>(),
             Payload = tcpPayload
         };
-        
-        _localSeq++;
         
         reply.UpdateChecksum();
         Log.Info($"IPv4 checksum={reply.Checksum:x4}");
