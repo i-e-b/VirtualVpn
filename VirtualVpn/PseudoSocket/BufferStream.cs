@@ -19,6 +19,18 @@ public class BufferStream
     /// </summary>
     private long? _endSequence;
     
+
+    public void Reset()
+    {
+        lock (_lock)
+        {
+            _fragments.Clear();
+            StartSequence = 0;
+            _readSequence = null;
+            _endSequence = null;
+        }
+    }
+    
     /// <summary>
     /// Sequence number => sub-buffer.
     /// Items are removed as soon as all the data is read.

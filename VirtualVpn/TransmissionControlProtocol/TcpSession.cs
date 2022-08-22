@@ -262,7 +262,8 @@ public class TcpSession
                     using var socks = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
                     socks.Connect(IPAddress.Loopback, Settings.WebAppPort);
                     var written = socks.Send(IncomingStream.AllBuffers());
-                    Log.Info($"Wrote {written} bytes to app");
+                    Log.Info($"    ### Wrote {written} bytes to app:\r\n{Encoding.UTF8.GetString(IncomingStream.AllBuffers().SelectMany(b=>b).ToArray())}");
+                    IncomingStream.Reset();
 
                     // Unfortunately, we can't bypass the tcp streaming layer in a useful way.
                     // So we have to convert the incoming TCP packets into a request stream
@@ -288,12 +289,12 @@ public class TcpSession
                         var more = socks.Available > 0; // if this is not reliable, we can try `read >= buffer.Length`
 
                         var msgStr = Encoding.UTF8.GetString(buffer, 0, read);
-                        Log.Info($"    ### Read {read} bytes from app{(more?", expecting more":"")}: {msgStr}");
+                        Log.Info($"    ### Read {read} bytes from app{(more?", expecting more":", ending")}:\r\n{msgStr}");
 
                         var flag = TcpSegmentFlags.Ack;
                         if (!more)
                         {
-                            flag |= TcpSegmentFlags.Psh;
+                            flag |= TcpSegmentFlags.Fin;
                         }
 
                         var idx = 0;
@@ -314,7 +315,7 @@ public class TcpSession
                         
                         bytes += read;
                         
-                        Log.Info($"    ### Sending through tunnel  {ipv4.Source.AsString}:{tcp.SourcePort} -> {ipv4.Destination.AsString}:{tcp.DestinationPort} via {Gateway}");
+                        Log.Info($"    ### Sending through tunnel  {ipv4.Source.AsString}:{tcp.SourcePort} <-- {ipv4.Destination.AsString}:{tcp.DestinationPort} via {Gateway}");
                         Reply(sender: ipv4, message: replyPkt);
                     }
                 }
@@ -366,6 +367,8 @@ public class TcpSession
     /// <summary>
     /// Send a reply through the connected gateway, back to original sender,
     /// with a new message. This increments local sequence number.
+    ///
+    /// The 'sender' should be left as it came in, we will flip src+dst and update checksums
     /// </summary>
     private void Reply(IpV4Packet sender, TcpSegment message)
     {
@@ -373,8 +376,8 @@ public class TcpSession
         // Set message checksum
         message.UpdateChecksum(sender.Destination.Value, sender.Source.Value);
         Log.Info($"Tcp checksum={message.Checksum:x4} (" +
-                  $"dest={Bit.HexString(sender.Destination.Value)}, src={Bit.HexString(sender.Source.Value)}, proto={(byte)IpV4Protocol.TCP}, " +
-                  $"destPort={message.DestinationPort}, srcPort={message.SourcePort}, " +
+                  $"virtualSender={sender.Destination.AsString}, replyDest={sender.Source.AsString}, proto={(byte)IpV4Protocol.TCP}, " +
+                  $"virtualPort={message.DestinationPort}, replyPort={message.SourcePort}, " +
                   $"seq={message.SequenceNumber}, ack#={message.AcknowledgmentNumber})");
         var tcpPayload = ByteSerialiser.ToBytes(message);
         
