@@ -188,7 +188,7 @@ public class TcpSession
 
             case TcpSocketState.Listen: // Expect to receive a SYN message and move to SynReceived
             {
-                if (tcp.Flags != TcpSegmentFlags.Syn) throw new Exception($"Invalid flags. Local state={State.ToString()}, request flags={tcp.Flags.ToString()}");
+                if (tcp.Flags != TcpSegmentFlags.Syn) Log.Warn($"Invalid flags? Local state={State.ToString()}, request flags={tcp.Flags.ToString()}");
                 _remoteSeq = tcp.SequenceNumber + 1;
 
                 var replyPkt = new TcpSegment
@@ -211,7 +211,7 @@ public class TcpSession
             }
             case TcpSocketState.SynReceived: // Expect to receive an ACK message and move to Established
             {
-                if (tcp.Flags != TcpSegmentFlags.Ack) throw new Exception($"Invalid flags. Local state={State.ToString()}, request flags={tcp.Flags.ToString()}");
+                if (tcp.Flags != TcpSegmentFlags.Ack) Log.Warn($"Invalid flags? Local state={State.ToString()}, request flags={tcp.Flags.ToString()}");
 
                 if (tcp.SequenceNumber != _remoteSeq) Log.Warn($"Initial SYNC: Request out of sequence: Expected {_remoteSeq}, got {tcp.SequenceNumber}");
                 if (tcp.AcknowledgmentNumber != _localSeq) Log.Warn($"Initial SYNC: Acknowledgement out of sequence: Expected {_localSeq}, got {tcp.AcknowledgmentNumber}");
@@ -264,27 +264,47 @@ public class TcpSession
                     var written = socks.Send(IncomingStream.AllBuffers());
                     Log.Info($"Wrote {written} bytes to app");
 
-                    var buffer = new byte[65536];
-                    var read = socks.Receive(buffer);
+                    // Unfortunately, we can't bypass the tcp streaming layer in a useful way.
+                    // So we have to convert the incoming TCP packets into a request stream
+                    // and turn the response stream into a set of packets.
+                    // If we don't get the format exactly correct, we risk breaking the
+                    // protocol beneath.
+                    
+                    
+                    
+                    //var buffer = new byte[5120]; // small buffer, makes it easier to chunk up for transport.
+                    var buffer = new byte[128]; // tiny buffer for testing
 
-                    var msgStr = Encoding.UTF8.GetString(buffer, 0, read);
-                    Log.Info($"Read {read} bytes from app: {msgStr}");
-
-                    var data = Encoding.ASCII.GetBytes(msgStr);
-                    var replyPkt = new TcpSegment
+                    while (socks.Available > 0)
                     {
-                        SourcePort = tcp.DestinationPort,
-                        DestinationPort = tcp.SourcePort,
-                        SequenceNumber = _localSeq,
-                        AcknowledgmentNumber = _remoteSeq,
-                        DataOffset = 5,
-                        Reserved = 0,
-                        Flags = TcpSegmentFlags.Ack | TcpSegmentFlags.Psh,
-                        WindowSize = tcp.WindowSize,
-                        Options = Array.Empty<byte>(),
-                        Payload = data
-                    };
-                    Reply(sender: ipv4, message: replyPkt);
+                        var read = socks.Receive(buffer);
+                        var more = socks.Available > 0; // if this is not reliable, we can try `read >= buffer.Length`
+
+                        var msgStr = Encoding.UTF8.GetString(buffer, 0, read);
+                        Log.Info($"Read {read} bytes from app: {msgStr}");
+
+                        var flag = TcpSegmentFlags.Ack;
+                        if (!more)
+                        {
+                            flag |= TcpSegmentFlags.Psh;
+                        }
+
+                        var data = Encoding.ASCII.GetBytes(msgStr);
+                        var replyPkt = new TcpSegment
+                        {
+                            SourcePort = tcp.DestinationPort,
+                            DestinationPort = tcp.SourcePort,
+                            SequenceNumber = _localSeq,
+                            AcknowledgmentNumber = _remoteSeq,
+                            DataOffset = 5,
+                            Reserved = 0,
+                            Flags = flag,
+                            WindowSize = tcp.WindowSize,
+                            Options = Array.Empty<byte>(),
+                            Payload = data
+                        };
+                        Reply(sender: ipv4, message: replyPkt);
+                    }
                 }
                 else
                 {
