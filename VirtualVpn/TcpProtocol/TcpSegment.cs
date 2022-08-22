@@ -1,12 +1,39 @@
-﻿using VirtualVpn.Enums;
-using VirtualVpn.Helpers;
+﻿using VirtualVpn.Helpers;
 using VirtualVpn.InternetProtocol;
 
-namespace VirtualVpn.TransmissionControlProtocol;
+namespace VirtualVpn.TcpProtocol;
 
+/// <summary>
+/// Serialisation structure for TCP header and payload.
+/// This is sometimes called a 'Frame', or 'Segment'
+/// </summary>
 [ByteLayout]
-public class TcpSegment
+public class TcpSegment : IComparable, IComparable<TcpSegment>
 {
+    /*
+               https://tools.ietf.org/html/rfc793#page-15
+
+     0                   1                   2                   3
+     0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |          Source Port          |       Destination Port        |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |                        Sequence Number                        |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |                    Acknowledgment Number                      |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |  Data |           |U|A|P|R|S|F|                               |
+    | Offset| Reserved  |R|C|S|S|Y|I|            Window             |
+    |       |           |G|K|H|T|N|N|                               |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |           Checksum            |         Urgent Pointer        |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |                    Options                    |    Padding    |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |                             data                              |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+*/
+    
     /// <summary>
     /// Identifies the sending port, 0..65535
     /// </summary>
@@ -27,7 +54,10 @@ public class TcpSegment
     ///     number in the corresponding ACK are then this sequence number plus 1.</li>
     /// 
     /// <li>If the SYN flag is clear (0), then this is the accumulated sequence number
-    ///     of the first data byte of this segment for the current session.</li>
+    ///     of the first data byte of this segment for the current session;<br/>
+    ///     i.e. the sequence number is an offset that places each packet into a
+    ///     giant virtual buffer space. The other side 'reads' this starting
+    ///     from the last sequence it saw.</li>
     /// </ul>
     /// </summary>
     [BigEndian(bytes:4, order:2)]
@@ -54,6 +84,12 @@ public class TcpSegment
     /// </summary>
     [BigEndianPartial(bits: 4, order:4)]
     public byte DataOffset;
+
+    /// <summary>
+    /// Size of the TCP header in bytes.
+    /// Derived from <see cref="DataOffset"/>
+    /// </summary>
+    public int HeaderSize => DataOffset * 4;
     
     /// <summary>
     /// For future use and should be set to zero
@@ -62,7 +98,8 @@ public class TcpSegment
     public byte Reserved;
     
     /// <summary>
-    /// Also known as 'Control Bits'
+    /// Also known as 'Control Bits'.
+    /// These are vital to the way the packet will be interpreted.
     /// </summary>
     [BigEndianPartial(bits: 9, order:6)]
     public TcpSegmentFlags Flags;
@@ -113,6 +150,8 @@ public class TcpSegment
     /// </summary>
     public int OptionsLength() => (DataOffset - 5) * 4;
 
+    
+    
     /// <summary>
     /// Update the TCP checksum for current headers and payload,
     /// this includes data from the outer wrapper.
@@ -162,5 +201,41 @@ public class TcpSegment
         
         // calculate and set checksum
         Checksum = IpChecksum.TcpChecksum(sourceAddress, destAddress, 6, tcpBytes.Length, tcpBytes, 0);
+    }
+
+    /// <summary>
+    /// Return true if the checksum value matches the rest of the segment data.
+    /// For TCP, this includes the payload data.
+    /// It also requires data not held in the segment itself
+    /// </summary>
+    public bool ValidateChecksum(byte[] sourceAddress, byte[] destAddress)
+    {
+        // capture message bytes
+        var tcpBytes = ByteSerialiser.ToBytes(this);
+        
+        // calculate and set checksum
+        return 0 == IpChecksum.TcpChecksum(sourceAddress, destAddress, 6, tcpBytes.Length, tcpBytes, 0);
+    }
+    
+    /// <summary>
+    /// Return true if the checksum value matches the rest of the segment data,
+    /// using the source and destination from the IPv4 wrapper.
+    /// </summary>
+    public bool ValidateChecksum(IpV4Packet wrapper) => ValidateChecksum(wrapper.Source.Value, wrapper.Destination.Value);
+
+    public int CompareTo(object? obj)
+    {
+        if (obj is TcpSegment other) return CompareTo(other);
+        return -1;
+    }
+
+    /// <summary>
+    /// Compare by sequence number.
+    /// This allows ordering into correct data order
+    /// </summary>
+    public int CompareTo(TcpSegment? other)
+    {
+        if (other is null) return 1;
+        return SequenceNumber.CompareTo(other.SequenceNumber);
     }
 }

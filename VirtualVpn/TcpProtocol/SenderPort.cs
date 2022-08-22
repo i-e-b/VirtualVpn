@@ -1,6 +1,6 @@
 ﻿using VirtualVpn.Helpers;
 
-namespace VirtualVpn.TransmissionControlProtocol;
+namespace VirtualVpn.TcpProtocol;
 
 /// <summary>
 /// Combine remote address and local port into a hashable key

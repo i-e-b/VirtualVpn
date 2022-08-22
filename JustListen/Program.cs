@@ -6,7 +6,7 @@ using System.Text;
 using VirtualVpn.Enums;
 using VirtualVpn.Helpers;
 using VirtualVpn.InternetProtocol;
-using VirtualVpn.TransmissionControlProtocol;
+using VirtualVpn.TcpProtocol;
 
 Console.Write("[T]CP, [U]DP, [S]end packets, [L]isten on socket 5223 ");
 var x = Console.Read();

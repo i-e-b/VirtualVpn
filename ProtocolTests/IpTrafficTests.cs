@@ -1,6 +1,6 @@
 ﻿using System.Text;
 using NUnit.Framework;
-using VirtualVpn.TransmissionControlProtocol;
+using VirtualVpn.TcpProtocol;
 
 namespace ProtocolTests;
 

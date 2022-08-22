@@ -150,12 +150,32 @@ public class IpV4Packet
     public int OptionsLength() => HeaderLength * 4 - 20;
 
     /// <summary>
+    /// Returns true if the checksum matches the rest of the data
+    /// </summary>
+    public bool ValidateChecksum()
+    {
+        return CalculateChecksum() == 0;
+    }
+
+    /// <summary>
     /// Re-write the TCP header-checksum with current values.
     /// This is not affected by payload data, but is affected by payload length.
     /// </summary>
     public void UpdateChecksum()
     {
-        // Copy only header data, not payload
+        // Zero the checksum first, then calculate, then write back.
+        Checksum = 0;
+        Checksum = CalculateChecksum();
+    }
+
+    /// <summary>
+    /// Get the checksum value for all headers.
+    /// You need to set the checksum field to 0 before
+    /// calling if you are trying to update.
+    /// </summary>
+    private ushort CalculateChecksum()
+    {
+        // Copy only header data (including options), but not payload
         var justHeads = new IpV4Packet
         {
             Version = Version, HeaderLength = HeaderLength, ServiceType = ServiceType,
@@ -163,14 +183,14 @@ public class IpV4Packet
             FragmentIndex = FragmentIndex, Ttl = Ttl, Protocol = Protocol,
             Source = Source, Destination = Destination, Options = Options,
             
-            Checksum = 0,
+            Checksum = Checksum,
             Payload = Array.Empty<byte>()
         };
         // get bytes
         var headerBytes = ByteSerialiser.ToBytes(justHeads);
         
         // update our checksum
-        Checksum = IpChecksum.CalculateChecksum(headerBytes);
+        return IpChecksum.CalculateChecksum(headerBytes);
     }
 }
 
@@ -206,25 +226,4 @@ public enum IpV4HeaderFlags
     /// The last fragment has a non-zero Fragment Offset field, differentiating it from an un-fragmented packet.
     /// </summary>
     MoreFragments = 0x01
-}
-
-[ByteLayout]
-public class IpV4Address
-{
-    [ByteString(bytes:4, order:0)]
-    public byte[] Value = Array.Empty<byte>();
-
-    public IpV4Address() { }
-    public IpV4Address(byte[] address) { Value = address; }
-
-    public string AsString => ToString();
-    public bool IsLocalhost => Value.Length == 4 && Value[0] == 127 && Value[1] == 0 && Value[2] == 0 && Value[3] == 1;
-    
-    public static IpV4Address Localhost => new() { Value = new byte[]{127,0,0,1}};
-
-    public override string ToString()
-    {
-        if (Value.Length < 4) return "<empty>";
-        return $"{Value[0]}.{Value[1]}.{Value[2]}.{Value[3]}";
-    }
 }
