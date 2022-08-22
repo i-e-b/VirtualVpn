@@ -279,8 +279,8 @@ public class TcpSession
                     }
 
 
-                    var buffer = new byte[5120]; // small buffer, makes it easier to chunk up for transport.
-                    //var buffer = new byte[128]; // tiny buffer for testing
+                    //var buffer = new byte[5120]; // small buffer, makes it easier to chunk up for transport.
+                    var buffer = new byte[80]; // tiny buffer for testing
 
                     while (socks.Available > 0)
                     {
@@ -302,7 +302,7 @@ public class TcpSession
                         {
                             SourcePort = tcp.DestinationPort,
                             DestinationPort = tcp.SourcePort,
-                            SequenceNumber = _localSeq++,
+                            SequenceNumber = _localSeq,
                             AcknowledgmentNumber = _remoteSeq,
                             DataOffset = 5,
                             Reserved = 0,
@@ -311,6 +311,8 @@ public class TcpSession
                             Options = Array.Empty<byte>(),
                             Payload = data
                         };
+                        
+                        _localSeq += read; // advance sequence through bytes
                         
                         Log.Info($"    ### Sending through tunnel  {ipv4.Source.AsString}:{tcp.SourcePort} <-- {ipv4.Destination.AsString}:{tcp.DestinationPort} via {Gateway}");
                         Reply(sender: ipv4, message: replyPkt);
