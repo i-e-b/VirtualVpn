@@ -1,5 +1,6 @@
 ﻿using System.Text;
 using NUnit.Framework;
+using VirtualVpn.EspProtocol;
 using VirtualVpn.TcpProtocol;
 
 namespace ProtocolTests;
@@ -42,4 +43,40 @@ public class IpTrafficTests
         Assert.That(replyPkt.Checksum, Is.EqualTo(0x3f38), $"Tcp checksum 0x{replyPkt.Checksum:x4} (should be 0x3f38)");
         
     }
+    
+    [Test]
+    public void tcp_socket_lifecycle()
+    {
+        // TODO: test these against themselves.
+        var aliceTunnel = new TestTunnel();
+        var aliceAdaptor = new TestAdaptor();
+        var alice = new TcpSocket(aliceTunnel, aliceAdaptor);
+        
+        var bobTunnel = new TestTunnel();
+        var bobAdaptor = new TestAdaptor();
+        var bob = new TcpSocket(bobTunnel, bobAdaptor);
+        
+        //alice.ReceiveWithIpv4(segment, wrapper);
+        // Required
+        // -[x] receive packet
+        // -[ ] connect to other side
+        // -[ ] write data
+        // -[ ] read data
+        
+        // Then should be able to plumb adaptor into receive
+        
+        Assert.Inconclusive("not implemented");
+    }
+}
+
+public class TestAdaptor : ITcpAdaptor
+{
+    public void Close()
+    {
+        throw new NotImplementedException();
+    }
+}
+
+public class TestTunnel : ITransportTunnel
+{
 }

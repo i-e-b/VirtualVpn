@@ -27,4 +27,9 @@ public static class TcpDefaults
     /// Linux uses a minimum RTO of 200 ms
     /// </remarks>
     public static readonly TimeSpan MinimumRto = TimeSpan.FromMilliseconds(100);
+
+    /// <summary>
+    /// Number of times we will retry a SYN before timing out
+    /// </summary>
+    public const int BackoffLimit = 6;
 }

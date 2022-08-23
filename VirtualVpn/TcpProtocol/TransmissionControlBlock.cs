@@ -79,4 +79,21 @@ public class TransmissionControlBlock
         /// </summary>
         public UInt16 Up { get; set; }
     }
+
+    public void Reset()
+    {
+        Irs = 0;
+        Iss = 0;
+        
+        Snd.Nxt=0;
+        Snd.Una=0;
+        Snd.Up=0;
+        Snd.Wl1=0;
+        Snd.Wl2=0;
+        Snd.Wnd=0;
+        
+        Rcv.Nxt=0;
+        Rcv.Wnd=0;
+        Rcv.Up=0;
+    }
 }

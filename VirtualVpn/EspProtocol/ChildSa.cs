@@ -9,7 +9,7 @@ using VirtualVpn.TcpProtocol;
 
 namespace VirtualVpn.EspProtocol;
 
-public class ChildSa
+public class ChildSa : ITransportTunnel
 {
     private readonly byte[] _spiIn;
     private readonly byte[] _spiOut;

@@ -12,7 +12,7 @@ namespace VirtualVpn.TcpProtocol;
 /// The actual TCP logic starts in <see cref="TcpSocket"/>
 /// https://en.wikipedia.org/wiki/Transmission_Control_Protocol
 /// </summary>
-public class TcpAdaptor
+public class TcpAdaptor : ITcpAdaptor
 {
     /// <summary>
     /// The tunnel gateway we expect to be talking to
@@ -58,9 +58,9 @@ public class TcpAdaptor
     {
         _transport = transport;
         _selfKey = selfKey;
-        Gateway = gateway;
         
-        TcpSocket = new TcpSocket();
+        Gateway = gateway;
+        TcpSocket = new TcpSocket(transport, this);
         LastContact = new Stopwatch();
     }
 
@@ -136,7 +136,8 @@ public class TcpAdaptor
             return false;
         }
         
-        // TODO: pump through the TCP session logic
+        // Pump through the TCP session logic
+        TcpSocket.ReceiveWithIpv4(tcp, ipv4);
 
         /*
         var replyPkt = new TcpSegment
@@ -165,7 +166,6 @@ public class TcpAdaptor
     /// </summary>
     private void Reply(IpV4Packet sender, TcpSegment message)
     {
-        
         // Set message checksum
         message.UpdateChecksum(sender.Destination.Value, sender.Source.Value);
         Log.Info($"Tcp checksum={message.Checksum:x4} (" +
@@ -196,6 +196,46 @@ public class TcpAdaptor
         reply.UpdateChecksum();
         Log.Info($"IPv4 checksum={reply.Checksum:x4}");
         
+        _transport.Send(reply, Gateway);
+    }
+
+
+    /// <summary>
+    /// Send a TCP packet back down the tunnel interface
+    /// </summary>
+    public void Reply(TcpSegment message, TcpRoute route)
+    {
+        // Set message checksum
+        message.UpdateChecksum(route.LocalAddress.Value, route.RemoteAddress.Value);
+        Log.Debug($"Tcp checksum={message.Checksum:x4} (" +
+                  $"virtualSender={route.LocalAddress}, replyDest={route.RemoteAddress}, proto={(byte)IpV4Protocol.TCP}, " +
+                  $"virtualPort={message.SourcePort}, replyPort={message.DestinationPort}, " +
+                  $"seq={message.SequenceNumber}, ack#={message.AcknowledgmentNumber})");
+        var tcpPayload = ByteSerialiser.ToBytes(message);
+        
+        // prepare container
+        var reply = new IpV4Packet
+        {
+            Version = IpV4Version.Version4,
+            HeaderLength = 5,
+            ServiceType = 0,
+            TotalLength = 20 + tcpPayload.Length,
+            PacketId = 0, // TODO: fix this. Should be random
+            Flags = IpV4HeaderFlags.None,
+            FragmentIndex = 0,
+            Ttl = 64,
+            Protocol = IpV4Protocol.TCP,
+            Checksum = 0,
+            Source = route.LocalAddress,
+            Destination = route.RemoteAddress,
+            Options = Array.Empty<byte>(),
+            Payload = tcpPayload
+        };
+        
+        reply.UpdateChecksum();
+        Log.Debug($"IPv4 checksum={reply.Checksum:x4}");
+        
+        Log.Info($"Sending message to tunnel {route.LocalAddress}:{message.SourcePort} -> {route.RemoteAddress}:{message.DestinationPort}");
         _transport.Send(reply, Gateway);
     }
 }
