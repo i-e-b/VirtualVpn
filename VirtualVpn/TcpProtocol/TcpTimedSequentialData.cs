@@ -10,7 +10,8 @@ internal class TcpTimedSequentialData
     public Stopwatch Clock { get; set; }
     public long Sequence { get; set; }
     public TcpSegmentFlags Flags { get; set; }
-    
+    public long Length { get; set; }
+
     public TcpTimedSequentialData()
     {
         Clock = new Stopwatch();

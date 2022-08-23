@@ -1,5 +1,6 @@
 ﻿// ReSharper disable BuiltInTypeReferenceStyle
 
+using System.Collections;
 using System.Diagnostics;
 using System.Net.Sockets;
 using System.Security.Cryptography;
@@ -43,7 +44,7 @@ public class TcpSocket
     /// <summary> Sorted list of incoming TCP packets </summary>
     private ReceiveBuffer _receiveQueue = new();
     /// <summary> Sequence numbers of unacknowledged segments.</summary>
-    private Queue<TcpTimedSequentialData> _unAckedSegments = new();
+    private SegmentAckList _unAckedSegments = new();
     
     /// <summary> Retransmit Time-Out (RTO) value (calculated from _rtt) </summary>
     private TimeSpan _rto;
@@ -387,7 +388,7 @@ public class TcpSocket
         Log.Debug($"Adding segment to un-ack queue. Seq={sequence}, flags={flags.ToString()}"); // lib/tcp/output.c:238
         
         // Store sequence information for the RTO
-        _unAckedSegments.Enqueue(new TcpTimedSequentialData{
+        _unAckedSegments.Add(new TcpTimedSequentialData{
             Sequence = sequence,
             Flags = flags,
         });
@@ -1353,8 +1354,67 @@ public class TcpSocket
 
     private void UpdateRtq() // lib/tcp/retransmission.c:152
     {
-        // IEB: Continue here
+        lock (_lock)
+        {
+            var unack = _tcb.Snd.Una;
+            switch (_state)
+            {
+                case TcpSocketState.SynSent:
+                    break;
+                
+                default:
+                    if (FinWasAcked()) // Ensure we don't try to consume the non-existent ACK byte for our FIN
+                    {
+                        unack--;
+                    }
+                    
+                    // Release all acknowledged bytes from send buffer
+                    _sendBuffer.ConsumeTo(unack);
+                    break;
+            }
+            
+            Log.Debug($"Checking {_unAckedSegments.Count} unacknowledged segments"); // lib/tcp/retransmission.c:172
+
+            TcpTimedSequentialData? latest = null;
+            foreach (var data in _unAckedSegments) // lib/tcp/retransmission.c:174
+            {
+                var iss = _tcb.Iss;
+                var end = data.Sequence + data.Length - 1;
+
+                if (SeqGt(_tcb.Snd.Una, end))
+                {
+                    Log.Debug($"Removing acknowledged segment {data.Sequence - iss}..{end - iss}");
+                    
+                    // Store the latest ACKed segment for updating the rtt
+                    // Retransmitted segments should NOT be used for rtt calculation
+                    if (_backoff < 1) latest = data;
+                    
+                    _unAckedSegments.Remove(data);
+                }
+            }
+
+            if (latest is not null && latest.Sequence != 0 && latest.Length != 0) // lib/tcp/retransmission.c:195
+            {
+                // Update the round-trip time with the latest ACK received
+                var iss = _tcb.Iss;
+                var end = latest.Sequence + latest.Length - 1;
+                Log.Debug($"Updating RTT with segment {latest.Sequence - iss}..{end - iss}");
+                UpdateRtt(latest);
+            }
+            
+            // stop RTO is there are no unacknowledged segments left
+            if (_unAckedSegments.Count < 1)
+            {
+                Log.Debug("No more unacknowledged segments. Ending retry time-out.");
+                _rtoEvent = null;
+            }
+        }
+    }
+
+    private void UpdateRtt(TcpTimedSequentialData latest) // lib/tcp/retransmission.c:225
+    {
         throw new NotImplementedException();
+        // IEB: Continue here
     }
 
 
@@ -1384,6 +1444,64 @@ public class TcpSocket
     private static bool SeqGtEq(long a, long  b) => (a-b) >= 0;
     private static bool SeqInRange(long seq, long start, long end) => (seq - start) < (end - start);
     private static bool SeqInWindow(long seq, long start, long size) => SeqInRange(seq, start, start + size);
+}
+
+internal class SegmentAckList : IEnumerable<TcpTimedSequentialData>
+{
+    /// <summary>
+    /// Sequence => details
+    /// </summary>
+    private readonly Dictionary<long, TcpTimedSequentialData> _checkList = new();
+
+    private readonly object _lock = new();
+
+    public int Count
+    {
+        get {
+            lock (_lock)
+            {
+                return _checkList.Count;
+            }
+        }
+    }
+
+    public IEnumerator<TcpTimedSequentialData> GetEnumerator()
+    {
+        lock (_lock)
+        {
+            var copy = _checkList.Values.ToList(); // we return a copy, so that 'Remove()' can be called in a `foreach`
+            return copy.GetEnumerator();
+        }
+    }
+
+    IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+    public TcpTimedSequentialData? Peek()
+    {
+        lock (_lock)
+        {
+            if (_checkList.Count < 1) return null;
+            var least = _checkList.Keys.Min();
+            return _checkList[least];
+        }
+    }
+
+    public void Add(TcpTimedSequentialData item)
+    {
+        lock (_lock)
+        {
+            if (_checkList.ContainsKey(item.Sequence)) _checkList[item.Sequence] = item; // update with latest counter
+            else _checkList.Add(item.Sequence, item);
+        }
+    }
+
+    public void Remove(TcpTimedSequentialData data)
+    {
+        lock (_lock)
+        {
+            _checkList.Remove(data.Sequence);
+        }
+    }
 }
 
 internal class ReceiveBuffer
@@ -1503,5 +1621,22 @@ internal class SendBuffer
             i++;
         }
         return result.ToArray();
+    }
+
+    /// <summary>
+    /// Release any chunks upto the offset point
+    /// </summary>
+    public void ConsumeTo(long newStart)
+    {
+        lock (_lock)
+        {
+            var offsets = _segments.Keys.ToList();
+            foreach (var offset in offsets)
+            {
+                var end = offset + _segments[offset].Length;
+                if (end < newStart) _segments.Remove(offset);
+            }
+            Start = newStart;
+        }
     }
 }
