@@ -1023,8 +1023,13 @@ public class TcpSocket
 
     private void ConnectionEstablished(uint segSeq) // lib/tcp/tcp.c:198
     {
-        // IEB: Continue here
-        throw new NotImplementedException();
+        SetState(TcpSocketState.Established);
+        
+        _rtoEvent = null; // cancel syn-sent timer
+        
+        Log.Debug($"Tcp session: first byte={segSeq}, SND.WND={_tcb.Snd.Wnd}, RCV.WND={_tcb.Rcv.Wnd}");
+        
+        // The source does set-up of the send buffer here, but we handle it dynamically
     }
 
     private bool CheckResetBit(TcpFrame frame) // lib/tcp/input.c:509
@@ -1315,7 +1320,7 @@ public class TcpSocket
                 _mss = 1460; // should be parsed
                 UpdateWindow(frame.Tcp);
 
-                SetEstablished(segSeq + 1);
+                ConnectionEstablished(segSeq + 1);
 
                 Log.Debug("SYN+ACK ok, sending ACK");
                 SendAck();
@@ -1346,13 +1351,9 @@ public class TcpSocket
         }
     }
 
-    private void SetEstablished(uint receiveNext) // lib/tcp/tcp.c:198
-    {
-        throw new NotImplementedException();
-    }
-
     private void UpdateRtq() // lib/tcp/retransmission.c:152
     {
+        // IEB: Continue here
         throw new NotImplementedException();
     }
 
@@ -1485,6 +1486,8 @@ internal class SendBuffer
         while (remaining > 0 && i < orderedOffsets.Count)
         {
             var start = orderedOffsets[i];
+            if (start > loc) throw new Exception("Gap in transmission stream"); // REALLY shouldn't happen
+            
             var chunkOffset = loc - start;
             var chunk = _segments[start];
             var available = chunk.Length - chunkOffset;
@@ -1496,6 +1499,7 @@ internal class SendBuffer
 
             result.AddRange(chunk.Skip((int)chunkOffset).Take((int)toTake));
             remaining -= toTake;
+            loc += toTake;
             i++;
         }
         return result.ToArray();
