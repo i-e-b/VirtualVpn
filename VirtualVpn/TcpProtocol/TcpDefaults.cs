@@ -9,7 +9,7 @@ public static class TcpDefaults
     public const UInt16 DefaultMss = 536;
     
     /// <summary>
-    /// Maximum Segment Lifetime
+    /// Maximum Segment Lifetime. Default is one minute
     /// </summary>
     public static readonly TimeSpan MaxSegmentLifetime = TimeSpan.FromSeconds(60);
     

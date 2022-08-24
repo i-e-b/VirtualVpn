@@ -3,7 +3,6 @@ using System.Text;
 using NUnit.Framework;
 using VirtualVpn;
 using VirtualVpn.Enums;
-using VirtualVpn.EspProtocol;
 using VirtualVpn.Helpers;
 using VirtualVpn.InternetProtocol;
 using VirtualVpn.TcpProtocol;
@@ -141,13 +140,60 @@ public class IpTrafficTests
         Assert.That(server.State, Is.EqualTo(TcpSocketState.CloseWait), "server state");
         
         RouteNextMessageAndRemove(from: serverNet, to: client, TcpSegmentFlags.Ack);
-        Assert.That(clientNet.IsEmpty, "more server messages");
+        Assert.That(serverNet.IsEmpty, "more server messages");
         Assert.That(client.State, Is.EqualTo(TcpSocketState.FinWait2), "client state");
         
         // time passes
+        server.TriggerMainWaitTimer(); server.EventPump();
+        Assert.That(server.State, Is.EqualTo(TcpSocketState.LastAck), "server state"); // I think this should actually be LastAck
         
         
-        Assert.Inconclusive("not finished");
+        RouteNextMessageAndRemove(from: serverNet, to: client, TcpSegmentFlags.Fin);
+        Assert.That(serverNet.IsEmpty, "more server messages");
+        Assert.That(client.State, Is.EqualTo(TcpSocketState.TimeWait), "client state");
+        
+        // more time passes
+        client.TriggerMainWaitTimer(); client.EventPump();
+        Assert.That(client.State, Is.EqualTo(TcpSocketState.Closed), "client state");
+        
+        RouteNextMessageAndRemove(from: clientNet, to: server, TcpSegmentFlags.Ack);
+        Assert.That(clientNet.IsEmpty, "more client messages");
+        Assert.That(server.State, Is.EqualTo(TcpSocketState.Closed), "server state");
+    }
+    
+    [Test] // See https://upload.wikimedia.org/wikipedia/commons/f/f6/Tcp_state_diagram_fixed_new.svg
+    public void tcp_socket_shutdown_from_established_server()
+    {
+        Log.SetLevel(LogLevel.Everything);
+        
+        //
+        // Immediately shut-down a connection after it has started
+        // Closing like this from the server side is less common?
+        //
+        
+        TwoConnectedSockets(out var server, out var serverNet, out var client, out var clientNet);
+        
+        server.StartClose(); // 'Passive close' which starts with FIN+ACK 
+        
+        RouteNextMessageAndRemove(from: serverNet, to: client, TcpSegmentFlags.Fin | TcpSegmentFlags.Ack);
+        Assert.That(serverNet.IsEmpty, "more server messages");
+        Assert.That(server.State, Is.EqualTo(TcpSocketState.FinWait1), "server state");
+        Assert.That(client.State, Is.EqualTo(TcpSocketState.CloseWait), "client state"); // ???
+        
+        RouteNextMessageAndRemove(from: clientNet, to: server, TcpSegmentFlags.Ack);
+        Assert.That(clientNet.IsEmpty, "more client messages");
+        Assert.That(client.State, Is.EqualTo(TcpSocketState.CloseWait), "client state");
+        
+        // time passes
+        server.TriggerMainWaitTimer(); server.EventPump();
+        client.TriggerMainWaitTimer(); client.EventPump();
+        
+        // both sides should consider themselves closed
+        Assert.That(server.State, Is.EqualTo(TcpSocketState.Closed), "server state");
+        Assert.That(client.State, Is.EqualTo(TcpSocketState.LastAck), "client state");
+        
+        client.TriggerMainWaitTimer(); client.EventPump();
+        Assert.That(client.State, Is.EqualTo(TcpSocketState.Closed), "client state");
     }
     
     /// <summary>

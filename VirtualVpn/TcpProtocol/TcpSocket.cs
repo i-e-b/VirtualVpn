@@ -1,6 +1,5 @@
 ﻿// ReSharper disable BuiltInTypeReferenceStyle
 
-using System.Diagnostics;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using VirtualVpn.Helpers;
@@ -115,7 +114,7 @@ public class TcpSocket
     /// <summary>
     /// Monotonic TCP waiting timer. Null if nothing is waiting.
     /// </summary>
-    private readonly TcpTimedEvent? _timeWait;
+    private readonly TcpTimedEvent _timeWait;
     
     private readonly AutoResetEvent _sendWait;
     private readonly AutoResetEvent _readWait;
@@ -136,7 +135,7 @@ public class TcpSocket
         _mss = TcpDefaults.DefaultMss;
 
         _rtoEvent = null;
-        _timeWait = null;
+        _timeWait = new TcpTimedEvent(TimeWaitExpired, TcpDefaults.MaxSegmentLifetime.Multiply(2));
 
         _tcb = new TransmissionControlBlock();
         _route = new TcpRoute();
@@ -154,7 +153,7 @@ public class TcpSocket
         
         SendIfPossible();
         _rtoEvent?.TriggerIfExpired();
-        _timeWait?.TriggerIfExpired();
+        _timeWait.TriggerIfExpired();
     }
 
     /// <summary>
@@ -328,6 +327,29 @@ public class TcpSocket
         {
             return _receiveQueue.ReadOutAndUpdate(buffer, offset, length);
         }
+    }
+
+    /// <summary>
+    /// <b>FOR TESTING ONLY</b>
+    /// <p></p>
+    /// Cause the RTO trigger to fire on next event pump.
+    /// Throws an exception if there is no RTO event waiting.
+    /// </summary>
+    public void TriggerRtoTimer()
+    {
+        if (_rtoEvent is null) throw new Exception("No Retry timer was set");
+        _rtoEvent.ForceSet();
+    }
+    
+    /// <summary>
+    /// <b>FOR TESTING ONLY</b>
+    /// <p></p>
+    /// Cause the main connection timer to fire on next event pump.
+    /// Throws an exception if there is no event waiting.
+    /// </summary>
+    public void TriggerMainWaitTimer()
+    {
+        _timeWait.ForceSet();
     }
 
     #region private
@@ -542,7 +564,8 @@ public class TcpSocket
     /// </summary>
     private void KillSession()
     {
-        _timeWait.Stop();
+        _timeWait.Clear();
+        _rtoEvent = null;
         _adaptor.Close();
     }
 
@@ -1016,7 +1039,7 @@ public class TcpSocket
                 if (FinWasAcked())
                 {
                     SetState(TcpSocketState.TimeWait);
-                    _timeWait.Restart();
+                    _timeWait.Reset();
                 }
                 else
                 {
@@ -1027,10 +1050,10 @@ public class TcpSocket
             }
             case TcpSocketState.FinWait2: // lib/tcp/input.c:1016
                 SetState(TcpSocketState.TimeWait);
-                _timeWait.Restart();
+                _timeWait.Reset();
                 break;
             case TcpSocketState.TimeWait: // lib/tcp/input.c:1030
-                _timeWait.Restart();
+                _timeWait.Reset();
                 break;
             // Other states stay as-is
         }
@@ -1042,6 +1065,34 @@ public class TcpSocket
         Log.Debug("End of stream. Sending ACK");
         _tcb.Rcv.Nxt = segSeq + 1;
         SendAck();
+    }
+
+    private void TimeWaitExpired(TcpTimedEvent obj)
+    {
+        lock (_lock)
+        {
+            switch (_state)
+            {
+                case TcpSocketState.Established:
+                    Log.Info("Timer expired from Established state. Beginning close process.");
+                    _timeWait.Reset();
+                    StartClose();
+                    break;
+                
+                case TcpSocketState.CloseWait:
+                    Log.Info("Timer expired from Established state. Beginning close process.");
+                    _timeWait.Reset();
+                    SetState(TcpSocketState.LastAck);
+                    SendFin();
+                    break;
+                
+                default:
+                    Log.Info($"Tcp socket life-timer expired in state {_state.ToString()}. Session is terminated.");
+                    SetState(TcpSocketState.Closed);
+                    KillSession();
+                    break;
+            }
+        }
     }
 
     private bool DropIfFinFlagsInvalid(TcpFrame frame, uint segSeq)
@@ -1187,7 +1238,7 @@ public class TcpSocket
                           otherwise ignore the segment.
                     */
                 SetState(TcpSocketState.TimeWait);
-                _timeWait.Restart();
+                _timeWait.Reset();
                 // TODO: anything waiting on close can continue now
                 break;
             case TcpSocketState.LastAck: // lib/tcp/input.c:813
@@ -1210,7 +1261,7 @@ public class TcpSocket
                           the 2 MSL timeout.
                     */
                 SendAck();
-                _timeWait.Restart();
+                _timeWait.Reset();
                 break;
 
             case TcpSocketState.Closed:
@@ -1234,7 +1285,7 @@ public class TcpSocket
     /// </summary>
     private bool FinWasAcked() // include/netstack/tcp/tcp.h:418
     {
-        //return _tcb.Snd.Una == (_sendBuffer.Start + _sendBuffer.Count() + 1); // IEB: Not sure if this works when no data has been sent
+        //return _tcb.Snd.Una == (_sendBuffer.Start + _sendBuffer.Count() + 1); // Not sure if this works when no data has been sent
         return _tcb.Snd.Una == (_sendBuffer.Start + _sendBuffer.Count());
     }
 

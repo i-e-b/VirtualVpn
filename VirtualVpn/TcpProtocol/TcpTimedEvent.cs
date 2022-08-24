@@ -19,6 +19,14 @@ internal class TcpTimedEvent
     private readonly object _lock = new();
     private volatile bool _fired = false;
 
+    public TcpTimedEvent(Action<TcpTimedEvent> action, TimeSpan timeout)
+    {
+        Action = action;
+        Timeout = timeout;
+        Timer = new Stopwatch();
+        Timer.Start();
+    }
+    
     public TcpTimedEvent()
     {
         Timer = new Stopwatch();
@@ -39,9 +47,52 @@ internal class TcpTimedEvent
             if (_fired) return; // already done
             if (Timer.Elapsed < Timeout) return; // not time yet
             
+            _fired = true; // trigger before calling action, so the action can reset
             Action?.Invoke(this);
-            
+        }
+    }
+
+    /// <summary>
+    /// <b>FOR TESTING ONLY</b>
+    /// <p></p>
+    /// After calling this method, the timer is considered immediately expired.
+    /// The event will only trigger once <see cref="TriggerIfExpired"/> is called.
+    /// The event will not fire again if it has already fired.
+    /// </summary>
+    public void ForceSet()
+    {
+        lock (_lock)
+        {
+            Timeout = TimeSpan.MinValue;
+        }
+    }
+
+    /// <summary>
+    /// The event will not trigger after calling this method.
+    /// Works by setting the 'already called' state without
+    /// calling the action
+    /// </summary>
+    public void Clear()
+    {
+        lock (_lock)
+        {
             _fired = true;
+        }
+    }
+
+    /// <summary>
+    /// Resets the clock and fired flag.
+    /// The timer retains its original timeout, but starts
+    /// counting from now.
+    /// If the event has already triggered, it WILL be able
+    /// to trigger again.
+    /// </summary>
+    public void Reset()
+    {
+        lock (_lock)
+        {
+            _fired = false;
+            Timer.Restart();
         }
     }
 }
