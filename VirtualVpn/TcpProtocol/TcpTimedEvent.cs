@@ -5,19 +5,21 @@ namespace VirtualVpn.TcpProtocol;
 /// <summary>
 /// Schedule slot for Retransmission Time-Out (RTO)
 /// </summary>
-internal class TcpTimedRtoEvent
+internal class TcpTimedEvent
 {
     public uint Sequence { get; set; }
     public int Length { get; set; }
     public TcpSegmentFlags Flags { get; set; }
-    public Action<TcpTimedRtoEvent>? Action { get; set; }
+    
     public TimeSpan Timeout { get; set; }
     public Stopwatch Timer { get; set; }
+    
+    public Action<TcpTimedEvent>? Action { get; set; }
     
     private readonly object _lock = new();
     private volatile bool _fired = false;
 
-    public TcpTimedRtoEvent()
+    public TcpTimedEvent()
     {
         Timer = new Stopwatch();
         Timer.Start();

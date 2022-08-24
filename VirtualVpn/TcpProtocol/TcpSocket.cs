@@ -81,9 +81,6 @@ public class TcpSocket
 
     private TimeSpan _sRtt, _rttVar; // Round-trip time values
 
-    /// <summary> Monotonic TCP timer </summary>
-    private readonly Stopwatch _timeWait;
-
     /// <summary> General sync lock for this socket </summary>
     /// <remarks>The locking in here is very broad, which technically could
     /// slow us down. However, we're already slow, and correct is better than fast here.</remarks>
@@ -99,11 +96,29 @@ public class TcpSocket
     /// </summary>
     private TcpSegment _earlyPayload = new();
 
+    /// <summary>
+    /// Rate limiting factor
+    /// </summary>
     private int _backoff;
 
+    /// <summary>
+    /// True if we are the active party (requester, initiator, client)
+    /// False if we are the passive (listener, receiver, server)
+    /// </summary>
+    private bool _isActive;
+    
+    /// <summary>
+    /// Retransmit event timer. Null if all messages are acknowledged.
+    /// </summary>
+    private TcpTimedEvent? _rtoEvent; // most recent retransmit timeout, if any
+
+    /// <summary>
+    /// Monotonic TCP waiting timer. Null if nothing is waiting.
+    /// </summary>
+    private readonly TcpTimedEvent? _timeWait;
+    
     private readonly AutoResetEvent _sendWait;
     private readonly AutoResetEvent _readWait;
-    private TcpTimedRtoEvent? _rtoEvent; // most recent retransmit timeout, if any
 
     #endregion
 
@@ -115,11 +130,13 @@ public class TcpSocket
         ErrorCode = SocketError.Success;
 
         _adaptor = adaptor;
+        _isActive = true; // flipped if `Listen()` is called
 
         _state = TcpSocketState.Closed;
         _mss = TcpDefaults.DefaultMss;
 
-        _timeWait = new Stopwatch();
+        _rtoEvent = null;
+        _timeWait = null;
 
         _tcb = new TransmissionControlBlock();
         _route = new TcpRoute();
@@ -134,8 +151,10 @@ public class TcpSocket
     public void EventPump()
     {
         // check for any timers or queues that need driving through this socket
-        _rtoEvent?.TriggerIfExpired();
+        
         SendIfPossible();
+        _rtoEvent?.TriggerIfExpired();
+        _timeWait?.TriggerIfExpired();
     }
 
     /// <summary>
@@ -152,6 +171,7 @@ public class TcpSocket
     /// </summary>
     public void Listen()
     {
+        _isActive = false;
         SetState(TcpSocketState.Listen);
     }
 
@@ -241,7 +261,10 @@ public class TcpSocket
                 case TcpSocketState.SynReceived: // Note: should check for any pending data to send, but not handled here
                 case TcpSocketState.Established:
                     SetState(TcpSocketState.FinWait1);
-                    SendAckFin();
+                    //SendAckFin(); // source has this, but refs say just FIN if we are client
+                    if (_isActive) SendFin();
+                    else SendAckFin();
+
                     break;
                 
                 case TcpSocketState.CloseWait: // Note: should check for any pending data to send, but not handled here. See https://tools.ietf.org/html/rfc1122#page-93
@@ -578,6 +601,7 @@ public class TcpSocket
     private void SendAck() => SendEmpty(_tcb.Snd.Nxt, _tcb.Rcv.Nxt, TcpSegmentFlags.Ack);
     private void SendSynAck() => SendEmpty(_tcb.Iss, _tcb.Rcv.Nxt, TcpSegmentFlags.SynAck);
     private void SendAckFin() => SendEmpty(_tcb.Snd.Nxt++, _tcb.Rcv.Nxt, TcpSegmentFlags.Ack | TcpSegmentFlags.Fin);
+    private void SendFin() => SendEmpty(_tcb.Snd.Nxt++, _tcb.Rcv.Nxt, TcpSegmentFlags.Fin);
     private void SendRst(long sequence) => SendEmpty(sequence, 0, TcpSegmentFlags.Rst);
     private void SendRstAck(long sequence, long ackNumber) => SendEmpty(sequence, ackNumber, TcpSegmentFlags.Rst | TcpSegmentFlags.Ack);
 
@@ -665,7 +689,7 @@ public class TcpSocket
     private void StartRto(int dataLength, TcpSegmentFlags flags) // lib/tcp/retransmission.c:46
     {
         // This is a highly simplified retry clock.
-        _rtoEvent = new TcpTimedRtoEvent
+        _rtoEvent = new TcpTimedEvent
         {
             Sequence = _tcb.Snd.Nxt,
             Length = dataLength,
@@ -675,7 +699,7 @@ public class TcpSocket
         };
     }
 
-    private void RetransmissionTimeout(TcpTimedRtoEvent evt) // lib/tcp/retransmission.c:68
+    private void RetransmissionTimeout(TcpTimedEvent evt) // lib/tcp/retransmission.c:68
     {
         lock (_lock)
         {
@@ -731,7 +755,7 @@ public class TcpSocket
             }
 
             var data = _sendBuffer[waiting.Sequence];
-            var next = new TcpTimedRtoEvent
+            var next = new TcpTimedEvent
             {
                 Sequence = (uint)waiting.Sequence,
                 Length = data.Length,
@@ -843,7 +867,7 @@ public class TcpSocket
         {
             Log.Debug("Starting SYN RTO");
 
-            _rtoEvent = new TcpTimedRtoEvent
+            _rtoEvent = new TcpTimedEvent
             {
                 // lib/tcp/output.c:79
                 Sequence = _tcb.Iss,
@@ -857,7 +881,7 @@ public class TcpSocket
         Send(seg, _route);
     }
 
-    private void SynRetransmissionTimeout(TcpTimedRtoEvent eventData) // lib/tcp/retransmission.c:10
+    private void SynRetransmissionTimeout(TcpTimedEvent eventData) // lib/tcp/retransmission.c:10
     {
         lock (_lock)
         {
@@ -933,7 +957,17 @@ public class TcpSocket
 
         // lib/tcp/input.c:662
         // "if the ACK bit is off drop the segment and return"
-        if (frame.Tcp.Flags.FlagsClear(TcpSegmentFlags.Ack)) return;
+        if (frame.Tcp.Flags.FlagsClear(TcpSegmentFlags.Ack))
+        {
+            // Handle the case of a FIN with no ACK
+            // The RFC and other references are unclear, so we will try to handle
+            // FIN or FIN+ACK
+            if (frame.Tcp.Flags.FlagsSet(TcpSegmentFlags.Fin))
+            {
+                HandleFinFlag(segSeq);
+            }
+            return;
+        }
 
         if (HandleIncomingAckFlag(frame, ackOk, segSeq, segAck)) return;
 
@@ -949,60 +983,65 @@ public class TcpSocket
 
         if (frame.Tcp.Flags.FlagsSet(TcpSegmentFlags.Fin))
         {
-            /*
+            HandleFinFlag(segSeq);
+        }
+
+        Log.Debug("End of receive");
+    }
+
+    private void HandleFinFlag(uint segSeq)
+    {
+        /*
               If the FIN bit is set, signal the user "connection closing" and
               return any pending RECEIVE packets with same message, advance RCV.NXT
               over the FIN, and send an acknowledgment for the FIN.  Note that
               FIN implies PUSH for any segment text not yet delivered to the
               user.
             */
-            switch (_state) // lib/tcp/input.c:978
+        switch (_state) // lib/tcp/input.c:978
+        {
+            case TcpSocketState.SynReceived: // lib/tcp/input.c:985
+            case TcpSocketState.Established:
+                SetState(TcpSocketState.CloseWait);
+                break;
+            case TcpSocketState.FinWait1: // lib/tcp/input.c:997
             {
-                case TcpSocketState.SynReceived: // lib/tcp/input.c:985
-                case TcpSocketState.Established:
-                    SetState(TcpSocketState.CloseWait);
-                    break;
-                case TcpSocketState.FinWait1: // lib/tcp/input.c:997
-                {
-                    /*
+                /*
                     FIN-WAIT-1 STATE
             
                       If our FIN has been ACKed (perhaps in this segment), then
                       enter TIME-WAIT, start the time-wait timer, turn off the other
                       timers; otherwise enter the CLOSING state.
                     */
-                    if (FinWasAcked())
-                    {
-                        SetState(TcpSocketState.TimeWait);
-                        _timeWait.Restart();
-                    }
-                    else
-                    {
-                        SetState(TcpSocketState.Closing);
-                    }
-
-                    break;
-                }
-                case TcpSocketState.FinWait2: // lib/tcp/input.c:1016
+                if (FinWasAcked())
+                {
                     SetState(TcpSocketState.TimeWait);
                     _timeWait.Restart();
-                    break;
-                case TcpSocketState.TimeWait: // lib/tcp/input.c:1030
-                    _timeWait.Restart();
-                    break;
-                // Other states stay as-is
+                }
+                else
+                {
+                    SetState(TcpSocketState.Closing);
+                }
+
+                break;
             }
-
-            // We are now "EOF"
-            _readWait.Set();
-            _receiveQueue.SetComplete();
-
-            Log.Debug("End of stream. Sending ACK");
-            _tcb.Rcv.Nxt = segSeq + 1;
-            SendAck();
+            case TcpSocketState.FinWait2: // lib/tcp/input.c:1016
+                SetState(TcpSocketState.TimeWait);
+                _timeWait.Restart();
+                break;
+            case TcpSocketState.TimeWait: // lib/tcp/input.c:1030
+                _timeWait.Restart();
+                break;
+            // Other states stay as-is
         }
 
-        Log.Debug("End of receive");
+        // We are now "EOF"
+        _readWait.Set();
+        _receiveQueue.SetComplete();
+
+        Log.Debug("End of stream. Sending ACK");
+        _tcb.Rcv.Nxt = segSeq + 1;
+        SendAck();
     }
 
     private bool DropIfFinFlagsInvalid(TcpFrame frame, uint segSeq)
@@ -1195,7 +1234,8 @@ public class TcpSocket
     /// </summary>
     private bool FinWasAcked() // include/netstack/tcp/tcp.h:418
     {
-        return _tcb.Snd.Una == (_sendBuffer.Start + _sendBuffer.Count() + 1);
+        //return _tcb.Snd.Una == (_sendBuffer.Start + _sendBuffer.Count() + 1); // IEB: Not sure if this works when no data has been sent
+        return _tcb.Snd.Una == (_sendBuffer.Start + _sendBuffer.Count());
     }
 
     private bool HandleIncomingAckFlag(TcpFrame frame, bool ackOk, uint segSeq, uint segAck) // lib/tcp/input.c:682

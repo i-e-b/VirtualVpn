@@ -61,7 +61,7 @@ public class IpTrafficTests
         Assert.That(ReceiveBuffer.Min(3, 2, 1), Is.EqualTo(1), "c2");
     }
 
-    [Test]
+    [Test] // See https://upload.wikimedia.org/wikipedia/commons/f/f6/Tcp_state_diagram_fixed_new.svg
     public void tcp_socket_connection()
     {
         Log.SetLevel(LogLevel.Everything);
@@ -97,7 +97,7 @@ public class IpTrafficTests
         Assert.That(alice.ErrorCode, Is.EqualTo(SocketError.Success), "err");
         
         // deliver SYN to bob, expect SYN+ACK back
-        CheckAndRouteLatestMessage(from: aliceAdaptor, to: bob, TcpSegmentFlags.Syn);
+        CheckAndRouteMostRecentMessage(from: aliceAdaptor, to: bob, TcpSegmentFlags.Syn);
         
         Assert.That(bobAdaptor.SentSegments.Count, Is.EqualTo(1), "sent segments");
         Assert.That(bobAdaptor.SentRoutes.Count, Is.EqualTo(1), "sent routes");
@@ -105,7 +105,7 @@ public class IpTrafficTests
         Assert.That(bob.ErrorCode, Is.EqualTo(SocketError.Success), "err");
         
         // deliver SYN+ACK to alice, expect final ACK. Alice should be established
-        CheckAndRouteLatestMessage(from: bobAdaptor, to: alice, TcpSegmentFlags.SynAck);
+        CheckAndRouteMostRecentMessage(from: bobAdaptor, to: alice, TcpSegmentFlags.SynAck);
         
         Assert.That(aliceAdaptor.SentSegments.Count, Is.EqualTo(2), "sent segments");
         Assert.That(aliceAdaptor.SentRoutes.Count, Is.EqualTo(2), "sent routes");
@@ -113,7 +113,7 @@ public class IpTrafficTests
         Assert.That(alice.ErrorCode, Is.EqualTo(SocketError.Success), "err");
         
         // deliver final ACK to bob, expect no further message. Bob should be established
-        CheckAndRouteLatestMessage(from: aliceAdaptor, to: bob, TcpSegmentFlags.Ack);
+        CheckAndRouteMostRecentMessage(from: aliceAdaptor, to: bob, TcpSegmentFlags.Ack);
         
         Assert.That(bobAdaptor.SentSegments.Count, Is.EqualTo(1), "sent segments");
         Assert.That(bobAdaptor.SentRoutes.Count, Is.EqualTo(1), "sent routes");
@@ -121,10 +121,82 @@ public class IpTrafficTests
         Assert.That(bob.ErrorCode, Is.EqualTo(SocketError.Success), "err");
     }
 
+    [Test] // See https://upload.wikimedia.org/wikipedia/commons/5/55/TCP_CLOSE.svg
+    public void tcp_socket_shutdown_from_established_client()
+    {
+        Log.SetLevel(LogLevel.Everything);
+        
+        //
+        // Immediately shut-down a connection after it has started
+        //
+        TwoConnectedSockets(out var server, out var serverNet, out var client, out var clientNet);
+        
+        client.StartClose(); // this should advance the ack by one one the Fin segment?
+        
+        Assert.That(client.State, Is.EqualTo(TcpSocketState.FinWait1), "client state");
+        Assert.That(server.State, Is.EqualTo(TcpSocketState.Established), "server state");
+        
+        RouteNextMessageAndRemove(from: clientNet, to: server, TcpSegmentFlags.Fin);
+        Assert.That(clientNet.IsEmpty, "more client messages");
+        Assert.That(server.State, Is.EqualTo(TcpSocketState.CloseWait), "server state");
+        
+        RouteNextMessageAndRemove(from: serverNet, to: client, TcpSegmentFlags.Ack);
+        Assert.That(clientNet.IsEmpty, "more server messages");
+        Assert.That(client.State, Is.EqualTo(TcpSocketState.FinWait2), "client state");
+        
+        // time passes
+        
+        
+        Assert.Inconclusive("not finished");
+    }
+    
     /// <summary>
     /// Make sure checksum is correct, then send from an adaptor to a socket
     /// </summary>
-    private static void CheckAndRouteLatestMessage(TestAdaptor from, TcpSocket to, TcpSegmentFlags flags)
+    private static void RouteNextMessageAndRemove(TestAdaptor from, TcpSocket to, TcpSegmentFlags flags)
+    {
+        Assert.That(from.SentSegments.Count, Is.GreaterThan(0), "No messages to route");
+        
+        var tcp = from.SentSegments[0];
+        var route = from.SentRoutes[0];
+        
+        from.SentSegments.RemoveAt(0);
+        from.SentRoutes.RemoveAt(0);
+        
+        // update checksum
+        Assert.True(tcp.ValidateChecksum(route.LocalAddress.Value, route.RemoteAddress.Value), "sender's checksum");
+        
+        Assert.That(tcp.Flags, Is.EqualTo(flags), "flags");
+        
+        // make an IPv4 wrapper
+        var tcpBytes = ByteSerialiser.ToBytes(tcp);
+
+        var ip = new IpV4Packet
+        {
+            Version = IpV4Version.Version4,
+            HeaderLength = 5,
+            ServiceType = 0,
+            TotalLength = 20 + tcpBytes.Length,
+            PacketId = 0,
+            Flags = IpV4HeaderFlags.None,
+            FragmentIndex = 0,
+            Ttl = 0,
+            Protocol = IpV4Protocol.TCP,
+            Checksum = 0,
+            Source = route.LocalAddress,
+            Destination = route.RemoteAddress,
+            Options = Array.Empty<byte>(),
+            Payload = tcpBytes
+        };
+        ip.UpdateChecksum();
+        
+        to.FeedIncomingPacket(tcp, ip);
+    }
+
+    /// <summary>
+    /// Make sure checksum is correct, then send from an adaptor to a socket
+    /// </summary>
+    private static void CheckAndRouteMostRecentMessage(TestAdaptor from, TcpSocket to, TcpSegmentFlags flags)
     {
         var tcp = from.SentSegments.Last();
         var route = from.SentRoutes.Last();
@@ -157,6 +229,38 @@ public class IpTrafficTests
         ip.UpdateChecksum();
         
         to.FeedIncomingPacket(tcp, ip);
+    }
+
+    /// <summary>
+    /// Create two sockets, and get the to the connected state.
+    /// Assumes that this is working (tested by <see cref="tcp_socket_connection"/>)
+    /// The adaptors traffic is cleared before being returned.
+    /// </summary>
+    private static void TwoConnectedSockets(
+        out TcpSocket server, out TestAdaptor serverAdaptor,
+        out TcpSocket client, out TestAdaptor clientAdaptor
+        )
+    {
+        serverAdaptor = new TestAdaptor();
+        server = new TcpSocket(serverAdaptor);
+        server.Listen();
+        
+        clientAdaptor = new TestAdaptor();
+        client = new TcpSocket(clientAdaptor);
+        client.StartConnect(IpV4Address.Localhost, 46781);
+        
+        // SYN, expect SYN+ACK back
+        CheckAndRouteMostRecentMessage(from: clientAdaptor, to: server, TcpSegmentFlags.Syn);
+        // SYN+ACK, expect final ACK. Client should be established
+        CheckAndRouteMostRecentMessage(from: serverAdaptor, to: client, TcpSegmentFlags.SynAck);
+        // ACK, expect no further message. Server should be established
+        CheckAndRouteMostRecentMessage(from: clientAdaptor, to: server, TcpSegmentFlags.Ack);
+        
+        serverAdaptor.Clear();
+        clientAdaptor.Clear();
+        
+        Assert.That(client.State, Is.EqualTo(TcpSocketState.Established), "client state");
+        Assert.That(server.State, Is.EqualTo(TcpSocketState.Established), "server state");
     }
 
     private static void MakeTcpPacket(int seq, int ack, TcpSegmentFlags flags, out TcpSegment tcp, out IpV4Packet ip)
@@ -227,4 +331,12 @@ public class TestAdaptor : ITcpAdaptor
         SentSegments.Add(seg);
         SentRoutes.Add(route);
     }
+
+    public void Clear()
+    {
+        SentSegments.Clear();
+        SentRoutes.Clear();
+    }
+
+    public bool IsEmpty() => SentSegments.Count < 1 && SentRoutes.Count < 1;
 }
