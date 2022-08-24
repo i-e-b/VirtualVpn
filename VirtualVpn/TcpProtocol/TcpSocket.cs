@@ -37,7 +37,7 @@ public class TcpSocket
     /// send data, then all data has been transmitted
     /// AND received.
     /// </summary>
-    public long BytesOfSendDataWaiting => _sendBuffer.Count();
+    public long BytesOfSendDataWaiting => _sendBuffer.RemainingData();
     
     /// <summary>
     /// Amount of data that has been queued for reading.
@@ -391,7 +391,10 @@ public class TcpSocket
         lock (_lock)
         {
             if (!ValidStateForSend()) return; // can't send
-            if (_sendBuffer.Count() < 1) return; // nothing to send
+            
+            if (!_sendBuffer.HasDataAfter(_tcb.Snd.Nxt)) return; // nothing to send
+            
+            Log.Debug($"Entering SendIfPossible. Send buffer claims {_sendBuffer.Count()} bytes, some of which have not been transmitted");
 
             long inflight = 0;
             foreach (var segment in _unAckedSegments)
@@ -407,7 +410,7 @@ public class TcpSocket
             }
 
             var total = _sendBuffer.Count();
-            var sent = SendData(_tcb.Snd.Nxt, (int)space, TcpSegmentFlags.None);
+            var sent = SendData(sequence: _tcb.Snd.Nxt, maxSize: (int)space, flags: TcpSegmentFlags.None, isRetransmit: false);
             Log.Debug($"SendIfPossible - sent {sent} bytes, {total - sent} remaining");
         }
     }
@@ -753,7 +756,7 @@ public class TcpSocket
                 if (evt.Length > 0)
                 {
                     Log.Info($"Retransmit data. Seq={una}, Byte count={evt.Length} Flags={evt.Flags.ToString()}");
-                    SendData(sequence: una, size: evt.Length, flags: evt.Flags);
+                    SendData(sequence: una, maxSize: evt.Length, flags: evt.Flags, isRetransmit: true);
                 }
                 else
                 {
@@ -800,8 +803,10 @@ public class TcpSocket
     /// or as much as can fit in a single packet, from the socket data send queue.
     /// </summary>
     /// <returns>Number of bytes sent</returns>
-    private int SendData(uint sequence, int size, TcpSegmentFlags flags) // lib/tcp/output.c:135
+    private int SendData(uint sequence, int maxSize, TcpSegmentFlags flags, bool isRetransmit) // lib/tcp/output.c:135
     {
+        Log.Debug($"Call to SendData: sequence={sequence}, max size={maxSize}, flags={flags.ToString()}, is retransmit={isRetransmit}");
+        
         // lib/tcp/output.c:153
         var ackN = _tcb.Rcv.Nxt;
         flags |= TcpSegmentFlags.Ack;
@@ -840,7 +845,7 @@ public class TcpSocket
         var willFitInPacket = Min(_mss, (int)bytesAvailable);
 
         // Make sure we don't send more than requested
-        var toSend = (size > 0) ? Min(size, willFitInPacket) : willFitInPacket;
+        var toSend = (maxSize > 0) ? Min(maxSize, willFitInPacket) : willFitInPacket;
 
         // Set 'push' flag if the buffer is going to be empty
         if (toSend >= bytesAvailable) seg.Flags |= TcpSegmentFlags.Psh;

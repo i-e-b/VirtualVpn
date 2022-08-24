@@ -5,10 +5,14 @@ internal class SendBuffer
     private readonly object _lock = new();
     private readonly Dictionary<long, byte[]> _segments = new();
     public long Start { get; set; }
+    public long ReadHead { get; set; }
+    public long End { get; set; }
 
     public SendBuffer()
     {
         Start = -1;
+        ReadHead = -1;
+        End = -1;
     }
 
     public byte[] this[long seq]
@@ -23,7 +27,7 @@ internal class SendBuffer
     }
 
     /// <summary>
-    /// Number of bytes buffered for sending
+    /// Number of bytes buffered for sending (does NOT account for data that is read)
     /// </summary>
     public long Count()
     {
@@ -50,31 +54,18 @@ internal class SendBuffer
         // 2. Gather data in chunks until we reach the end of the buffer, or the size requested.
         //    Note: we may have overlap in the offsets we have to account for
 
-        var empty = Array.Empty<byte>();
-        var orderedOffsets = _segments.Keys.OrderBy(k => k).ToList();
-        if (orderedOffsets.Count < 1) return empty;
+        if (_segments.Count < 1) return Array.Empty<byte>();
+        
+        var found = FindFirstSegmentForSequence(offset, out var sequenceStart, out var orderedOffsets);
 
-        int i = 0;
-        for (; i < orderedOffsets.Count; i++)
-        {
-            var start = orderedOffsets[i];
-            var chunk = _segments[start];
-            var end = start + chunk.Length;
-
-            if (start <= offset && end > offset) // found the first chunk in the range
-            {
-                break;
-            }
-        }
-
-        if (i >= orderedOffsets.Count) return empty; // can't find any matching data
+        if (!found) return Array.Empty<byte>(); // can't find any matching data
 
         var result = new List<byte>(maxSize);
         long remaining = maxSize;
         var loc = offset;
-        while (remaining > 0 && i < orderedOffsets.Count)
+        while (remaining > 0 && sequenceStart < orderedOffsets.Count)
         {
-            var start = orderedOffsets[i];
+            var start = orderedOffsets[sequenceStart];
             if (start > loc) throw new Exception("Gap in transmission stream"); // REALLY shouldn't happen
 
             var chunkOffset = loc - start;
@@ -84,7 +75,7 @@ internal class SendBuffer
             // check that this is a valid selection (in case of major overlap)
             if (available <= 0)
             {
-                i++;
+                sequenceStart++;
                 continue;
             }
 
@@ -93,10 +84,33 @@ internal class SendBuffer
             result.AddRange(chunk.Skip((int)chunkOffset).Take((int)toTake));
             remaining -= toTake;
             loc += toTake;
-            i++;
+            sequenceStart++;
         }
 
+        ReadHead = offset + result.Count;
+        Log.Debug($"SendBuffer:Pull - read head moved from {offset} to {ReadHead}");
         return result.ToArray();
+    }
+
+    private bool FindFirstSegmentForSequence(long offset, out int offsetsIndex, out List<long> orderedOffsets)
+    {
+        orderedOffsets = _segments.Keys.OrderBy(k => k).ToList();
+
+        offsetsIndex = 0;
+        for (; offsetsIndex < orderedOffsets.Count; offsetsIndex++)
+        {
+            var start = orderedOffsets[offsetsIndex];
+            var chunk = _segments[start];
+            var end = start + chunk.Length;
+
+            if (start <= offset && end > offset) // found the first chunk in the range
+            {
+                break;
+            }
+        }
+
+        //Log.Debug($"FindFirstSegmentForSequence: offset={offsetsIndex}, count={orderedOffsets.Count}");
+        return offsetsIndex < orderedOffsets.Count;
     }
 
     /// <summary>
@@ -106,6 +120,13 @@ internal class SendBuffer
     {
         lock (_lock)
         {
+            if (_segments.Count < 1)
+            {
+                Log.Debug($"SendBuffer:ConsumeTo - no data to release. Next sequence={newStart}");
+                Start = newStart;
+                return;
+            }
+
             var offsets = _segments.Keys.ToList();
             foreach (var offset in offsets)
             {
@@ -113,6 +134,7 @@ internal class SendBuffer
                 if (end < newStart) _segments.Remove(offset);
             }
 
+            Log.Debug($"SendBuffer:ConsumeTo - releasing from {Start} to {newStart} ({newStart-Start} bytes)");
             Start = newStart;
         }
     }
@@ -125,15 +147,30 @@ internal class SendBuffer
         // should we chop this into MSS chunks, or just feed it directly in?
         lock (_lock)
         {
-            var nextSequence = Start + Count();
+            if (Start < 0) throw new Exception("Tried to write before setting start sequence");
+            if (End < 0) End = Start + Count();
+
+            var nextSequence = End;
+            
+            int written;
             if (offset == 0 && length == buffer.Length)
             {
                 _segments.Add(nextSequence, buffer);
+                written = buffer.Length;
             }
             else
             {
-                _segments.Add(nextSequence, buffer.Skip(offset).Take(length).ToArray());
+                var subset = buffer.Skip(offset).Take(length).ToArray();
+                _segments.Add(nextSequence, subset);
+                written = subset.Length;
             }
+
+            if (written > 0)
+            {
+                End = nextSequence + written + 1;
+            }
+
+            Log.Debug($"Wrote to SendBuffer. Buffer start seq={Start}, write start seq={nextSequence}, write end seq={End}");
         }
     }
 
@@ -145,5 +182,26 @@ internal class SendBuffer
         {
             Start = sndNxt;
         }
+    }
+
+    /// <summary>
+    /// Read the available segments and return true
+    /// if there is data after the given sequence
+    /// </summary>
+    public bool HasDataAfter(uint sequence)
+    {
+        lock (_lock)
+        {
+            if (_segments.Count < 1) return false;
+            
+            return FindFirstSegmentForSequence(sequence, out _, out _);
+        }
+    }
+
+    public long RemainingData()
+    {
+        if (End < 0) return 0;
+        if (ReadHead < 0) return End - Start;
+        return End - ReadHead - 1;
     }
 }

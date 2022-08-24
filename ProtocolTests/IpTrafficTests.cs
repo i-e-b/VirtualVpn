@@ -218,17 +218,9 @@ public class IpTrafficTests
         Assert.That(server.BytesOfReadDataWaiting, Is.EqualTo(senderBuffer.Length), "did not receive all data");
         Assert.That(client.BytesOfSendDataWaiting, Is.Zero, "did not send all data"); // it's getting there, but not clearing the send buffer
 
-//IEB: This is faulting. The client is trying to remove a sequence from the ack list, but is then picking it up again
-//IEB: Maybe the length is not being set, and that's causing a fault?
-        /*
-         
-2022-08-24T15:28 (utc) UpdateRtq - Checking 1 unacknowledged segments
-2022-08-24T15:28 (utc) Removing acknowledged segment: length=0, seq=266422666, initial offset=266422665 Range=1..0
-2022-08-24T15:28 (utc) Ack list - removed sequence=266422666
-2022-08-24T15:28 (utc) No more unacknowledged segments. Ending retry time-out.
-2022-08-24T15:28 (utc) End of receive
-2022-08-24T15:28 (utc) Queuing data that needs to be ACKd. Seq=266422719, length=53
-*/
+        
+        // IEB: Next, test sending a reply back.
+
 
         Assert.Inconclusive("not implemented");
     }
@@ -393,11 +385,11 @@ public class IpTrafficTests
         out TcpSocket client, out TestAdaptor clientAdaptor
         )
     {
-        serverAdaptor = new TestAdaptor();
+        serverAdaptor = new TestAdaptor("server");
         server = new TcpSocket(serverAdaptor);
         server.Listen();
         
-        clientAdaptor = new TestAdaptor();
+        clientAdaptor = new TestAdaptor("client");
         client = new TcpSocket(clientAdaptor);
         client.StartConnect(IpV4Address.Localhost, 46781);
         
@@ -460,13 +452,15 @@ public class IpTrafficTests
 
 public class TestAdaptor : ITcpAdaptor
 {
+    private readonly string _name;
     public bool IsClosed { get; set; }
     
     public List<TcpSegment> SentSegments { get; set; }
     public List<TcpRoute> SentRoutes { get; set; }
 
-    public TestAdaptor()
+    public TestAdaptor(string name="TestAdaptor")
     {
+        _name = name;
         SentRoutes = new List<TcpRoute>();
         SentSegments = new List<TcpSegment>();
         IsClosed = false;
@@ -479,7 +473,7 @@ public class TestAdaptor : ITcpAdaptor
 
     public void Reply(TcpSegment seg, TcpRoute route)
     {
-        Log.Info($"TestAdaptor - got reply: Flags={seg.Flags.ToString()}, Seq={seg.SequenceNumber}, Ack={seg.AcknowledgmentNumber}, target={route.RemoteAddress}:{route.RemotePort}");
+        Log.Info($"Adaptor {_name} - have packet to send: Flags={seg.Flags.ToString()}, Seq={seg.SequenceNumber}, Ack={seg.AcknowledgmentNumber}, target={route.RemoteAddress}:{route.RemotePort}");
         SentSegments.Add(seg);
         SentRoutes.Add(route);
     }
