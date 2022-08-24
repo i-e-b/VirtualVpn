@@ -56,7 +56,9 @@ internal class SegmentAckList : IEnumerable<TcpTimedSequentialData>
     {
         lock (_lock)
         {
-            _checkList.Remove(data.Sequence);
+            var ok = _checkList.Remove(data.Sequence);
+            if (ok) Log.Debug($"Ack list - removed sequence={data.Sequence}");
+            else Log.Warn($"Ack list - FAILED to remove sequence={data.Sequence}");
         }
     }
 }

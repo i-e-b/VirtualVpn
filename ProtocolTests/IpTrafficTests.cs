@@ -218,6 +218,17 @@ public class IpTrafficTests
         Assert.That(server.BytesOfReadDataWaiting, Is.EqualTo(senderBuffer.Length), "did not receive all data");
         Assert.That(client.BytesOfSendDataWaiting, Is.Zero, "did not send all data"); // it's getting there, but not clearing the send buffer
 
+//IEB: This is faulting. The client is trying to remove a sequence from the ack list, but is then picking it up again
+//IEB: Maybe the length is not being set, and that's causing a fault?
+        /*
+         
+2022-08-24T15:28 (utc) UpdateRtq - Checking 1 unacknowledged segments
+2022-08-24T15:28 (utc) Removing acknowledged segment: length=0, seq=266422666, initial offset=266422665 Range=1..0
+2022-08-24T15:28 (utc) Ack list - removed sequence=266422666
+2022-08-24T15:28 (utc) No more unacknowledged segments. Ending retry time-out.
+2022-08-24T15:28 (utc) End of receive
+2022-08-24T15:28 (utc) Queuing data that needs to be ACKd. Seq=266422719, length=53
+*/
 
         Assert.Inconclusive("not implemented");
     }
@@ -227,15 +238,23 @@ public class IpTrafficTests
     /// </summary>
     private static void SendAllWaitingPackets(TcpSocket server, TestAdaptor serverNet, TcpSocket client, TestAdaptor clientNet)
     {
-        var transmit = true;
-        while (transmit)
+        var rounds = 0;
+        while (rounds < 3)
         {
-            server.EventPump();
-            client.EventPump();
+            var transmit = false;
             
-            transmit = false;
-            transmit |= TryRouteNextMessageAndRemove(from: serverNet, to: client);
+            Console.WriteLine("------------- server -------------------");
             transmit |= TryRouteNextMessageAndRemove(from: clientNet, to: server);
+            server.EventPump();
+            Assert.That(server.ErrorCode, Is.EqualTo(SocketError.Success), "server faulted");
+            
+            Console.WriteLine("------------- client -------------------");
+            transmit |= TryRouteNextMessageAndRemove(from: serverNet, to: client);
+            client.EventPump();
+            Assert.That(client.ErrorCode, Is.EqualTo(SocketError.Success), "client faulted");
+            
+            if ( transmit ) rounds = 0;
+            else rounds++;
         }
     }
 

@@ -408,7 +408,7 @@ public class TcpSocket
 
             var total = _sendBuffer.Count();
             var sent = SendData(_tcb.Snd.Nxt, (int)space, TcpSegmentFlags.None);
-            Log.Debug($"Sent {sent} bytes, {total - sent} remaining");
+            Log.Debug($"SendIfPossible - sent {sent} bytes, {total - sent} remaining");
         }
     }
     
@@ -670,6 +670,8 @@ public class TcpSocket
     /// </summary>
     private void QueueUnacknowledged(long sequence, int dataLength, TcpSegmentFlags flags) // lib/tcp/output.c:219
     {
+        Log.Debug($"Queuing data that needs to be ACKd. Seq={sequence}, length={dataLength}");
+        
         // Start re-transmission timeout if needed
         if (_unAckedSegments.Count < 1) StartRto(dataLength, flags);
 
@@ -694,8 +696,6 @@ public class TcpSocket
             return;
         }
 
-        Log.Debug($"Adding segment to un-ack queue. Seq={sequence}, flags={flags.ToString()}"); // lib/tcp/output.c:238
-
         // Store sequence information for the RTO
         _unAckedSegments.Add(new TcpTimedSequentialData
         {
@@ -703,6 +703,8 @@ public class TcpSocket
             Flags = flags,
         });
 
+        Log.Debug($"Adding segment to un-ack queue. Total waiting={_unAckedSegments.Count}, Seq={sequence}, flags={flags.ToString()}"); // lib/tcp/output.c:238
+        
         // Advance SND.NXT past this segment
         _tcb.Snd.Nxt += (uint)dataLength;
     }
@@ -763,6 +765,7 @@ public class TcpSocket
             // If there are no more segments waiting to be acknowledged, don't schedule another check
             if (_unAckedSegments.Count <= 0)
             {
+                Log.Debug("RetransmissionTimeout - unacknowledged queue empty. Stopping RTO event");
                 _rtoEvent = null;
                 return; // lib/tcp/retransmission.c:114
             }
@@ -771,6 +774,7 @@ public class TcpSocket
             var waiting = _unAckedSegments.Peek();
             if (waiting is null)
             {
+                Log.Warn("Expected an unacknowledged segment, but couldn't find it");
                 _rtoEvent = null;
                 return;
             }
@@ -848,11 +852,12 @@ public class TcpSocket
 
         if (seg.Payload.Length <= 0)
         {
-            Log.Warn("No data to read");
+            Log.Warn($"SendData: Failed to read data. Payload length={seg.Payload.Length}");
             ErrorCode = SocketError.NoData;
             return 0;
         }
 
+        Log.Info($"SendData: Transmitting data. Payload length={seg.Payload.Length}");
         Send(seg, _route); // lib/tcp/output.c:212
         return seg.Payload.Length;
     }
@@ -1169,10 +1174,11 @@ public class TcpSocket
                 // of being in-order. Adjust the window:
                 _tcb.Rcv.Wnd -= (ushort)segLen;
 
-                Log.Debug($"Segment queued. {segLen} bytes");
-
                 // Calculate and Acknowledge the largest contiguous segment we have
                 _tcb.Rcv.Nxt = _receiveQueue.ContiguousSequence(_tcb.Rcv.Nxt);
+                
+                Log.Debug($"ProcessSegmentData - segment queued. {segLen} bytes. Receive queue has {_receiveQueue.EntireSize} bytes. Sending ACK.");
+                
                 SendAck();
 
                 if (inOrder)
@@ -1748,17 +1754,18 @@ public class TcpSocket
                     break;
             }
 
-            Log.Debug($"Checking {_unAckedSegments.Count} unacknowledged segments"); // lib/tcp/retransmission.c:172
+            Log.Debug($"UpdateRtq - Checking {_unAckedSegments.Count} unacknowledged segments"); // lib/tcp/retransmission.c:172
 
             TcpTimedSequentialData? latest = null;
             foreach (var data in _unAckedSegments) // lib/tcp/retransmission.c:174
             {
+                var seq = data.Sequence;
                 var iss = _tcb.Iss;
-                var end = data.Sequence + data.Length - 1;
+                var end = seq + data.Length - 1;
 
                 if (SeqGt(_tcb.Snd.Una, end))
                 {
-                    Log.Debug($"Removing acknowledged segment {data.Sequence - iss}..{end - iss}");
+                    Log.Debug($"Removing acknowledged segment: length={data.Length}, seq={seq}, initial offset={iss} Range={seq - iss}..{end - iss}");
 
                     // Store the latest ACKed segment for updating the rtt
                     // Retransmitted segments should NOT be used for rtt calculation
