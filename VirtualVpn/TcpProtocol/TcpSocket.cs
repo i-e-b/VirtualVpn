@@ -311,8 +311,6 @@ public class TcpSocket
             
             _sendBuffer.Write(buffer, offset, length);
         }
-
-        throw new NotImplementedException();
     }
     
     /// <summary>

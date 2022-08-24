@@ -195,7 +195,94 @@ public class IpTrafficTests
         client.TriggerMainWaitTimer(); client.EventPump();
         Assert.That(client.State, Is.EqualTo(TcpSocketState.Closed), "client state");
     }
-    
+
+    [Test]
+    public void tcp_socket_send_and_receive_data()
+    {
+        Log.SetLevel(LogLevel.Everything);
+        
+        //
+        // Do a full transaction, with data coming from both sides
+        //
+        
+        TwoConnectedSockets(out var server, out var serverNet, out var client, out var clientNet);
+
+        var senderBuffer = Encoding.UTF8.GetBytes("This is a short message from the client to the server");
+        client.SendData(senderBuffer, 0, senderBuffer.Length);
+        Log.Info($"##### Data is {senderBuffer.Length} bytes. Client has {client.BytesOfSendDataWaiting} bytes, server has {server.BytesOfReadDataWaiting} bytes. #######");
+        
+        SendAllWaitingPackets(server, serverNet, client, clientNet);
+        
+        Log.Info($"##### Data is {senderBuffer.Length} bytes. Client has {client.BytesOfSendDataWaiting} bytes, server has {server.BytesOfReadDataWaiting} bytes. #######");
+        
+        Assert.That(server.BytesOfReadDataWaiting, Is.EqualTo(senderBuffer.Length), "did not receive all data");
+        Assert.That(client.BytesOfSendDataWaiting, Is.Zero, "did not send all data"); // it's getting there, but not clearing the send buffer
+
+
+        Assert.Inconclusive("not implemented");
+    }
+
+    /// <summary>
+    /// Send packets in both directions until both are empty
+    /// </summary>
+    private static void SendAllWaitingPackets(TcpSocket server, TestAdaptor serverNet, TcpSocket client, TestAdaptor clientNet)
+    {
+        var transmit = true;
+        while (transmit)
+        {
+            server.EventPump();
+            client.EventPump();
+            
+            transmit = false;
+            transmit |= TryRouteNextMessageAndRemove(from: serverNet, to: client);
+            transmit |= TryRouteNextMessageAndRemove(from: clientNet, to: server);
+        }
+    }
+
+
+    /// <summary>
+    /// Make sure checksum is correct, then send from an adaptor to a socket
+    /// </summary>
+    private static bool TryRouteNextMessageAndRemove(TestAdaptor from, TcpSocket to)
+    {
+        if (from.SentSegments.Count < 1) return false;
+        
+        var tcp = from.SentSegments[0];
+        var route = from.SentRoutes[0];
+        
+        from.SentSegments.RemoveAt(0);
+        from.SentRoutes.RemoveAt(0);
+        
+        // update checksum
+        Assert.True(tcp.ValidateChecksum(route.LocalAddress.Value, route.RemoteAddress.Value), "sender's checksum");
+        
+        // make an IPv4 wrapper
+        var tcpBytes = ByteSerialiser.ToBytes(tcp);
+
+        var ip = new IpV4Packet
+        {
+            Version = IpV4Version.Version4,
+            HeaderLength = 5,
+            ServiceType = 0,
+            TotalLength = 20 + tcpBytes.Length,
+            PacketId = 0,
+            Flags = IpV4HeaderFlags.None,
+            FragmentIndex = 0,
+            Ttl = 0,
+            Protocol = IpV4Protocol.TCP,
+            Checksum = 0,
+            Source = route.LocalAddress,
+            Destination = route.RemoteAddress,
+            Options = Array.Empty<byte>(),
+            Payload = tcpBytes
+        };
+        ip.UpdateChecksum();
+        
+        to.FeedIncomingPacket(tcp, ip);
+        
+        return true;
+    }
+
     /// <summary>
     /// Make sure checksum is correct, then send from an adaptor to a socket
     /// </summary>
