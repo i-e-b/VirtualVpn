@@ -1,6 +1,5 @@
 ﻿// ReSharper disable BuiltInTypeReferenceStyle
 
-using System.Collections;
 using System.Diagnostics;
 using System.Net.Sockets;
 using System.Security.Cryptography;
@@ -17,7 +16,8 @@ namespace VirtualVpn.TcpProtocol;
 /// Root of the custom TCP stack.
 /// This tries to emulate a socket-like interface.
 /// </summary><remarks>
-/// Derived in part from https://github.com/frebib/netstack.git
+/// Derived from https://github.com/frebib/netstack.git
+/// Adapted to work non-blocking with an external event pump, and against virtual devices.
 /// </remarks>
 public class TcpSocket
 {
@@ -26,12 +26,37 @@ public class TcpSocket
     /// </summary>
     public SocketError ErrorCode { get; set; }
 
+    /// <summary>
+    /// State of the socket interface
+    /// </summary>
+    public TcpSocketState State => _state;
+    
+    /// <summary>
+    /// Amount of data that is either waiting to
+    /// be sent, or waiting for an acknowledgment.
+    /// When this reaches zero after starting to
+    /// send data, then all data has been transmitted
+    /// AND received.
+    /// </summary>
+    public long BytesOfSendDataWaiting => _sendBuffer.Count();
+    
+    /// <summary>
+    /// Amount of data that has been queued for reading.
+    /// This may be more than the total size of the stream if
+    /// the remote side is sending overlaps
+    /// </summary>
+    public long BytesOfReadDataWaiting => _receiveQueue.EntireSize;
+
+    /// <summary>
+    /// Returns true if we processed an in-sequence FIN message,
+    /// indicating that all data is here and received.
+    /// </summary>
+    public bool ReadDataComplete => _receiveQueue.IsComplete;
+
     #region Private state
 
     /// <summary> Tunnel interface (used instead of sockets) </summary>
     private readonly ITcpAdaptor _adaptor;
-
-    private volatile bool _running;
 
     /// <summary> State of this 'socket' </summary>
     private TcpSocketState _state;
@@ -72,7 +97,7 @@ public class TcpSocket
     /// <summary>
     /// Possible 'early' data from handshake
     /// </summary>
-    private byte[] _earlyPayload = Array.Empty<byte>();
+    private TcpSegment _earlyPayload = new();
 
     private int _backoff;
 
@@ -108,14 +133,187 @@ public class TcpSocket
     /// </summary>
     public void EventPump()
     {
+        // check for any timers or queues that need driving through this socket
         _rtoEvent?.TriggerIfExpired();
-        // TODO: check for any other timers that need driving through this
+        SendIfPossible();
     }
+
+    /// <summary>
+    /// Process incoming TCP segment and IPv4 wrapper.
+    /// You must supply any incoming packets to this function.
+    /// </summary>
+    public void FeedIncomingPacket(TcpSegment segment, IpV4Packet wrapper)
+    {
+        ReceiveWithIpv4(segment, wrapper);
+    }
+
+    /// <summary>
+    /// Set this socket to the listen state
+    /// </summary>
+    public void Listen()
+    {
+        SetState(TcpSocketState.Listen);
+    }
+
+    /// <summary>
+    /// Start a connection to a remote machine.
+    /// This will return before the connection
+    /// is established. You should pump events
+    /// and wait error code to change from the
+    /// success status, or the state to become
+    /// established.
+    /// </summary>
+    public void StartConnect(IpV4Address destinationAddress, ushort destinationPort) // lib/tcp/user.c:21
+    {
+        lock (_lock)
+        {
+            _route.RemoteAddress = destinationAddress.Copy();
+            _route.RemotePort = destinationPort;
+
+            // Check we are in a valid state
+            switch (_state)
+            {
+                case TcpSocketState.Established:
+                case TcpSocketState.FinWait1:
+                case TcpSocketState.FinWait2:
+                case TcpSocketState.LastAck:
+                case TcpSocketState.Closing:
+                case TcpSocketState.CloseWait:
+                    ErrorCode = SocketError.IsConnected;
+                    throw new SocketException((int)ErrorCode);
+
+                case TcpSocketState.SynSent:
+                case TcpSocketState.SynReceived:
+                    ErrorCode = SocketError.AlreadyInProgress;
+                    throw new SocketException((int)ErrorCode);
+
+                case TcpSocketState.Closed:
+                case TcpSocketState.Listen:
+                case TcpSocketState.TimeWait:
+                    Log.Debug("Starting connection process");
+                    break;
+
+                default:
+                    throw new ArgumentOutOfRangeException();
+            }
+
+            // Set up initial TCB variables
+            var iss = NewTcpSequence();
+            _tcb.Iss = iss;
+            _tcb.Snd.Una = iss;
+            _tcb.Snd.Nxt = iss + 1;
+            _tcb.Rcv.Wnd = UInt16.MaxValue;
+
+            // Ensure the state is SynSent BEFORE calling SendSyn() so that
+            // the correct retransmit timeout function is used
+            SetState(TcpSocketState.SynSent);
+
+            SendSyn();
+
+            // Normally, a socket connection would block here,
+            // but we are using a caller-poll convention
+            // so we just return and expect the caller to
+            // check the state periodically until there is
+            // an error code or the state becomes Established.
+        }
+    }
+
+    /// <summary>
+    /// Begin the process of closing a connection.
+    /// This will return before the connection is
+    /// closed. You should call EventPump() until
+    /// the error code changes from success state
+    /// or the state becomes closed.
+    /// </summary>
+    public void StartClose() // lib/tcp/user.c:380
+    {
+        lock (_lock)
+        {
+            switch (_state)
+            {
+                case TcpSocketState.Listen:
+                    SetState(TcpSocketState.Closed);
+                    break;
+                
+                case TcpSocketState.SynSent:
+                    break;
+                
+                case TcpSocketState.SynReceived: // Note: should check for any pending data to send, but not handled here
+                case TcpSocketState.Established:
+                    SetState(TcpSocketState.FinWait1);
+                    SendAckFin();
+                    break;
+                
+                case TcpSocketState.CloseWait: // Note: should check for any pending data to send, but not handled here. See https://tools.ietf.org/html/rfc1122#page-93
+                    SetState(TcpSocketState.LastAck);
+                    SendAckFin();
+                    break;
+                
+                case TcpSocketState.Closing:
+                case TcpSocketState.LastAck:
+                case TcpSocketState.TimeWait:
+                    ErrorCode = SocketError.AlreadyInProgress;
+                    break;
+                
+                case TcpSocketState.Closed:
+                    ErrorCode = SocketError.NotConnected;
+                    break;
+                
+                case TcpSocketState.FinWait1:
+                case TcpSocketState.FinWait2:
+                    break;
+                
+                default:
+                    throw new ArgumentOutOfRangeException();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Begin sending buffer data.
+    /// This will return before all the data is sent.
+    /// You should call EventPump() until the error
+    /// code changes or SendBufferLength becomes zero.
+    /// </summary>
+    public void SendData(byte[] buffer, int offset, int length) // lib/tcp/user.c:122
+    {
+        if (!ValidStateForSend()) throw new Exception($"Socket is not ready for sending. State={_state.ToString()}");
+
+        lock (_lock)
+        {
+            if (!_sendBuffer.SequenceIsSet())
+            {
+                Log.Debug($"Starting send stream at sequence {_tcb.Snd.Nxt} for {length} bytes");
+                _sendBuffer.SetStartSequence(_tcb.Snd.Nxt);
+            }
+            
+            _sendBuffer.Write(buffer, offset, length);
+        }
+
+        throw new NotImplementedException();
+    }
+    
+    /// <summary>
+    /// Read data from the incoming data buffer.
+    /// This does not block, and may not return all data
+    /// if transmission is not complete.
+    /// </summary>
+    /// <returns>Actual bytes copied</returns>
+    public int ReadData(byte[] buffer, int offset, int length)
+    {
+        lock (_lock)
+        {
+            return _receiveQueue.ReadOutAndUpdate(buffer, offset, length);
+        }
+    }
+
+    #region private
+    
 
     /// <summary>
     /// Process an incoming tcp segment given an IPv4 wrapper
     /// </summary>
-    public void ReceiveWithIpv4(TcpSegment segment, IpV4Packet wrapper) // lib/tcp/tcp.c:128
+    private void ReceiveWithIpv4(TcpSegment segment, IpV4Packet wrapper) // lib/tcp/tcp.c:128
     {
         if (!segment.ValidateChecksum(wrapper))
         {
@@ -142,98 +340,62 @@ public class TcpSocket
     }
 
     /// <summary>
-    /// Set this socket to the listen state
+    /// Send next chunk of data that will fit in the destination's
+    /// receive window. This might be zero
     /// </summary>
-    public void Listen()
+    private void SendIfPossible() // lib/tcp/user.c:141
     {
-        SetState(TcpSocketState.Listen);
-    }
+        lock (_lock)
+        {
+            if (!ValidStateForSend()) return; // can't send
+            if (_sendBuffer.Count() < 1) return; // nothing to send
 
-    /// <summary>
-    /// Start a connection to a remote machine.
-    /// This will return before the connection
-    /// is established. You should pump events
-    /// and wait error code to change from the
-    /// success status, or the state to become
-    /// established.
-    /// </summary>
-    public void StartConnect(IpV4Address destinationAddress, ushort destinationPort) // lib/tcp/user.c:21
+            long inflight = 0;
+            foreach (var segment in _unAckedSegments)
+            {
+                inflight += segment.Length;
+            }
+
+            long space = Max(0, _tcb.Snd.Wnd - inflight);
+            if (space <= 0)
+            {
+                Log.Info("No space in send window. Waiting for an incoming ACK");
+                return;
+            }
+
+            var total = _sendBuffer.Count();
+            var sent = SendData(_tcb.Snd.Nxt, (int)space, TcpSegmentFlags.None);
+            Log.Debug($"Sent {sent} bytes, {total - sent} remaining");
+        }
+    }
+    
+    private bool ValidStateForSend() // lib/tcp/user.c:102
     {
-        _route.RemoteAddress = destinationAddress.Copy();
-        _route.RemotePort = destinationPort;
-        
-        // Check we are in a valid state
         switch (_state)
         {
             case TcpSocketState.Established:
-            case TcpSocketState.FinWait1:
-            case TcpSocketState.FinWait2:
-            case TcpSocketState.LastAck:
-            case TcpSocketState.Closing:
             case TcpSocketState.CloseWait:
-                ErrorCode = SocketError.IsConnected;
-                throw new SocketException((int)ErrorCode);
+                return true;
             
-            case TcpSocketState.SynSent:
-            case TcpSocketState.SynReceived:
-                ErrorCode = SocketError.AlreadyInProgress;
-                throw new SocketException((int)ErrorCode);
-
             case TcpSocketState.Closed:
             case TcpSocketState.Listen:
+            case TcpSocketState.SynSent:
+            case TcpSocketState.SynReceived:
+                ErrorCode = SocketError.NotConnected;
+                return false;
+                
+            case TcpSocketState.FinWait1:
+            case TcpSocketState.FinWait2:
+            case TcpSocketState.Closing:
+            case TcpSocketState.LastAck:
             case TcpSocketState.TimeWait:
-                Log.Debug("Starting connection process");
-                break;
+                ErrorCode = SocketError.Shutdown;
+                return false;
             
             default:
                 throw new ArgumentOutOfRangeException();
         }
-        
-        // Set up initial TCB variables
-        var iss = NewTcpSequence();
-        _tcb.Iss = iss;
-        _tcb.Snd.Una = iss;
-        _tcb.Snd.Nxt = iss + 1;
-        _tcb.Rcv.Wnd = UInt16.MaxValue;
-        
-        // Ensure the state is SynSent BEFORE calling SendSyn() so that
-        // the correct retransmit timeout function is used
-        SetState(TcpSocketState.SynSent);
-        
-        SendSyn();
-        
-        // Normally, a socket connection would block here,
-        // but we are using a caller-poll convention
-        // so we just return and expect the caller to
-        // check the state periodically until there is
-        // an error code or the state becomes Established.
     }
-
-    /// <summary>
-    /// Begin the process of closing a connection.
-    /// This will return before the connection is
-    /// closed. You should call EventPump() until
-    /// the error code changes from success state
-    /// or the state becomes closed.
-    /// </summary>
-    public void StartClose() // lib/tcp/user.c:380
-    {
-        throw new NotImplementedException();
-    }
-
-    public void SendData( /* ... */) // lib/tcp/user.c:120
-    {
-        // should be blocking, wait on the auto-reset event
-        throw new NotImplementedException();
-    }
-    
-    public void ReadData( /* ... */) // lib/tcp/user.c:204
-    {
-        // should be blocking, wait on the auto-reset event
-        throw new NotImplementedException();
-    }
-
-    #region private
 
     /// <summary>
     /// Socket is idle and waiting for a connection.
@@ -366,7 +528,6 @@ public class TcpSocket
     /// </summary>
     private void EndAllReceive()
     {
-        _running = false; // TODO any receive waits should be checking this
         _readWait.Set();
     }
 
@@ -452,6 +613,8 @@ public class TcpSocket
         // Normally, we would construct some data and send it on a
         // physical device.
         // Here, we pass to a tunnel
+        
+        seg.UpdateChecksum(_route.LocalAddress.Value, _route.RemoteAddress.Value);
 
         _adaptor.Reply(seg, route);
     }
@@ -561,6 +724,11 @@ public class TcpSocket
 
             // Update the next unacknowledged segment for retransmit timeout
             var waiting = _unAckedSegments.Peek();
+            if (waiting is null)
+            {
+                _rtoEvent = null;
+                return;
+            }
 
             var data = _sendBuffer[waiting.Sequence];
             var next = new TcpTimedRtoEvent
@@ -582,7 +750,8 @@ public class TcpSocket
     /// Constructs and sends a TCP packet with the largest payload available to send,
     /// or as much as can fit in a single packet, from the socket data send queue.
     /// </summary>
-    private void SendData(uint sequence, int size, TcpSegmentFlags flags) // lib/tcp/output.c:135
+    /// <returns>Number of bytes sent</returns>
+    private int SendData(uint sequence, int size, TcpSegmentFlags flags) // lib/tcp/output.c:135
     {
         // lib/tcp/output.c:153
         var ackN = _tcb.Rcv.Nxt;
@@ -593,7 +762,7 @@ public class TcpSocket
         {
             ErrorCode = SocketError.NoData;
             Log.Error("Call to SendData, with no data in outgoing buffer");
-            return;
+            return 0;
         }
 
         var seg = new TcpSegment
@@ -636,10 +805,11 @@ public class TcpSocket
         {
             Log.Warn("No data to read");
             ErrorCode = SocketError.NoData;
-            return;
+            return 0;
         }
 
         Send(seg, _route); // lib/tcp/output.c:212
+        return seg.Payload.Length;
     }
 
     /// <summary>
@@ -825,6 +995,7 @@ public class TcpSocket
 
             // We are now "EOF"
             _readWait.Set();
+            _receiveQueue.SetComplete();
 
             Log.Debug("End of stream. Sending ACK");
             _tcb.Rcv.Nxt = segSeq + 1;
@@ -1138,6 +1309,13 @@ public class TcpSocket
         Log.Debug($"Tcp session: first byte={segSeq}, SND.WND={_tcb.Snd.Wnd}, RCV.WND={_tcb.Rcv.Wnd}");
 
         // The source does set-up of the send buffer here, but we handle it dynamically
+        
+        if (_earlyPayload.Payload.Length > 0) // Not sure if I should support this
+        {
+            Log.Warn($"Connection had {_earlyPayload.Payload.Length} bytes of early payload, will be added at seq={_earlyPayload.SequenceNumber}; current seq={segSeq}");
+            _receiveQueue.Insert(_earlyPayload);
+            _earlyPayload = new TcpSegment();
+        }
     }
 
     private bool CheckResetBit(TcpFrame frame) // lib/tcp/input.c:509
@@ -1348,6 +1526,7 @@ public class TcpSocket
 
     private static int Min(int a, int b) => a < b ? a : b;
     private static int Max(int a, int b) => a > b ? a : b;
+    private static long Max(long a, long  b) => a > b ? a : b;
 
     private void HandleSynSent(TcpFrame frame, uint segAck, bool ackOk, uint segSeq) // lib/tcp/input.c:257
     {
@@ -1455,7 +1634,7 @@ public class TcpSocket
         // get to Established
         if (frame.Tcp.Payload.Length > 0)
         {
-            _earlyPayload = frame.Tcp.Payload;
+            _earlyPayload = frame.Tcp;
         }
     }
 
@@ -1577,250 +1756,8 @@ public class TcpSocket
     private static bool SeqLt(long a, long b) => (a - b) < 0;
     private static bool SeqGt(long a, long b) => (a - b) > 0;
     private static bool SeqLtEq(long a, long b) => (a - b) <= 0;
-    private static bool SeqGtEq(long a, long b) => (a - b) >= 0;
     private static bool SeqInRange(long seq, long start, long end) => (seq - start) < (end - start);
     private static bool SeqInWindow(long seq, long start, long size) => SeqInRange(seq, start, start + size);
 
     #endregion // private
-}
-
-internal class SegmentAckList : IEnumerable<TcpTimedSequentialData>
-{
-    /// <summary>
-    /// Sequence => details
-    /// </summary>
-    private readonly Dictionary<long, TcpTimedSequentialData> _checkList = new();
-
-    private readonly object _lock = new();
-
-    public int Count
-    {
-        get
-        {
-            lock (_lock)
-            {
-                return _checkList.Count;
-            }
-        }
-    }
-
-    public IEnumerator<TcpTimedSequentialData> GetEnumerator()
-    {
-        lock (_lock)
-        {
-            var copy = _checkList.Values.ToList(); // we return a copy, so that 'Remove()' can be called in a `foreach`
-            return copy.GetEnumerator();
-        }
-    }
-
-    IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
-
-    public TcpTimedSequentialData? Peek()
-    {
-        lock (_lock)
-        {
-            if (_checkList.Count < 1) return null;
-            var least = _checkList.Keys.Min();
-            return _checkList[least];
-        }
-    }
-
-    public void Add(TcpTimedSequentialData item)
-    {
-        lock (_lock)
-        {
-            if (_checkList.ContainsKey(item.Sequence)) _checkList[item.Sequence] = item; // update with latest counter
-            else _checkList.Add(item.Sequence, item);
-        }
-    }
-
-    public void Remove(TcpTimedSequentialData data)
-    {
-        lock (_lock)
-        {
-            _checkList.Remove(data.Sequence);
-        }
-    }
-}
-
-internal class ReceiveBuffer
-{
-    private readonly object _lock = new();
-    private readonly List<TcpSegment> _segments = new();
-
-    public void Insert(TcpSegment seg)
-    {
-        lock (_lock)
-        {
-            // we will sort on read
-            _segments.Add(seg);
-        }
-    }
-
-    /// <summary>
-    /// Gets the next sequence number after the longest contiguous sequence of bytes
-    /// stored after the initial value given.
-    /// </summary>
-    /// <param name="initial">initial sequence number to count from (next byte expected)</param>
-    /// <returns>the next byte after the highest contiguous sequence number from 'initial' that is held</returns>
-    public uint ContiguousSequence(long initial) // lib/tcp/tcp.c:361
-    {
-        lock (_lock)
-        {
-            _segments.Sort((a, b) => a.SequenceNumber.CompareTo(b.SequenceNumber));
-            var position = initial;
-
-            foreach (var segment in _segments)
-            {
-                var segSeq = segment.SequenceNumber;
-                var segLen = segment.Payload.Length;
-                var segEnd = segSeq + segLen - 1;
-
-                if (SeqGtEq(position, segSeq) && SeqLtEq(position, segEnd)) // position is inside the segment
-                {
-                    position = segEnd + 1; // next byte after segment
-                }
-                else if (SeqGt(position, segEnd)) // duplicate
-                {
-                    // continue
-                }
-                else break;
-            }
-
-            return (uint)position;
-        }
-    }
-
-    private static bool SeqGtEq(long a, long b) => (a - b) >= 0;
-    private static bool SeqLtEq(long a, long b) => (a - b) <= 0;
-    private static bool SeqGt(long a, long b) => (a - b) > 0;
-}
-
-internal class SendBuffer
-{
-    private readonly object _lock = new();
-    private readonly Dictionary<long, byte[]> _segments = new();
-    public long Start { get; set; }
-
-    public SendBuffer()
-    {
-        Start = -1;
-    }
-
-    public byte[] this[long seq]
-    {
-        get
-        {
-            lock (_lock)
-            {
-                return _segments.ContainsKey(seq) ? _segments[seq] : Array.Empty<byte>();
-            }
-        }
-        set
-        {
-            lock (_lock)
-            {
-                if (Start < 0 || Start > seq) Start = seq;
-
-                if (_segments.ContainsKey(seq))
-                {
-                    // accept replacement data if it is longer than previous
-                    if (value.Length > _segments[seq].Length) _segments[seq] = value;
-                }
-                else _segments.Add(seq, value);
-            }
-        }
-    }
-
-    public long Count()
-    {
-        lock (_lock)
-        {
-            return _segments.Sum(s => s.Value.Length);
-        }
-    }
-
-    /// <summary>
-    /// Pull data from the buffer, without removing it
-    /// </summary>
-    public byte[] Pull(long offset, int maxSize)
-    {
-        lock (_lock)
-        {
-            return PullInternal(offset, maxSize);
-        }
-    }
-
-    private byte[] PullInternal(long offset, int maxSize) // lib/col/seqbuf.c:39
-    {
-        // 1. Walk along the ordered keys until we are inside the offset requested
-        // 2. Gather data in chunks until we reach the end of the buffer, or the size requested.
-        //    Note: we may have overlap in the offsets we have to account for
-
-        var empty = Array.Empty<byte>();
-        var orderedOffsets = _segments.Keys.OrderBy(k => k).ToList();
-        if (orderedOffsets.Count < 1) return empty;
-
-        int i = 0;
-        for (; i < orderedOffsets.Count; i++)
-        {
-            var start = orderedOffsets[i];
-            var chunk = _segments[start];
-            var end = start + chunk.Length;
-
-            if (start <= offset && end > offset) // found the first chunk in the range
-            {
-                break;
-            }
-        }
-
-        if (i >= orderedOffsets.Count) return empty; // can't find any matching data
-
-        var result = new List<byte>(maxSize);
-        long remaining = maxSize;
-        var loc = offset;
-        while (remaining > 0 && i < orderedOffsets.Count)
-        {
-            var start = orderedOffsets[i];
-            if (start > loc) throw new Exception("Gap in transmission stream"); // REALLY shouldn't happen
-
-            var chunkOffset = loc - start;
-            var chunk = _segments[start];
-            var available = chunk.Length - chunkOffset;
-
-            // check that this is a valid selection (in case of major overlap)
-            if (available <= 0)
-            {
-                i++;
-                continue;
-            }
-
-            var toTake = remaining < available ? remaining : available;
-
-            result.AddRange(chunk.Skip((int)chunkOffset).Take((int)toTake));
-            remaining -= toTake;
-            loc += toTake;
-            i++;
-        }
-
-        return result.ToArray();
-    }
-
-    /// <summary>
-    /// Release any chunks upto the offset point
-    /// </summary>
-    public void ConsumeTo(long newStart)
-    {
-        lock (_lock)
-        {
-            var offsets = _segments.Keys.ToList();
-            foreach (var offset in offsets)
-            {
-                var end = offset + _segments[offset].Length;
-                if (end < newStart) _segments.Remove(offset);
-            }
-
-            Start = newStart;
-        }
-    }
 }

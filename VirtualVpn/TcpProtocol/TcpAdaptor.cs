@@ -138,7 +138,7 @@ public class TcpAdaptor : ITcpAdaptor
         }
         
         // Pump through the TCP session logic
-        TcpSocket.ReceiveWithIpv4(tcp, ipv4);
+        TcpSocket.FeedIncomingPacket(tcp, ipv4);
 
         /*
         var replyPkt = new TcpSegment
