@@ -25,32 +25,40 @@ public class TcpSocket
     /// .Net standard codes for socket errors
     /// </summary>
     public SocketError ErrorCode { get; set; }
-    
+
     #region Private state
+
     /// <summary> Tunnel interface (used instead of sockets) </summary>
     private readonly ITcpAdaptor _adaptor;
+
     private volatile bool _running;
 
     /// <summary> State of this 'socket' </summary>
     private TcpSocketState _state;
+
     /// <summary> State machine variables </summary>
     private readonly TransmissionControlBlock _tcb;
+
     /// <summary> Maximum Segment Size </summary>
     private UInt16 _mss;
+
     /// <summary> Blocks of sent data, in case of retransmission </summary>
     private readonly SendBuffer _sendBuffer = new();
+
     /// <summary> Sorted list of incoming TCP packets </summary>
     private readonly ReceiveBuffer _receiveQueue = new();
+
     /// <summary> Sequence numbers of unacknowledged segments.</summary>
     private readonly SegmentAckList _unAckedSegments = new();
-    
+
     /// <summary> Retransmit Time-Out (RTO) value (calculated from _rtt) </summary>
     private TimeSpan _rto;
-    private TimeSpan _sRtt,_rttVar; // Round-trip time values
-    
+
+    private TimeSpan _sRtt, _rttVar; // Round-trip time values
+
     /// <summary> Monotonic TCP timer </summary>
     private readonly Stopwatch _timeWait;
-    
+
     /// <summary> General sync lock for this socket </summary>
     /// <remarks>The locking in here is very broad, which technically could
     /// slow us down. However, we're already slow, and correct is better than fast here.</remarks>
@@ -80,14 +88,14 @@ public class TcpSocket
     public TcpSocket(ITcpAdaptor adaptor)
     {
         ErrorCode = SocketError.Success;
-        
+
         _adaptor = adaptor;
-        
+
         _state = TcpSocketState.Closed;
         _mss = TcpDefaults.DefaultMss;
-        
+
         _timeWait = new Stopwatch();
-        
+
         _tcb = new TransmissionControlBlock();
         _route = new TcpRoute();
         _sendWait = new AutoResetEvent(true);
@@ -134,6 +142,100 @@ public class TcpSocket
     }
 
     /// <summary>
+    /// Set this socket to the listen state
+    /// </summary>
+    public void Listen()
+    {
+        SetState(TcpSocketState.Listen);
+    }
+
+    /// <summary>
+    /// Start a connection to a remote machine.
+    /// This will return before the connection
+    /// is established. You should pump events
+    /// and wait error code to change from the
+    /// success status, or the state to become
+    /// established.
+    /// </summary>
+    public void StartConnect(IpV4Address destinationAddress, ushort destinationPort) // lib/tcp/user.c:21
+    {
+        _route.RemoteAddress = destinationAddress.Copy();
+        _route.RemotePort = destinationPort;
+        
+        // Check we are in a valid state
+        switch (_state)
+        {
+            case TcpSocketState.Established:
+            case TcpSocketState.FinWait1:
+            case TcpSocketState.FinWait2:
+            case TcpSocketState.LastAck:
+            case TcpSocketState.Closing:
+            case TcpSocketState.CloseWait:
+                ErrorCode = SocketError.IsConnected;
+                throw new SocketException((int)ErrorCode);
+            
+            case TcpSocketState.SynSent:
+            case TcpSocketState.SynReceived:
+                ErrorCode = SocketError.AlreadyInProgress;
+                throw new SocketException((int)ErrorCode);
+
+            case TcpSocketState.Closed:
+            case TcpSocketState.Listen:
+            case TcpSocketState.TimeWait:
+                Log.Debug("Starting connection process");
+                break;
+            
+            default:
+                throw new ArgumentOutOfRangeException();
+        }
+        
+        // Set up initial TCB variables
+        var iss = NewTcpSequence();
+        _tcb.Iss = iss;
+        _tcb.Snd.Una = iss;
+        _tcb.Snd.Nxt = iss + 1;
+        _tcb.Rcv.Wnd = UInt16.MaxValue;
+        
+        // Ensure the state is SynSent BEFORE calling SendSyn() so that
+        // the correct retransmit timeout function is used
+        SetState(TcpSocketState.SynSent);
+        
+        SendSyn();
+        
+        // Normally, a socket connection would block here,
+        // but we are using a caller-poll convention
+        // so we just return and expect the caller to
+        // check the state periodically until there is
+        // an error code or the state becomes Established.
+    }
+
+    /// <summary>
+    /// Begin the process of closing a connection.
+    /// This will return before the connection is
+    /// closed. You should call EventPump() until
+    /// the error code changes from success state
+    /// or the state becomes closed.
+    /// </summary>
+    public void StartClose() // lib/tcp/user.c:380
+    {
+        throw new NotImplementedException();
+    }
+
+    public void SendData( /* ... */) // lib/tcp/user.c:120
+    {
+        // should be blocking, wait on the auto-reset event
+        throw new NotImplementedException();
+    }
+    
+    public void ReadData( /* ... */) // lib/tcp/user.c:204
+    {
+        // should be blocking, wait on the auto-reset event
+        throw new NotImplementedException();
+    }
+
+    #region private
+
+    /// <summary>
     /// Socket is idle and waiting for a connection.
     /// We SHOULD get a SYN as the start of the handshake.
     /// </summary>
@@ -141,14 +243,14 @@ public class TcpSocket
     {
         // lib/tcp/input.c:87
         Log.Info($"Received packet. Socket state={_state.ToString()}, {frame.Ip.Source}:{frame.Tcp.SourcePort} -> {frame.Ip.Destination}:{frame.Tcp.DestinationPort}");
-        
+
         // Ignore any reset packets
         if (frame.Tcp.Flags.FlagsSet(TcpSegmentFlags.Rst))
         {
             Log.Debug("Reset flag set. Ignoring packet.");
             return;
         }
-        
+
         // Check for ACK
         if (frame.Tcp.Flags.FlagsSet(TcpSegmentFlags.Ack))
         {
@@ -159,14 +261,14 @@ public class TcpSocket
             SendRst(frame.Tcp.AcknowledgmentNumber);
             return;
         }
-        
+
         // Make sure SYN is present
         if (frame.Tcp.Flags.FlagsClear(TcpSegmentFlags.Syn))
         {
             // lib/tcp/input.c:138
             return;
         }
-        
+
         /*
         If the SYN bit is set, check the security.  If the
         security/compartment on the incoming segment does not exactly
@@ -197,30 +299,30 @@ public class TcpSocket
         the foreign socket was not fully specified), then the
         unspecified fields should be filled in now.
          */
-        
+
         // lib/tcp/input.c:173
-        var iss = NewTcpSequence();   // initial sequence on our side
+        var iss = NewTcpSequence(); // initial sequence on our side
         var segSeq = frame.Tcp.SequenceNumber;
-        
+
         _route.LocalPort = frame.Tcp.DestinationPort; // as we are the listener
         _route.LocalAddress = frame.Ip.Destination;
         _route.RemotePort = frame.Tcp.SourcePort;
         _route.RemoteAddress = frame.Ip.Source;
-        
+
         _mss = 1460;
-        
+
         _tcb.Irs = (uint)segSeq;
         _tcb.Iss = iss;
-        
+
         _tcb.Snd.Una = iss;
         _tcb.Snd.Nxt = iss + 1;
         _tcb.Snd.Wnd = (ushort)frame.Tcp.WindowSize;
-        
+
         _tcb.Rcv.Nxt = (uint)(segSeq + 1);
         _tcb.Rcv.Wnd = UInt16.MaxValue;
-        
+
         SetState(TcpSocketState.SynReceived);
-        
+
         Log.Info("Ready for connection. Sending SYN+ACK");
         SendSynAck();
     }
@@ -228,7 +330,7 @@ public class TcpSocket
     private void SetState(TcpSocketState newState) // lib/tcp/tcp.c:178
     {
         Log.Debug($"Transition from state {_state.ToString()} to {newState.ToString()}");
-        
+
         lock (_lock)
         {
             _state = newState;
@@ -240,7 +342,7 @@ public class TcpSocket
                     // Should and any blocking calls to Receive
                     EndAllReceive();
                     break;
-                
+
                 case TcpSocketState.Closed:
                     // Should signal to the adaptor that we are gone
                     KillSession();
@@ -287,7 +389,7 @@ public class TcpSocket
     {
         // lib/tcp/input.c:44
         Log.Info($"Received packet. Socket state={_state.ToString()}, {frame.Ip.Source}:{frame.Tcp.SourcePort} -> {frame.Ip.Destination}:{frame.Tcp.DestinationPort}");
-        
+
         // Filter rules:
         // - All data in the incoming segment is discarded (there should not be any)
         // - An incoming segment containing a RST is discarded
@@ -321,10 +423,11 @@ public class TcpSocket
     private void SendEmpty(long sequence, long ackNumber, TcpSegmentFlags controlFlags) // include/netstack/tcp/tcp.h:473, lib/tcp/output.c:100
     {
         // This should go through the tunnel. We don't need to do any routing ourselves.
-        
+
         // lib/tcp/output.c:117
         var seg = new TcpSegment
-        { // lib/tcp/output.c:256
+        {
+            // lib/tcp/output.c:256
             SourcePort = _route.LocalPort,
             DestinationPort = _route.RemotePort,
             SequenceNumber = sequence,
@@ -338,9 +441,9 @@ public class TcpSocket
             Options = Array.Empty<byte>(),
             Payload = Array.Empty<byte>()
         };
-        
+
         QueueUnacknowledged(sequence, 0, controlFlags);
-        
+
         Send(seg, _route);
     }
 
@@ -349,7 +452,7 @@ public class TcpSocket
         // Normally, we would construct some data and send it on a
         // physical device.
         // Here, we pass to a tunnel
-        
+
         _adaptor.Reply(seg, route);
     }
 
@@ -361,14 +464,14 @@ public class TcpSocket
     {
         // Start re-transmission timeout if needed
         if (_unAckedSegments.Count < 1) StartRto(dataLength, flags);
-        
+
         // Don't queue segment if it is a retransmission
         if (sequence != _tcb.Snd.Nxt)
         {
             Log.Debug($"Not queueing segment for sequence {sequence} (SND.NXT={_tcb.Snd.Nxt})");
             return;
         }
-        
+
         // Don't queue empty ACK packets
         if (dataLength < 1 && flags == TcpSegmentFlags.Ack)
         {
@@ -384,13 +487,14 @@ public class TcpSocket
         }
 
         Log.Debug($"Adding segment to un-ack queue. Seq={sequence}, flags={flags.ToString()}"); // lib/tcp/output.c:238
-        
+
         // Store sequence information for the RTO
-        _unAckedSegments.Add(new TcpTimedSequentialData{
+        _unAckedSegments.Add(new TcpTimedSequentialData
+        {
             Sequence = sequence,
             Flags = flags,
         });
-        
+
         // Advance SND.NXT past this segment
         _tcb.Snd.Nxt += (uint)dataLength;
     }
@@ -398,7 +502,8 @@ public class TcpSocket
     private void StartRto(int dataLength, TcpSegmentFlags flags) // lib/tcp/retransmission.c:46
     {
         // This is a highly simplified retry clock.
-        _rtoEvent = new TcpTimedRtoEvent{
+        _rtoEvent = new TcpTimedRtoEvent
+        {
             Sequence = _tcb.Snd.Nxt,
             Length = dataLength,
             Flags = flags,
@@ -416,24 +521,24 @@ public class TcpSocket
 
             // Maximum value MAY be placed on RTO, provided it is at least 60 seconds ( https://tools.ietf.org/html/rfc6298 )
             if (_rto.TotalSeconds < 60) _backoff++;
-            
+
             var seq = evt.Sequence;
             var una = _tcb.Snd.Una;
             var end = seq + evt.Length - 1;
-            
+
             Log.Debug($"Retransmission timeout. Seq={seq}, Iss={_tcb.Iss}, data len={evt.Length}.");
-            
+
             // Retransmit a new segment starting from the latest un-acked data
             if (SeqLtEq(una, end)) // lib/tcp/retransmission.c:88
             {
                 var bot = seq - _tcb.Iss;
                 var top = end - _tcb.Iss;
                 Log.Warn($"Retransmit sequence range {bot} -> {top}");
-                
+
                 // Always exponentially backoff every time a segment has to be
                 // retransmitted. This is reset to 0 every time a valid ACK arrives (see ResetBackoff() )
                 _backoff++;
-                
+
                 // Retransmit waiting data.
                 if (evt.Length > 0)
                 {
@@ -466,9 +571,9 @@ public class TcpSocket
                 Action = RetransmissionTimeout,
                 Timeout = TcpDefaults.InitialRto.Multiply(_backoff)
             };
-                
+
             Log.Debug($"Backoff for next retransmit: {next.Timeout}");
-                
+
             _rtoEvent = next;
         }
     }
@@ -482,7 +587,7 @@ public class TcpSocket
         // lib/tcp/output.c:153
         var ackN = _tcb.Rcv.Nxt;
         flags |= TcpSegmentFlags.Ack;
-        
+
         var bytesAvailable = _sendBuffer.Count();
         if (bytesAvailable < 1)
         {
@@ -490,9 +595,10 @@ public class TcpSocket
             Log.Error("Call to SendData, with no data in outgoing buffer");
             return;
         }
-        
+
         var seg = new TcpSegment
-        { // lib/tcp/output.c:161
+        {
+            // lib/tcp/output.c:161
             SourcePort = _route.LocalPort,
             DestinationPort = _route.RemotePort,
             SequenceNumber = sequence,
@@ -506,24 +612,24 @@ public class TcpSocket
             Options = Array.Empty<byte>(),
             Payload = Array.Empty<byte>()
         };
-        
+
         // NOTE: logic here was changed from source...
-        
+
         // Find the largest possible segment payload with headers taken into account
         // then clamp the value to at most the requested payload size
         // https://tools.ietf.org/html/rfc793#section-3.7
         // (see https://tools.ietf.org/html/rfc879 for details)
         var willFitInPacket = Min(_mss, (int)bytesAvailable);
-        
+
         // Make sure we don't send more than requested
         var toSend = (size > 0) ? Min(size, willFitInPacket) : willFitInPacket;
-        
+
         // Set 'push' flag if the buffer is going to be empty
         if (toSend >= bytesAvailable) seg.Flags |= TcpSegmentFlags.Psh;
-        
+
         // Add to queue waiting for ACK
         QueueUnacknowledged(sequence, toSend, seg.Flags);
-        
+
         seg.Payload = _sendBuffer.Pull(sequence, toSend); // lib/tcp/output.c:194
 
         if (seg.Payload.Length <= 0)
@@ -532,7 +638,7 @@ public class TcpSocket
             ErrorCode = SocketError.NoData;
             return;
         }
-        
+
         Send(seg, _route); // lib/tcp/output.c:212
     }
 
@@ -543,9 +649,10 @@ public class TcpSocket
     {
         // This should go through the tunnel.
         // Syn has a lot of rate logic
-        
+
         var seg = new TcpSegment
-        { // lib/tcp/output.c:256
+        {
+            // lib/tcp/output.c:256
             SourcePort = _route.LocalPort,
             DestinationPort = _route.RemotePort,
             SequenceNumber = _tcb.Iss,
@@ -565,8 +672,10 @@ public class TcpSocket
         if (_backoff < 1)
         {
             Log.Debug("Starting SYN RTO");
-            
-            _rtoEvent = new TcpTimedRtoEvent{ // lib/tcp/output.c:79
+
+            _rtoEvent = new TcpTimedRtoEvent
+            {
+                // lib/tcp/output.c:79
                 Sequence = _tcb.Iss,
                 Length = 0,
                 Flags = TcpSegmentFlags.Syn,
@@ -574,7 +683,7 @@ public class TcpSocket
                 Timeout = TcpDefaults.InitialRto
             };
         }
-        
+
         Send(seg, _route);
     }
 
@@ -597,11 +706,11 @@ public class TcpSocket
                 _readWait.Set();
                 return;
             }
-            
+
             // Send the next SYN attempt
             _backoff++;
             SendSyn();
-            
+
             // Reset the RTO event to try again (double the previous timeout)
             eventData.Timeout = eventData.Timeout.Multiply(2);
             eventData.Timer.Restart();
@@ -626,7 +735,7 @@ public class TcpSocket
         var segAck = (uint)frame.Tcp.AcknowledgmentNumber;
         var segLen = frame.Tcp.Payload.Length;
         var segEnd = segSeq + Max(segLen - 1, 0);
-        
+
         // A segment is in-order if the sequence number is what we expect.
         // This should be the case in our VPN scenario, but not guaranteed.
         var inOrder = segSeq == _tcb.Rcv.Nxt;
@@ -645,11 +754,11 @@ public class TcpSocket
             SendAck();
             return;
         }
-        
+
         if (CheckResetBit(frame)) return;
 
         // Ignoring precedence checks
-        
+
         CheckForSynInReceptionWindow(frame, segSeq, segAck);
 
         // lib/tcp/input.c:662
@@ -664,7 +773,7 @@ public class TcpSocket
 
         // Handle actual input data
         ProcessSegmentData(frame, segLen, inOrder);
-        
+
         // Filter FIN flag
         if (DropIfFinFlagsInvalid(frame, segSeq)) return;
 
@@ -713,10 +822,10 @@ public class TcpSocket
                     break;
                 // Other states stay as-is
             }
-            
+
             // We are now "EOF"
             _readWait.Set();
-            
+
             Log.Debug("End of stream. Sending ACK");
             _tcb.Rcv.Nxt = segSeq + 1;
             SendAck();
@@ -836,7 +945,7 @@ public class TcpSocket
     private bool HandleShutdownAcks(bool inOrder)
     {
         if (!inOrder || !FinWasAcked()) return false; // lib/tcp/input.c:768
-        
+
         switch (_state)
         {
             case TcpSocketState.FinWait1: // lib/tcp/input.c:777
@@ -1023,11 +1132,11 @@ public class TcpSocket
     private void ConnectionEstablished(uint segSeq) // lib/tcp/tcp.c:198
     {
         SetState(TcpSocketState.Established);
-        
+
         _rtoEvent = null; // cancel syn-sent timer
-        
+
         Log.Debug($"Tcp session: first byte={segSeq}, SND.WND={_tcb.Snd.Wnd}, RCV.WND={_tcb.Rcv.Wnd}");
-        
+
         // The source does set-up of the send buffer here, but we handle it dynamically
     }
 
@@ -1359,18 +1468,18 @@ public class TcpSocket
             {
                 case TcpSocketState.SynSent:
                     break;
-                
+
                 default:
                     if (FinWasAcked()) // Ensure we don't try to consume the non-existent ACK byte for our FIN
                     {
                         unack--;
                     }
-                    
+
                     // Release all acknowledged bytes from send buffer
                     _sendBuffer.ConsumeTo(unack);
                     break;
             }
-            
+
             Log.Debug($"Checking {_unAckedSegments.Count} unacknowledged segments"); // lib/tcp/retransmission.c:172
 
             TcpTimedSequentialData? latest = null;
@@ -1382,11 +1491,11 @@ public class TcpSocket
                 if (SeqGt(_tcb.Snd.Una, end))
                 {
                     Log.Debug($"Removing acknowledged segment {data.Sequence - iss}..{end - iss}");
-                    
+
                     // Store the latest ACKed segment for updating the rtt
                     // Retransmitted segments should NOT be used for rtt calculation
                     if (_backoff < 1) latest = data;
-                    
+
                     _unAckedSegments.Remove(data);
                 }
             }
@@ -1399,7 +1508,7 @@ public class TcpSocket
                 Log.Debug($"Updating RTT with segment {latest.Sequence - iss}..{end - iss}");
                 UpdateRtt(latest);
             }
-            
+
             // stop RTO is there are no unacknowledged segments left
             if (_unAckedSegments.Count < 1)
             {
@@ -1413,7 +1522,7 @@ public class TcpSocket
     {
         acked.Clock.Stop();
         Log.Debug($"Round trip: {acked.Clock}");
-        
+
         // RFC 6298: Computing TCP Retransmission Timer
         // https://tools.ietf.org/html/rfc6298
 
@@ -1429,18 +1538,18 @@ public class TcpSocket
             double r = acked.Clock.ElapsedTicks;
             double rttVar = _rttVar.Ticks;
             double sRtt = _sRtt.Ticks;
-            
+
             rttVar = (1 - beta) * rttVar + beta * Math.Abs(sRtt - r);
-            sRtt = (1 - alpha) * sRtt + alpha * r; 
-            
+            sRtt = (1 - alpha) * sRtt + alpha * r;
+
             _sRtt = TimeSpan.FromTicks((long)sRtt);
             _rttVar = TimeSpan.FromTicks((long)rttVar);
         }
-        
+
         double rto = _sRtt.Ticks + (_rttVar.Ticks * 4.0);
         rto = Math.Max(rto, TcpDefaults.MinimumRto.Ticks);
         _rto = TimeSpan.FromTicks((long)rto);
-        
+
         Log.Debug($"RTO <- {_rto}");
     }
 
@@ -1462,15 +1571,17 @@ public class TcpSocket
     {
         return SeqLtEq(_tcb.Snd.Una, ackNumber) && SeqLtEq(ackNumber, _tcb.Snd.Nxt);
     }
-    
+
     // using long to save casting syntax around signed/unsigned 16&32 values
-    
-    private static bool SeqLt(long a, long b) => (a-b) < 0;
-    private static bool SeqGt(long a, long b) => (a-b) > 0;
-    private static bool SeqLtEq(long a, long b) => (a-b) <= 0;
-    private static bool SeqGtEq(long a, long  b) => (a-b) >= 0;
+
+    private static bool SeqLt(long a, long b) => (a - b) < 0;
+    private static bool SeqGt(long a, long b) => (a - b) > 0;
+    private static bool SeqLtEq(long a, long b) => (a - b) <= 0;
+    private static bool SeqGtEq(long a, long b) => (a - b) >= 0;
     private static bool SeqInRange(long seq, long start, long end) => (seq - start) < (end - start);
     private static bool SeqInWindow(long seq, long start, long size) => SeqInRange(seq, start, start + size);
+
+    #endregion // private
 }
 
 internal class SegmentAckList : IEnumerable<TcpTimedSequentialData>
@@ -1484,7 +1595,8 @@ internal class SegmentAckList : IEnumerable<TcpTimedSequentialData>
 
     public int Count
     {
-        get {
+        get
+        {
             lock (_lock)
             {
                 return _checkList.Count;
@@ -1555,9 +1667,9 @@ internal class ReceiveBuffer
     {
         lock (_lock)
         {
-            _segments.Sort((a,b) => a.SequenceNumber.CompareTo(b.SequenceNumber));
+            _segments.Sort((a, b) => a.SequenceNumber.CompareTo(b.SequenceNumber));
             var position = initial;
-            
+
             foreach (var segment in _segments)
             {
                 var segSeq = segment.SequenceNumber;
@@ -1574,16 +1686,14 @@ internal class ReceiveBuffer
                 }
                 else break;
             }
+
             return (uint)position;
         }
     }
-    private static bool SeqGtEq(long a, long  b) => (a-b) >= 0;
-    private static bool SeqLtEq(long a, long b) => (a-b) <= 0;
-    private static bool SeqGt(long a, long b) => (a-b) > 0;
-    /*
-    private static bool SeqLt(long a, long b) => (a-b) < 0;
-    private static bool SeqInRange(long seq, long start, long end) => (seq - start) < (end - start);
-    private static bool SeqInWindow(long seq, long start, long size) => SeqInRange(seq, start, start + size);*/
+
+    private static bool SeqGtEq(long a, long b) => (a - b) >= 0;
+    private static bool SeqLtEq(long a, long b) => (a - b) <= 0;
+    private static bool SeqGt(long a, long b) => (a - b) > 0;
 }
 
 internal class SendBuffer
@@ -1599,13 +1709,15 @@ internal class SendBuffer
 
     public byte[] this[long seq]
     {
-        get {
+        get
+        {
             lock (_lock)
             {
                 return _segments.ContainsKey(seq) ? _segments[seq] : Array.Empty<byte>();
             }
         }
-        set {
+        set
+        {
             lock (_lock)
             {
                 if (Start < 0 || Start > seq) Start = seq;
@@ -1633,7 +1745,6 @@ internal class SendBuffer
     /// </summary>
     public byte[] Pull(long offset, int maxSize)
     {
-        
         lock (_lock)
         {
             return PullInternal(offset, maxSize);
@@ -1645,11 +1756,11 @@ internal class SendBuffer
         // 1. Walk along the ordered keys until we are inside the offset requested
         // 2. Gather data in chunks until we reach the end of the buffer, or the size requested.
         //    Note: we may have overlap in the offsets we have to account for
-        
+
         var empty = Array.Empty<byte>();
-        var orderedOffsets = _segments.Keys.OrderBy(k=>k).ToList();
+        var orderedOffsets = _segments.Keys.OrderBy(k => k).ToList();
         if (orderedOffsets.Count < 1) return empty;
-        
+
         int i = 0;
         for (; i < orderedOffsets.Count; i++)
         {
@@ -1662,6 +1773,7 @@ internal class SendBuffer
                 break;
             }
         }
+
         if (i >= orderedOffsets.Count) return empty; // can't find any matching data
 
         var result = new List<byte>(maxSize);
@@ -1671,14 +1783,18 @@ internal class SendBuffer
         {
             var start = orderedOffsets[i];
             if (start > loc) throw new Exception("Gap in transmission stream"); // REALLY shouldn't happen
-            
+
             var chunkOffset = loc - start;
             var chunk = _segments[start];
             var available = chunk.Length - chunkOffset;
 
             // check that this is a valid selection (in case of major overlap)
-            if (available <= 0) { i++; continue; }
-            
+            if (available <= 0)
+            {
+                i++;
+                continue;
+            }
+
             var toTake = remaining < available ? remaining : available;
 
             result.AddRange(chunk.Skip((int)chunkOffset).Take((int)toTake));
@@ -1686,6 +1802,7 @@ internal class SendBuffer
             loc += toTake;
             i++;
         }
+
         return result.ToArray();
     }
 
@@ -1702,6 +1819,7 @@ internal class SendBuffer
                 var end = offset + _segments[offset].Length;
                 if (end < newStart) _segments.Remove(offset);
             }
+
             Start = newStart;
         }
     }

@@ -33,4 +33,20 @@ public class IpV4Address
         if (Value.Length < 4) return "<empty>";
         return $"{Value[0]}.{Value[1]}.{Value[2]}.{Value[3]}";
     }
+
+    /// <summary>
+    /// Create a copy of this address
+    /// </summary>
+    public IpV4Address Copy()
+    {
+        return new IpV4Address(new byte[4])
+        {
+            Value = {
+                [0] = Value[0],
+                [1] = Value[1],
+                [2] = Value[2],
+                [3] = Value[3]
+            }
+        };
+    }
 }
