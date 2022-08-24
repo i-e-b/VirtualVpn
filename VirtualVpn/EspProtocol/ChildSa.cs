@@ -61,6 +61,10 @@ public class ChildSa : ITransportTunnel
                           $" local={Bit.ToIpAddressString(tcp.LocalAddress)}:{tcp.LocalPort}. Closing");
                 CloseConnection(tcpKey);
             }
+            else
+            {
+                tcp.EventPump();
+            }
         }
     }
 

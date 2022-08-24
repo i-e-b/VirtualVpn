@@ -50,11 +50,11 @@ public class IpTrafficTests
         // TODO: test these against themselves.
         var aliceTunnel = new TestTunnel();
         var aliceAdaptor = new TestAdaptor();
-        var alice = new TcpSocket(aliceTunnel, aliceAdaptor);
+        var alice = new TcpSocket(aliceAdaptor);
         
         var bobTunnel = new TestTunnel();
         var bobAdaptor = new TestAdaptor();
-        var bob = new TcpSocket(bobTunnel, bobAdaptor);
+        var bob = new TcpSocket(bobAdaptor);
         
         //alice.ReceiveWithIpv4(segment, wrapper);
         // Required

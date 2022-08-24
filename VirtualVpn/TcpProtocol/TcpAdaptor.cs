@@ -1,5 +1,6 @@
 ﻿using System.Diagnostics;
 using System.Net;
+using System.Net.Sockets;
 using VirtualVpn.Enums;
 using VirtualVpn.EspProtocol;
 using VirtualVpn.Helpers;
@@ -60,7 +61,7 @@ public class TcpAdaptor : ITcpAdaptor
         _selfKey = selfKey;
         
         Gateway = gateway;
-        TcpSocket = new TcpSocket(transport, this);
+        TcpSocket = new TcpSocket(this);
         LastContact = new Stopwatch();
     }
 
@@ -237,5 +238,15 @@ public class TcpAdaptor : ITcpAdaptor
         
         Log.Info($"Sending message to tunnel {route.LocalAddress}:{message.SourcePort} -> {route.RemoteAddress}:{message.DestinationPort}");
         _transport.Send(reply, Gateway);
+    }
+
+    /// <summary>
+    /// Trigger time-based actions.
+    /// This should be called periodically
+    /// </summary>
+    public void EventPump()
+    {
+        TcpSocket.EventPump();
+        if (TcpSocket.ErrorCode != SocketError.Success) Log.Error($"Tcp virtual socket is in errored state: {TcpSocket.ErrorCode.ToString()}");
     }
 }

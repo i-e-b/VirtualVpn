@@ -4,7 +4,6 @@ using System.Collections;
 using System.Diagnostics;
 using System.Net.Sockets;
 using System.Security.Cryptography;
-using VirtualVpn.EspProtocol;
 using VirtualVpn.Helpers;
 using VirtualVpn.InternetProtocol;
 
@@ -29,29 +28,28 @@ public class TcpSocket
     
     #region Private state
     /// <summary> Tunnel interface (used instead of sockets) </summary>
-    private readonly ITransportTunnel _tunnel;
     private readonly ITcpAdaptor _adaptor;
     private volatile bool _running;
 
     /// <summary> State of this 'socket' </summary>
     private TcpSocketState _state;
     /// <summary> State machine variables </summary>
-    private TransmissionControlBlock _tcb;
+    private readonly TransmissionControlBlock _tcb;
     /// <summary> Maximum Segment Size </summary>
     private UInt16 _mss;
     /// <summary> Blocks of sent data, in case of retransmission </summary>
-    private SendBuffer _sendBuffer = new();
+    private readonly SendBuffer _sendBuffer = new();
     /// <summary> Sorted list of incoming TCP packets </summary>
-    private ReceiveBuffer _receiveQueue = new();
+    private readonly ReceiveBuffer _receiveQueue = new();
     /// <summary> Sequence numbers of unacknowledged segments.</summary>
-    private SegmentAckList _unAckedSegments = new();
+    private readonly SegmentAckList _unAckedSegments = new();
     
     /// <summary> Retransmit Time-Out (RTO) value (calculated from _rtt) </summary>
     private TimeSpan _rto;
-    private UInt64 _rtt,_srtt,_rttvar; // Round-trip time values
+    private TimeSpan _sRtt,_rttVar; // Round-trip time values
     
     /// <summary> Monotonic TCP timer </summary>
-    private Stopwatch _timeWait;
+    private readonly Stopwatch _timeWait;
     
     /// <summary> General sync lock for this socket </summary>
     /// <remarks>The locking in here is very broad, which technically could
@@ -66,7 +64,7 @@ public class TcpSocket
     /// <summary>
     /// Possible 'early' data from handshake
     /// </summary>
-    private byte[] _earlyPayload;
+    private byte[] _earlyPayload = Array.Empty<byte>();
 
     private int _backoff;
 
@@ -79,17 +77,17 @@ public class TcpSocket
     /// <summary>
     /// Create a new virtual TCP socket interface for the VPN tunnel
     /// </summary>
-    public TcpSocket(ITransportTunnel tunnel, ITcpAdaptor adaptor)
+    public TcpSocket(ITcpAdaptor adaptor)
     {
         ErrorCode = SocketError.Success;
         
-        _tunnel = tunnel;
         _adaptor = adaptor;
         
         _state = TcpSocketState.Closed;
         _mss = TcpDefaults.DefaultMss;
         
         _timeWait = new Stopwatch();
+        
         _tcb = new TransmissionControlBlock();
         _route = new TcpRoute();
         _sendWait = new AutoResetEvent(true);
@@ -806,7 +804,7 @@ public class TcpSocket
                 Log.Debug($"Segment queued. {segLen} bytes");
 
                 // Calculate and Acknowledge the largest contiguous segment we have
-                _tcb.Rcv.Nxt = _receiveQueue.ContiguousSequence();
+                _tcb.Rcv.Nxt = _receiveQueue.ContiguousSequence(_tcb.Rcv.Nxt);
                 SendAck();
 
                 if (inOrder)
@@ -1411,10 +1409,39 @@ public class TcpSocket
         }
     }
 
-    private void UpdateRtt(TcpTimedSequentialData latest) // lib/tcp/retransmission.c:225
+    private void UpdateRtt(TcpTimedSequentialData acked) // lib/tcp/retransmission.c:225
     {
-        throw new NotImplementedException();
-        // IEB: Continue here
+        acked.Clock.Stop();
+        Log.Debug($"Round trip: {acked.Clock}");
+        
+        // RFC 6298: Computing TCP Retransmission Timer
+        // https://tools.ietf.org/html/rfc6298
+
+        if (_sRtt.Ticks == 0) // make initial measurement
+        {
+            _sRtt = acked.Clock.Elapsed;
+            _rttVar = acked.Clock.Elapsed.Divide(2);
+        }
+        else
+        {
+            const double beta = 0.25;
+            const double alpha = 0.125;
+            double r = acked.Clock.ElapsedTicks;
+            double rttVar = _rttVar.Ticks;
+            double sRtt = _sRtt.Ticks;
+            
+            rttVar = (1 - beta) * rttVar + beta * Math.Abs(sRtt - r);
+            sRtt = (1 - alpha) * sRtt + alpha * r; 
+            
+            _sRtt = TimeSpan.FromTicks((long)sRtt);
+            _rttVar = TimeSpan.FromTicks((long)rttVar);
+        }
+        
+        double rto = _sRtt.Ticks + (_rttVar.Ticks * 4.0);
+        rto = Math.Max(rto, TcpDefaults.MinimumRto.Ticks);
+        _rto = TimeSpan.FromTicks((long)rto);
+        
+        Log.Debug($"RTO <- {_rto}");
     }
 
 
@@ -1506,18 +1533,57 @@ internal class SegmentAckList : IEnumerable<TcpTimedSequentialData>
 
 internal class ReceiveBuffer
 {
+    private readonly object _lock = new();
     private readonly List<TcpSegment> _segments = new();
 
     public void Insert(TcpSegment seg)
     {
-        // we will sort on read
-        _segments.Add(seg);
+        lock (_lock)
+        {
+            // we will sort on read
+            _segments.Add(seg);
+        }
     }
 
-    public uint ContiguousSequence() // lib/tcp/tcp.c:361
+    /// <summary>
+    /// Gets the next sequence number after the longest contiguous sequence of bytes
+    /// stored after the initial value given.
+    /// </summary>
+    /// <param name="initial">initial sequence number to count from (next byte expected)</param>
+    /// <returns>the next byte after the highest contiguous sequence number from 'initial' that is held</returns>
+    public uint ContiguousSequence(long initial) // lib/tcp/tcp.c:361
     {
-        throw new NotImplementedException();
+        lock (_lock)
+        {
+            _segments.Sort((a,b) => a.SequenceNumber.CompareTo(b.SequenceNumber));
+            var position = initial;
+            
+            foreach (var segment in _segments)
+            {
+                var segSeq = segment.SequenceNumber;
+                var segLen = segment.Payload.Length;
+                var segEnd = segSeq + segLen - 1;
+
+                if (SeqGtEq(position, segSeq) && SeqLtEq(position, segEnd)) // position is inside the segment
+                {
+                    position = segEnd + 1; // next byte after segment
+                }
+                else if (SeqGt(position, segEnd)) // duplicate
+                {
+                    // continue
+                }
+                else break;
+            }
+            return (uint)position;
+        }
     }
+    private static bool SeqGtEq(long a, long  b) => (a-b) >= 0;
+    private static bool SeqLtEq(long a, long b) => (a-b) <= 0;
+    private static bool SeqGt(long a, long b) => (a-b) > 0;
+    /*
+    private static bool SeqLt(long a, long b) => (a-b) < 0;
+    private static bool SeqInRange(long seq, long start, long end) => (seq - start) < (end - start);
+    private static bool SeqInWindow(long seq, long start, long size) => SeqInRange(seq, start, start + size);*/
 }
 
 internal class SendBuffer
