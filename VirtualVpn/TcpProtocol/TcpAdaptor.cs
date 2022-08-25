@@ -25,9 +25,9 @@ public class TcpAdaptor : ITcpAdaptor
     private readonly SenderPort _selfKey;
     
     // Transaction state triggers
-    private volatile bool _haveSentWebAppRequest;
-    private volatile bool _haveStartedShutDown;
     private volatile bool _closeCalled;
+    
+    private readonly byte[] _receiveBuffer = new byte[1800]; // big enough for a TCP packet
 
     /// <summary>
     /// Time since last packets send or received.
@@ -50,13 +50,16 @@ public class TcpAdaptor : ITcpAdaptor
     /// <summary> TcpSocket that represents the connection through the ChildSa tunnel </summary>
     public TcpSocket VirtualSocket { get; set; }
 
+    /// <summary> Operating system socket connected to the web app </summary>
+    private Socket? _realSocketToWebApp;
+    
     public TcpAdaptor(ChildSa transport, IPEndPoint gateway, SenderPort selfKey)
     {
         _transport = transport;
         _selfKey = selfKey;
-        _haveSentWebAppRequest = false;
-        _haveStartedShutDown = false;
         _closeCalled = false;
+        
+        _realSocketToWebApp = null;
         
         Gateway = gateway;
         VirtualSocket = new TcpSocket(this);
@@ -120,6 +123,7 @@ public class TcpAdaptor : ITcpAdaptor
     {
         if (_closeCalled)
         {
+            _realSocketToWebApp?.Dispose();
             _transport.TerminateConnection(_selfKey);
             Log.Trace("Repeated call to TcpAdaptor.Close()");
             return;
@@ -135,6 +139,7 @@ public class TcpAdaptor : ITcpAdaptor
     public void Closing()
     {
         Log.Trace("Started to close connection");
+        _realSocketToWebApp?.Close();
         _transport.ReleaseConnection(_selfKey);
     }
 
@@ -156,101 +161,90 @@ public class TcpAdaptor : ITcpAdaptor
         Log.Trace("### Data incoming...");
         VirtualSocket.FeedIncomingPacket(tcp, ipv4);
         VirtualSocket.EventPump(); // not strictly needed, but reduces latency a bit
-
-        // Then check states
-        if (VirtualSocket.State != TcpSocketState.Established) return true; // not connected yet
-        if (!VirtualSocket.ReadDataComplete) return true; // haven't got the entire request yet
         
-        // More packet incoming after we've sent our response?
-        if (_haveSentWebAppRequest)
-        {
-            if (VirtualSocket.BytesOfSendDataWaiting > 0)
-            {
-                Log.Debug("Have already triggered web api. This should be ACKs");
-                return true;
-            }
+        // Then check if we're ready to open a socket to the web app
+        if (VirtualSocket.State != TcpSocketState.Established) return true; // not connected yet
+        if (VirtualSocket.ReadDataState < TcpReadDataState.Cached) return true; // no data yet
+        
+        // We are ready to talk to web app. Make sure we have a real socket
+        _realSocketToWebApp ??= ConnectToWebApp();
 
-            if (_haveStartedShutDown) return true; // already closing. Just let things happen.
-            
-            // Everything is done. Close down.
-            _haveStartedShutDown = true;
-            VirtualSocket.StartClose();
-            return true;
+        // check to see if there is virtual port data to pass to the web app
+        if (VirtualSocket.BytesOfReadDataWaiting > 0)
+        {
+            MoveDataFromTunnelToWebApp();
         }
 
-        // Have all the request data, but have not passed to web app yet
-        // Flip the switch and do the transaction
-        _haveSentWebAppRequest = true;
-        var buffer = new byte[VirtualSocket.BytesOfReadDataWaiting];
-        var actual = VirtualSocket.ReadData(buffer);
-        var message = Encoding.UTF8.GetString(buffer, 0, actual);
-        Log.Info($"Complete message received, {actual} bytes of an expected {buffer.Length}.");
-        Log.Trace("\r\n" + message);
-
-        // Pass to the web app now, wait for response (maybe sending ACKs back to keep-alive?)
-        // then send the complete response back to tunnel
-        try
-        {
-            TransferToWebApp(buffer, actual);
-        }
-        catch (Exception ex)
-        {
-            Log.Error("Failed to transfer between web app and virtual socket", ex);
-            // TODO: sent some kind of error message back?
-        }
-
+        // Read reply back from web app
+        MoveDataFromWebAppBackToTunnel();
 
         return true;
     }
 
-    /// <summary>
-    /// Pass a request from the remote tunnelled connection through to the web app and back
-    /// </summary>
-    private void TransferToWebApp(byte[] buffer, int length)
+    private void MoveDataFromWebAppBackToTunnel()
+    {
+        try
+        {
+            var finalBytes = new List<byte>();
+
+            while (_realSocketToWebApp is not null
+                   && _realSocketToWebApp.Available > 0)
+            {
+                Log.Debug("Trying to receive");
+                var received = _realSocketToWebApp.Receive(_receiveBuffer);
+                if (received > 0) finalBytes.AddRange(_receiveBuffer.Take(received));
+
+                Log.Debug($"Got {received} bytes from socket");
+            }
+
+            Log.Info($"Web app replied with {finalBytes.Count} bytes of data");
+
+            var outgoingBuffer = finalBytes.ToArray();
+            Log.Trace("OUTGOING:\r\n", () => Encoding.UTF8.GetString(outgoingBuffer));
+
+            // Send reply back to virtual socket. The event pump will continue to send connection and state.
+            VirtualSocket.SendData(outgoingBuffer);
+            Log.Debug($"Virtual socket has {VirtualSocket.BytesOfSendDataWaiting} bytes remaining to send");
+            
+            VirtualSocket.EventPump(); // not strictly needed, but reduces latency a bit
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Failed to move data from Web App back to tunnel", ex);
+        }
+    }
+
+    private void MoveDataFromTunnelToWebApp()
+    {
+        try
+        {
+            // read from tunnel
+            var buffer = new byte[VirtualSocket.BytesOfReadDataWaiting];
+            var actual = VirtualSocket.ReadData(buffer);
+            Log.Info($"Complete message received, {actual} bytes of an expected {buffer.Length}.");
+            Log.Trace("INCOMING:\r\n", () => Encoding.UTF8.GetString(buffer, 0, actual));
+
+            // Send data to web app
+            var sent = _realSocketToWebApp?.Send(buffer, 0, actual, SocketFlags.None) ?? -1;
+            if (sent != actual)
+            {
+                Log.Warn($"Unexpected send length. Tried to send {actual} bytes, but transmitted {sent} bytes.");
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Failed to move data from tunnel to Web App", ex);
+        }
+    }
+
+    private Socket ConnectToWebApp()
     {
         // Connect to web app
         Log.Debug("Connecting to web app");
-        using var webApiSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+        var webApiSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
         webApiSocket.Connect(new IPAddress(Settings.WebAppIpAddress), Settings.WebAppPort);
         Log.Debug("connection up");
-        
-        // Send data to web app
-        var sent = webApiSocket.Send(buffer, 0, length, SocketFlags.None);
-        if (sent != length)
-        {
-            Log.Warn($"Unexpected send length. Tried to send {length} bytes, but transmitted {sent} bytes.");
-        }
-        
-        Log.Info("Message sent to web api, reading reply");
-        
-        // Wait for reply to become available
-        while (webApiSocket.Available <= 0)
-        {
-            Log.Debug("Waiting for web app to reply");
-            Thread.Sleep(100);
-        }
-
-        // Read reply back from web app
-        var finalBytes = new List<byte>();
-        var receiveBuffer = new byte[1800]; // big enough for a TCP packet
-        while (webApiSocket.Available > 0)
-        {
-            Log.Debug("Trying to receive");
-            var received = webApiSocket.Receive(receiveBuffer);
-            if (received > 0) finalBytes.AddRange(receiveBuffer.Take(received));
-            
-            Log.Debug($"Got {received} bytes from socket");
-        }
-
-        Log.Info($"Web app replied with {finalBytes.Count} bytes of data");
-        
-        var outgoingBuffer = finalBytes.ToArray();
-        var message = Encoding.UTF8.GetString(outgoingBuffer);
-        Log.Trace("\r\n" + message);
-        
-        // Send reply back to virtual socket. The event pump will continue to send connection and state.
-        VirtualSocket.SendData(outgoingBuffer);
-        Log.Debug($"Virtual socket has {VirtualSocket.BytesOfSendDataWaiting} bytes remaining to send");
+        return webApiSocket;
     }
 
     /// <summary>
@@ -273,7 +267,7 @@ public class TcpAdaptor : ITcpAdaptor
             HeaderLength = 5,
             ServiceType = 0,
             TotalLength = 20 + tcpPayload.Length,
-            PacketId = 0, // TODO: fix this. Should be random
+            PacketId = RandomPacketId(),
             Flags = IpV4HeaderFlags.None,
             FragmentIndex = 0,
             Ttl = 64,
@@ -292,6 +286,12 @@ public class TcpAdaptor : ITcpAdaptor
         _transport.Send(reply, Gateway);
         VirtualSocket.EventPump();
     }
+
+    /// <summary>
+    /// Random for NON-crypto use
+    /// </summary>
+    private static readonly Random _rnd = new();
+    private static int RandomPacketId() => _rnd.Next(1060, 64080);
 
     /// <summary>
     /// Trigger time-based actions.

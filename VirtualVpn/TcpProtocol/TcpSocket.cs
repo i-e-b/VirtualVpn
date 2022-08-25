@@ -51,7 +51,7 @@ public class TcpSocket
     /// or that we received a PSH flag and have all segments,
     /// either of which indicate that all data is received.
     /// </summary>
-    public bool ReadDataComplete => _receiveQueue.IsComplete;
+    public TcpReadDataState ReadDataState => _receiveQueue.ReadDataState;
 
     /// <summary>
     /// Create a new virtual TCP socket interface for the VPN tunnel
@@ -1205,7 +1205,7 @@ public class TcpSocket
                 {
                     if (frame.Tcp.Flags.FlagsSet(TcpSegmentFlags.Psh))
                     {
-                        _receiveQueue.SetComplete();
+                        _receiveQueue.PushFlagSent();
                     }
                 }
 

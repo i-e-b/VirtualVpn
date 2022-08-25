@@ -1,6 +1,6 @@
 # VirtualVpn
 
-An IKEv2 VPN gateway that presents an application as if it was on a private network
+An IKEv2/IPSEC VPN gateway that presents an application as if it was on a private network
 
 This is currently in progress.
 
@@ -32,25 +32,9 @@ https://www.rfc-editor.org/rfc/rfc9293
 
 ## Current issues & work-face
 
-### Run web-app on non-socket interface?
-
-https://gist.github.com/abgoswam/025bbf7b845259e6cbfb0671c12b51ac
-https://github.com/atlascode/Kestrel.Transport.Streams
-https://github.com/jacqueskang/IpcServiceFramework
-
-
 ### Now
 
-https://curl.se/docs/manpage.html#-d
-```
-curl -X 'POST' \
-    'http://55.55.55.55:5223/WeatherForecast/checksum' \
-    -H 'accept: */*' \
-    -H 'Content-Type: application/octet-stream' \
-    -d @filename
-```
-
-- [ ] Add POST endpoint to the test web app, and post something big to it from Curl
+- [x] Add POST endpoint to the test web app, and post something big to it from Curl
 - [ ] Need to be able to start a SA from this side
 
 ### Next
@@ -61,3 +45,15 @@ curl -X 'POST' \
 
 - [ ] Go through the collection types and make them thread safe
 - [ ] Check all "to-do" items
+
+## Helpful Bash Commands
+
+### Posting a binary file with curl
+https://curl.se/docs/manpage.html#-d
+```
+curl -X 'POST' \
+    'http://55.55.55.55:5223/WeatherForecast/checksum' \
+    -H 'accept: */*' \
+    -H 'Content-Type: application/octet-stream' \
+    -d @filename
+```

@@ -14,13 +14,15 @@ public class ReceiveBuffer
     public ReceiveBuffer()
     {
         _isReading = false;
-        IsComplete = false;
+        ReadDataState = TcpReadDataState.Waiting;
     }
 
     public void Insert(TcpSegment seg)
     {
         lock (_lock)
         {
+            if (ReadDataState < TcpReadDataState.Cached) ReadDataState = TcpReadDataState.Cached;
+            
             if (_isReading && seg.SequenceNumber < _readHead)
             {
                 Log.Warn($"Segment at sequence {seg.SequenceNumber} ignored because reading has already passed that point");
@@ -73,15 +75,30 @@ public class ReceiveBuffer
     private static bool SeqLtEq(long a, long b) => (a - b) <= 0;
     private static bool SeqGt(long a, long b) => (a - b) > 0;
 
+    /// <summary>
+    /// Signal that the socket has closed,
+    /// or we have received a FIN-flagged segment.
+    /// </summary>
     public void SetComplete()
     {
         lock (_lock)
         {
-            IsComplete = true;
+            ReadDataState = TcpReadDataState.Finalised;
         }
     }
 
-    public bool IsComplete { get; set; }
+    /// <summary>
+    /// Signal that sender has asked us to flush any caches
+    /// </summary>
+    public void PushFlagSent()
+    {
+        lock (_lock)
+        {
+            if (ReadDataState < TcpReadDataState.FlushRequest) ReadDataState = TcpReadDataState.FlushRequest;
+        }
+    }
+
+    public TcpReadDataState ReadDataState { get; set; }
 
     /// <summary>
     /// Read data into supplied buffer.
