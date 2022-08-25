@@ -83,6 +83,7 @@ public class TcpSocket
     {
         // check for any timers or queues that need driving through this socket
         
+        Log.Debug("TcpSocket.EventPump");
         var acted = SendIfPossible();
         acted |= _rtoEvent?.TriggerIfExpired() ?? false;
         acted |= _timeWait.TriggerIfExpired();
@@ -395,9 +396,18 @@ public class TcpSocket
     {
         lock (_lock)
         {
-            if (!ValidStateForSend()) return false; // can't send
-            if (!_sendBuffer.HasDataAfter(_tcb.Snd.Nxt)) return false; // nothing to send
-            
+            if (!ValidStateForSend())
+            {
+                Log.Debug("TcpSocket.SendIfPossible - wrong state for send");
+                return false; // can't send
+            }
+
+            if (!_sendBuffer.HasDataAfter(_tcb.Snd.Nxt))
+            {
+                Log.Debug("TcpSocket.SendIfPossible - I think I've sent everything");
+                return false; // nothing to send
+            }
+
             Log.Debug($"Entering SendIfPossible. Send buffer claims {_sendBuffer.Count()} bytes, some of which have not been transmitted");
 
             long inflight = 0;
