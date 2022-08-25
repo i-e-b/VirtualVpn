@@ -71,9 +71,13 @@ public class ChildSa : ITransportTunnel
 
         // Old sessions that are shutting down.
         // They are no longer keyed.
-        foreach (var oldSession in _parkedSessions)
+        foreach (var oldKey in _parkedSessions.Keys)
         {
-            oldSession.EventPump();
+            var oldSession = _parkedSessions[oldKey];
+            if (oldSession is null) continue;
+            
+            if (oldSession.VirtualSocket.State == TcpSocketState.Closed) _parkedSessions.Remove(oldKey);
+            else oldSession.EventPump();
         }
         return acted;
     }
@@ -87,7 +91,7 @@ public class ChildSa : ITransportTunnel
         var session = _tcpSessions.Remove(key);
         if (session is not null)
         {
-            _parkedSessions.Add(session);
+            _parkedSessions[key] = session;
         }
     }
 
@@ -165,7 +169,7 @@ public class ChildSa : ITransportTunnel
     private long _captureNumber;
     
     private readonly ThreadSafeMap<SenderPort, TcpAdaptor> _tcpSessions = new();
-    private readonly List<TcpAdaptor> _parkedSessions = new();
+    private readonly ThreadSafeMap<SenderPort, TcpAdaptor> _parkedSessions = new();
     
     /// <summary>
     /// Immediately remove the connection from sessions and stop event pump
@@ -174,10 +178,10 @@ public class ChildSa : ITransportTunnel
     {
         try
         {
-            var session = _tcpSessions[key];
-            _tcpSessions.Remove(key);
-
+            var session = _tcpSessions.Remove(key);
             session?.Close();
+            
+            _parkedSessions.Remove(key);
         }
         catch (Exception ex)
         {

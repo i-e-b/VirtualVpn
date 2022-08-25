@@ -120,6 +120,7 @@ public class TcpAdaptor : ITcpAdaptor
     {
         if (_closeCalled)
         {
+            _transport.TerminateConnection(_selfKey);
             Log.Trace("Repeated call to TcpAdaptor.Close()");
             return;
         }

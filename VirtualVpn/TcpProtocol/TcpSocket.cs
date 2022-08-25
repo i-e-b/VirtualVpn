@@ -574,6 +574,7 @@ public class TcpSocket
                     // Should end any blocking calls to Receive
                     _receiveQueue.SetComplete();
                     _adaptor.Closing();
+                    _timeWait.Reset();
                     break;
 
                 case TcpSocketState.Closed:
