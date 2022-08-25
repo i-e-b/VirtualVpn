@@ -24,11 +24,13 @@ public class ThreadSafeMap<TKey, TValue> where TKey : notnull
         }
     }
 
-    public void Remove(TKey key)
+    public TValue? Remove(TKey key)
     {
         lock (_lock)
         {
+            var prev = this[key];
             _dict.Remove(key);
+            return prev;
         }
     }
 

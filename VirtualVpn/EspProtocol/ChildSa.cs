@@ -11,16 +11,8 @@ namespace VirtualVpn.EspProtocol;
 
 public class ChildSa : ITransportTunnel
 {
-    private readonly byte[] _spiIn;
-    private readonly byte[] _spiOut;
-    private readonly IkeCrypto _cryptoIn;
-    private readonly IkeCrypto _cryptoOut;
-    private readonly UdpServer? _server;
-    private long _msgIdIn;
-    private long _msgIdOut;
-    private long _captureNumber;
-    
-    private readonly ThreadSafeMap<SenderPort, TcpAdaptor> _tcpSessions = new();
+    public UInt32 SpiIn { get; }
+    public UInt32 SpiOut { get; }
 
     // pvpn/server.py:18
     public ChildSa(byte[] spiIn, byte[] spiOut, IkeCrypto cryptoIn, IkeCrypto cryptoOut, UdpServer? server)
@@ -71,11 +63,122 @@ public class ChildSa : ITransportTunnel
                 acted |= tcp.EventPump();
             }
         }
+
+        // Old sessions that are shutting down.
+        // They are no longer keyed.
+        foreach (var oldSession in _parkedSessions)
+        {
+            oldSession.EventPump();
+        }
         return acted;
     }
+    
+    /// <summary>
+    /// Release the sender/port binding for the connection,
+    /// but keep pumping events until it completes shutdown.
+    /// </summary>
+    public void ReleaseConnection(SenderPort key)
+    {
+        var session = _tcpSessions.Remove(key);
+        if (session is not null)
+        {
+            _parkedSessions.Add(session);
+        }
+    }
 
-    public UInt32 SpiIn { get; set; }
-    public UInt32 SpiOut { get; set; }
+    /// <summary>
+    /// Write SPE packet for an IPv4 payload.
+    /// Encrypts and adds SPE checksum. IPv4 checksum must be written before calling
+    /// </summary>
+    public byte[] WriteSpe(IpV4Packet packet)
+    {
+        var plain = ByteSerialiser.ToBytes(packet);
+        var encrypted = _cryptoOut.EncryptEsp(plain, IpProtocol.IPV4);
+
+        CaptureTraffic(plain, "out");
+
+        var wrapper = new EspPacket{
+            Sequence = (uint)_msgIdOut,
+            Spi = SpiOut,
+            Payload = encrypted
+        };
+        
+        var message = ByteSerialiser.ToBytes(wrapper);
+        _cryptoOut.AddChecksum(message);
+        return message;
+    }
+
+    public IpV4Packet ReadSpe(byte[] encrypted, out EspPacket espPacket)
+    {
+        // sanity check
+        if (encrypted.Length < 8) throw new Exception("EspPacket too short");
+        
+        var ok = ByteSerialiser.FromBytes(encrypted, out espPacket);
+        if (!ok) throw new Exception("Failed to deserialise EspPacket");
+
+        // target check
+        if (espPacket.Spi != SpiIn) throw new Exception($"Mismatch SPI. Expected {SpiIn:x8}, got {espPacket.Spi:x8}");
+        if (espPacket.Sequence < _msgIdIn) throw new Exception($"Mismatch Sequence. Expected {_msgIdIn}, got {espPacket.Sequence}");
+        
+        // checksum
+        var checkOk = _cryptoIn.VerifyChecksum(encrypted);
+        if (!checkOk) throw new Exception("ESP Checksum failed");
+
+        // decode
+        var plain = _cryptoIn.DecryptEsp(espPacket.Payload, out var declaredProtocol);
+        
+        if (declaredProtocol != IpProtocol.IPV4) throw new Exception($"ESP delivered unsupported payload type: {declaredProtocol.ToString()}");
+        
+        CaptureTraffic(plain, "in");
+        
+        ok = ByteSerialiser.FromBytes<IpV4Packet>(plain, out var ipv4);
+        if (!ok) throw new Exception("Failed to deserialise IPv4 packet");
+        
+        return ipv4;
+    }
+    
+    /// <summary>
+    /// Send a message through the gateway.
+    /// Used by protocol layer (e.g. TCP).
+    /// IPv4 checksum must be written before calling
+    /// </summary>
+    public void Send(IpV4Packet reply, IPEndPoint gateway)
+    {
+        Log.Info("Sending reply");
+        var raw = WriteSpe(reply);
+        Reply(raw, gateway);
+    }
+    
+    
+    private readonly byte[] _spiIn;
+    private readonly byte[] _spiOut;
+    private readonly IkeCrypto _cryptoIn;
+    private readonly IkeCrypto _cryptoOut;
+    private readonly UdpServer? _server;
+    private long _msgIdIn;
+    private long _msgIdOut;
+    private long _captureNumber;
+    
+    private readonly ThreadSafeMap<SenderPort, TcpAdaptor> _tcpSessions = new();
+    private readonly List<TcpAdaptor> _parkedSessions = new();
+    
+    /// <summary>
+    /// Immediately remove the connection from sessions and stop event pump
+    /// </summary>
+    internal void CloseConnection(SenderPort key)
+    {
+        try
+        {
+            var session = _tcpSessions[key];
+            _tcpSessions.Remove(key);
+
+            session?.Close();
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"Failed to close TCP session: {ex}");
+        }
+    }
 
     public void HandleSpe(byte[] data, IPEndPoint sender)
     {
@@ -226,21 +329,6 @@ public class ChildSa : ITransportTunnel
         var encryptedData = WriteSpe(ipv4Reply);
         Reply(encryptedData, sender);
     }
-
-    internal void CloseConnection(SenderPort key)
-    {
-        try
-        {
-            var session = _tcpSessions[key];
-            _tcpSessions.Remove(key);
-
-            session?.Close();
-        }
-        catch (Exception ex)
-        {
-            Log.Error($"Failed to close TCP session: {ex}");
-        }
-    }
     
     private void Reply(byte[] message, IPEndPoint to)
     {
@@ -253,69 +341,6 @@ public class ChildSa : ITransportTunnel
         _server.SendRaw(message, to);
 
         _msgIdOut++;
-    }
-    
-    /// <summary>
-    /// Send a message through the gateway.
-    /// Used by protocol layer (e.g. TCP).
-    /// IPv4 checksum must be written before calling
-    /// </summary>
-    public void Send(IpV4Packet reply, IPEndPoint gateway)
-    {
-        Log.Info("Sending reply");
-        var raw = WriteSpe(reply);
-        Reply(raw, gateway);
-    }
-
-    /// <summary>
-    /// Write SPE packet for an IPv4 payload.
-    /// Encrypts and adds SPE checksum. IPv4 checksum must be written before calling
-    /// </summary>
-    public byte[] WriteSpe(IpV4Packet packet)
-    {
-        var plain = ByteSerialiser.ToBytes(packet);
-        var encrypted = _cryptoOut.EncryptEsp(plain, IpProtocol.IPV4);
-
-        CaptureTraffic(plain, "out");
-
-        var wrapper = new EspPacket{
-            Sequence = (uint)_msgIdOut,
-            Spi = SpiOut,
-            Payload = encrypted
-        };
-        
-        var message = ByteSerialiser.ToBytes(wrapper);
-        _cryptoOut.AddChecksum(message);
-        return message;
-    }
-
-    public IpV4Packet ReadSpe(byte[] encrypted, out EspPacket espPacket)
-    {
-        // sanity check
-        if (encrypted.Length < 8) throw new Exception("EspPacket too short");
-        
-        var ok = ByteSerialiser.FromBytes(encrypted, out espPacket);
-        if (!ok) throw new Exception("Failed to deserialise EspPacket");
-
-        // target check
-        if (espPacket.Spi != SpiIn) throw new Exception($"Mismatch SPI. Expected {SpiIn:x8}, got {espPacket.Spi:x8}");
-        if (espPacket.Sequence < _msgIdIn) throw new Exception($"Mismatch Sequence. Expected {_msgIdIn}, got {espPacket.Sequence}");
-        
-        // checksum
-        var checkOk = _cryptoIn.VerifyChecksum(encrypted);
-        if (!checkOk) throw new Exception("ESP Checksum failed");
-
-        // decode
-        var plain = _cryptoIn.DecryptEsp(espPacket.Payload, out var declaredProtocol);
-        
-        if (declaredProtocol != IpProtocol.IPV4) throw new Exception($"ESP delivered unsupported payload type: {declaredProtocol.ToString()}");
-        
-        CaptureTraffic(plain, "in");
-        
-        ok = ByteSerialiser.FromBytes<IpV4Packet>(plain, out var ipv4);
-        if (!ok) throw new Exception("Failed to deserialise IPv4 packet");
-        
-        return ipv4;
     }
 
     private void CaptureTraffic(byte[] plain, string direction)

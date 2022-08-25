@@ -117,8 +117,14 @@ public class TcpAdaptor : ITcpAdaptor
     public void Close()
     {
         Log.Info("Ending connection");
-        // TODO: shut down this connection
+        VirtualSocket.StartClose();
         _transport.CloseConnection(_selfKey);
+    }
+
+    public void Closing()
+    {
+        Log.Trace("Started to close connection");
+        _transport.ReleaseConnection(_selfKey);
     }
 
     /// <summary>
@@ -288,15 +294,18 @@ public class TcpAdaptor : ITcpAdaptor
             
             case SocketError.Disconnecting:
                 Log.Info($"Tcp virtual socket is closing: {VirtualSocket.ErrorCode.ToString()}");
+                _transport.ReleaseConnection(_selfKey);
                 return acted;
             
             case SocketError.NotConnected:
             case SocketError.Shutdown:
                 Log.Info($"Tcp virtual socket is closed: {VirtualSocket.ErrorCode.ToString()}");
+                _transport.ReleaseConnection(_selfKey);
                 return acted;
             
             default:
                 Log.Error($"Tcp virtual socket is in errored state: {VirtualSocket.ErrorCode.ToString()}");
+                _transport.ReleaseConnection(_selfKey);
                 return false;
         }
     }

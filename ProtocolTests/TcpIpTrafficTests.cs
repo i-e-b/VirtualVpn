@@ -314,7 +314,7 @@ public class TcpIpTrafficTests
         Log.SetLevel(LogLevel.Everything);
         
         const string sendMessage = "This is a short message from the client to the server";
-        TwoConnectedSockets(out var server, out var serverNet, out var client, out var clientNet);
+        TwoConnectedSockets(out _, out _, out var client, out var clientNet);
 
         // Send a message
         var senderBuffer = Encoding.UTF8.GetBytes(sendMessage);
@@ -562,6 +562,8 @@ public class TestAdaptor : ITcpAdaptor
     {
         IsClosed = true;
     }
+
+    public void Closing() { }
 
     public void Reply(TcpSegment seg, TcpRoute route)
     {

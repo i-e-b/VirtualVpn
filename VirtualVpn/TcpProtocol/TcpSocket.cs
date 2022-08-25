@@ -561,8 +561,9 @@ public class TcpSocket
             {
                 case TcpSocketState.Closing:
                 case TcpSocketState.CloseWait:
-                    // Should and any blocking calls to Receive
+                    // Should end any blocking calls to Receive
                     _receiveQueue.SetComplete();
+                    _adaptor.Closing();
                     break;
 
                 case TcpSocketState.Closed:
