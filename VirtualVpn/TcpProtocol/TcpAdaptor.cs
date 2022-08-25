@@ -218,6 +218,7 @@ public class TcpAdaptor : ITcpAdaptor
     public bool EventPump()
     {
         var acted = TcpSocket.EventPump();
+        Log.Debug($"Ran socket event pump. {(acted?"Action taken":"No actions were taken")}");
 
         switch (TcpSocket.ErrorCode)
         {

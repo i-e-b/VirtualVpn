@@ -396,7 +396,6 @@ public class TcpSocket
         lock (_lock)
         {
             if (!ValidStateForSend()) return false; // can't send
-            
             if (!_sendBuffer.HasDataAfter(_tcb.Snd.Nxt)) return false; // nothing to send
             
             Log.Debug($"Entering SendIfPossible. Send buffer claims {_sendBuffer.Count()} bytes, some of which have not been transmitted");
@@ -429,17 +428,18 @@ public class TcpSocket
             case TcpSocketState.CloseWait:
                 return true;
             
-            case TcpSocketState.Closed:
             case TcpSocketState.Listen:
             case TcpSocketState.SynSent:
             case TcpSocketState.SynReceived:
                 return false;
                 
+            case TcpSocketState.Closed:
             case TcpSocketState.FinWait1:
             case TcpSocketState.FinWait2:
             case TcpSocketState.Closing:
             case TcpSocketState.LastAck:
             case TcpSocketState.TimeWait:
+                if (_sendBuffer.RemainingData() > 0) Log.Warn($"Buffer has data remaining, but is in state={_state.ToString()}, so won't send.");
                 return false;
             
             default:

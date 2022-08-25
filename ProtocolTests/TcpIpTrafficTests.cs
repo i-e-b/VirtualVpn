@@ -11,7 +11,7 @@ using VirtualVpn.TcpProtocol;
 namespace ProtocolTests;
 
 [TestFixture]
-public class IpTrafficTests
+public class TcpIpTrafficTests
 {
     [Test]
     public void tcp_payload_checksum()
