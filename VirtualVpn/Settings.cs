@@ -11,6 +11,8 @@ public static class Settings
     /// <summary>
     /// Declared IP address of this VPN node.
     /// It must match what is in ipsec.conf, otherwise auth will fail.
+    /// <p></p>
+    /// This does NOT need to be a real machine's address.
     /// </summary>
     public static readonly byte[] LocalIpAddress = { 192, 168, 0, 2 }; // Hans
     //public static readonly byte[] LocalIpAddress = { 185, 81, 252, 44 }; // Behind NAT
@@ -55,7 +57,7 @@ public static class Settings
     public const int WebAppPort = 5223;
     
     /// <summary>
-    /// Jump address
+    /// IPv4 address of the app we're tunnelling. If on the same machine, use 127.0.0.1
     /// </summary>
-    public static readonly byte[] JumpIpAddress = { 159,69,13,126}; // Gerty
+    public static readonly byte[] WebAppIpAddress = { 127, 0, 0, 1 };
 }

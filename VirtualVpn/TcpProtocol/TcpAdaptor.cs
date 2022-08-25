@@ -11,7 +11,7 @@ namespace VirtualVpn.TcpProtocol;
 
 /// <summary>
 /// Manages a single TCP session over a virtual connection through a ChildSA tunnel.
-/// The actual TCP logic starts in <see cref="TcpSocket"/>
+/// The actual TCP logic starts in <see cref="VirtualSocket"/>
 /// https://en.wikipedia.org/wiki/Transmission_Control_Protocol
 /// </summary>
 public class TcpAdaptor : ITcpAdaptor
@@ -54,7 +54,10 @@ public class TcpAdaptor : ITcpAdaptor
     /// </summary>
     public int LocalPort { get; private set; }
 
-    public TcpSocket TcpSocket { get; set; }
+    /// <summary>
+    /// TcpSocket that represents the connection through the ChildSa tunnel
+    /// </summary>
+    public TcpSocket VirtualSocket { get; set; }
 
     public TcpAdaptor(ChildSa transport, IPEndPoint gateway, SenderPort selfKey)
     {
@@ -62,7 +65,7 @@ public class TcpAdaptor : ITcpAdaptor
         _selfKey = selfKey;
         
         Gateway = gateway;
-        TcpSocket = new TcpSocket(this);
+        VirtualSocket = new TcpSocket(this);
         LastContact = new Stopwatch();
     }
 
@@ -73,7 +76,7 @@ public class TcpAdaptor : ITcpAdaptor
     {
         Log.Debug("TCP session initiation");
         
-        TcpSocket.Listen(); // must be in this state, or it will try to close the connection
+        VirtualSocket.Listen(); // must be in this state, or it will try to close the connection
 
         var ok = HandleMessage(ipv4, out var tcp);
         if (!ok)
@@ -141,26 +144,63 @@ public class TcpAdaptor : ITcpAdaptor
         }
         
         // Pump through the TCP session logic
-        TcpSocket.FeedIncomingPacket(tcp, ipv4);
-        TcpSocket.EventPump();
+        VirtualSocket.FeedIncomingPacket(tcp, ipv4);
+        VirtualSocket.EventPump();
 
-        if (TcpSocket.State == TcpSocketState.Established
-         && TcpSocket.ReadDataComplete)
+        if (VirtualSocket.State == TcpSocketState.Established
+         && VirtualSocket.ReadDataComplete)
         {
-            var buffer = new byte[TcpSocket.BytesOfReadDataWaiting];
-            var actual = TcpSocket.ReadData(buffer);
+            var buffer = new byte[VirtualSocket.BytesOfReadDataWaiting];
+            var actual = VirtualSocket.ReadData(buffer);
             var message = Encoding.UTF8.GetString(buffer, 0, actual);
             Log.Warn($"Complete message received, {actual} bytes of an expected {buffer.Length}. Message:\r\n{message}");
             
-            // TODO: pass to the web app now, wait for response (maybe sending ACKs back to keep-alive?)
-            //       then send the complete response back to tunnel
-            
-            // FAKE for now
-            Log.Warn("Sending fake response");
-            TcpSocket.SendData(Encoding.UTF8.GetBytes("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 9\r\n\r\n\r\nHello\r\n"));
+            // Pass to the web app now, wait for response (maybe sending ACKs back to keep-alive?)
+            // then send the complete response back to tunnel
+            try
+            {
+                TransferToWebApp(buffer, actual);
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Failed to transfer between web app and virtual socket", ex);
+                // TODO: sent some kind of error message back.
+            }
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Pass a request from the remote tunnelled connection through to the web app and back
+    /// </summary>
+    private void TransferToWebApp(byte[] buffer, int length)
+    {
+        // Connect to web app
+        using var webApiSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+        webApiSocket.Connect(new IPAddress(Settings.WebAppIpAddress), Settings.WebAppPort);
+        
+        // Send data to web app
+        var sent = webApiSocket.Send(buffer, 0, length, SocketFlags.None);
+        if (sent != length)
+        {
+            Log.Warn($"Unexpected send length. Tried to send {length} bytes, but transmitted {sent} bytes.");
+        }
+        
+        // Read reply back from web app
+        var finalBytes = new List<byte>();
+        var receiveBuffer = new byte[1800]; // big enough for a TCP packet
+        int received;
+        do
+        {
+            received = webApiSocket.Receive(receiveBuffer);
+            if (received > 0) finalBytes.AddRange(receiveBuffer.Take(received));
+        } while (received > 0);
+        
+        Log.Info($"Web app replied with {finalBytes.Count} bytes of data");
+        
+        // Send reply back to virtual socket. The event pump will continue to send connection and state.
+        VirtualSocket.SendData(finalBytes.ToArray());
     }
 
     /// <summary>
@@ -200,7 +240,7 @@ public class TcpAdaptor : ITcpAdaptor
         
         Log.Info($"Sending message to tunnel {route.LocalAddress}:{message.SourcePort} -> {route.RemoteAddress}:{message.DestinationPort}");
         _transport.Send(reply, Gateway);
-        TcpSocket.EventPump();
+        VirtualSocket.EventPump();
     }
 
     /// <summary>
@@ -211,26 +251,26 @@ public class TcpAdaptor : ITcpAdaptor
     /// </summary>
     public bool EventPump()
     {
-        var acted = TcpSocket.EventPump();
+        var acted = VirtualSocket.EventPump();
         Log.Debug($"Ran socket event pump. {(acted?"Action taken":"No actions were taken")}");
 
-        switch (TcpSocket.ErrorCode)
+        switch (VirtualSocket.ErrorCode)
         {
             case SocketError.Success:
             case SocketError.IsConnected:
                 return acted;
             
             case SocketError.Disconnecting:
-                Log.Info($"Tcp virtual socket is closing: {TcpSocket.ErrorCode.ToString()}");
+                Log.Info($"Tcp virtual socket is closing: {VirtualSocket.ErrorCode.ToString()}");
                 return acted;
             
             case SocketError.NotConnected:
             case SocketError.Shutdown:
-                Log.Info($"Tcp virtual socket is closed: {TcpSocket.ErrorCode.ToString()}");
+                Log.Info($"Tcp virtual socket is closed: {VirtualSocket.ErrorCode.ToString()}");
                 return acted;
             
             default:
-                Log.Error($"Tcp virtual socket is in errored state: {TcpSocket.ErrorCode.ToString()}");
+                Log.Error($"Tcp virtual socket is in errored state: {VirtualSocket.ErrorCode.ToString()}");
                 return false;
         }
     }
