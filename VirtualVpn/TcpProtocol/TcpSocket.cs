@@ -7,7 +7,7 @@ using VirtualVpn.InternetProtocol;
 
 namespace VirtualVpn.TcpProtocol;
 
-/*
+/*Tcp virtual socket is closed:
  https://blog.cloudflare.com/syn-packet-handling-in-the-wild/
  */
 
@@ -82,7 +82,13 @@ public class TcpSocket
     public bool EventPump()
     {
         // check for any timers or queues that need driving through this socket
-        
+
+        if (_state == TcpSocketState.Closed && _stateTransitions > 0)
+        {
+            Log.Trace($"Event pump called, but this socket is closed after {_stateTransitions} states. Calling adaptor to release.");
+            _adaptor.Close();
+        }
+
         Log.Trace("TcpSocket.EventPump");
         var acted = SendIfPossible();
         acted |= _rtoEvent?.TriggerIfExpired() ?? false;
@@ -352,6 +358,9 @@ public class TcpSocket
     /// </summary>
     private readonly TcpTimedEvent _timeWait;
 
+    /// <summary> Number of times we've changed state </summary>
+    private int _stateTransitions;
+
     #endregion
 
     #region private
@@ -398,7 +407,7 @@ public class TcpSocket
         {
             if (!ValidStateForSend())
             {
-                Log.Trace("TcpSocket.SendIfPossible - wrong state for send");
+                Log.Trace($"TcpSocket.SendIfPossible - wrong state for send. State={_state.ToString()}, code={ErrorCode.ToString()}");
                 return false; // can't send
             }
 
@@ -552,6 +561,7 @@ public class TcpSocket
     private void SetState(TcpSocketState newState) // lib/tcp/tcp.c:178
     {
         Log.Trace($"Transition from state {_state.ToString()} to {newState.ToString()}");
+        _stateTransitions++;
 
         lock (_lock)
         {

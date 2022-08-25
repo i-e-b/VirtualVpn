@@ -56,12 +56,12 @@ public class ChildSa : ITransportTunnel
             {
                 Log.Debug($"Old session: {tcp.LastContact.Elapsed}; remote={Bit.ToIpAddressString(tcp.RemoteAddress)}:{tcp.RemotePort}," +
                           $" local={Bit.ToIpAddressString(tcp.LocalAddress)}:{tcp.LocalPort}. Closing");
-                CloseConnection(tcpKey);
+                TerminateConnection(tcpKey);
             }
             else if (tcp.VirtualSocket.State == TcpSocketState.Closed)
             {
                 Log.Debug($"Old session closed: {Bit.ToIpAddressString(tcp.RemoteAddress)}:{tcp.RemotePort} -> {Bit.ToIpAddressString(tcp.LocalAddress)}:{tcp.LocalPort}");
-                CloseConnection(tcpKey);
+                TerminateConnection(tcpKey);
             }
             else
             {
@@ -170,7 +170,7 @@ public class ChildSa : ITransportTunnel
     /// <summary>
     /// Immediately remove the connection from sessions and stop event pump
     /// </summary>
-    internal void CloseConnection(SenderPort key)
+    internal void TerminateConnection(SenderPort key)
     {
         try
         {

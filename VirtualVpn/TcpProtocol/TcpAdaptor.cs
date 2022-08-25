@@ -128,7 +128,7 @@ public class TcpAdaptor : ITcpAdaptor
         
         Log.Info("Ending connection");
         VirtualSocket.StartClose();
-        _transport.CloseConnection(_selfKey);
+        _transport.TerminateConnection(_selfKey);
     }
 
     public void Closing()
@@ -303,18 +303,26 @@ public class TcpAdaptor : ITcpAdaptor
                 return acted;
             
             case SocketError.Disconnecting:
-                Log.Info($"Tcp virtual socket is closing: {VirtualSocket.ErrorCode.ToString()}");
+                Log.Info($"Tcp virtual socket is closing: code={VirtualSocket.ErrorCode.ToString()}, state={VirtualSocket.State.ToString()}");
                 _transport.ReleaseConnection(_selfKey);
                 return acted;
             
             case SocketError.NotConnected:
             case SocketError.Shutdown:
-                Log.Info($"Tcp virtual socket is closed: {VirtualSocket.ErrorCode.ToString()}");
-                _transport.ReleaseConnection(_selfKey);
+                Log.Info($"Tcp virtual socket is closed: code={VirtualSocket.ErrorCode.ToString()}, state={VirtualSocket.State.ToString()}");
+                if (VirtualSocket.State == TcpSocketState.Closing)
+                {
+                    _transport.TerminateConnection(_selfKey);
+                }
+                else
+                {
+                    _transport.ReleaseConnection(_selfKey);
+                }
+
                 return acted;
             
             default:
-                Log.Error($"Tcp virtual socket is in errored state: {VirtualSocket.ErrorCode.ToString()}");
+                Log.Error($"Tcp virtual socket is in errored state: code={VirtualSocket.ErrorCode.ToString()}, state={VirtualSocket.State.ToString()}");
                 _transport.ReleaseConnection(_selfKey);
                 return false;
         }
