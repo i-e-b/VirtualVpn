@@ -185,7 +185,7 @@ public class TcpAdaptor : ITcpAdaptor
         var actual = VirtualSocket.ReadData(buffer);
         var message = Encoding.UTF8.GetString(buffer, 0, actual);
         Log.Info($"Complete message received, {actual} bytes of an expected {buffer.Length}.");
-        Log.Trace(message);
+        Log.Trace("\r\n" + message);
 
         // Pass to the web app now, wait for response (maybe sending ACKs back to keep-alive?)
         // then send the complete response back to tunnel
@@ -246,7 +246,7 @@ public class TcpAdaptor : ITcpAdaptor
         
         var outgoingBuffer = finalBytes.ToArray();
         var message = Encoding.UTF8.GetString(outgoingBuffer);
-        Log.Trace(message);
+        Log.Trace("\r\n" + message);
         
         // Send reply back to virtual socket. The event pump will continue to send connection and state.
         VirtualSocket.SendData(outgoingBuffer);
