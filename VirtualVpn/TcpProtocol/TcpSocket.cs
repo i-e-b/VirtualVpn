@@ -53,75 +53,6 @@ public class TcpSocket
     /// </summary>
     public bool ReadDataComplete => _receiveQueue.IsComplete;
 
-    #region Private state
-
-    /// <summary> Tunnel interface (used instead of sockets) </summary>
-    private readonly ITcpAdaptor _adaptor;
-
-    /// <summary> State of this 'socket' </summary>
-    private TcpSocketState _state;
-
-    /// <summary> State machine variables </summary>
-    private readonly TransmissionControlBlock _tcb;
-
-    /// <summary> Maximum Segment Size </summary>
-    private UInt16 _mss;
-
-    /// <summary> Blocks of sent data, in case of retransmission </summary>
-    private readonly SendBuffer _sendBuffer = new();
-
-    /// <summary> Sorted list of incoming TCP packets </summary>
-    private readonly ReceiveBuffer _receiveQueue = new();
-
-    /// <summary> Sequence numbers of unacknowledged segments.</summary>
-    private readonly SegmentAckList _unAckedSegments = new();
-
-    /// <summary> Retransmit Time-Out (RTO) value (calculated from _rtt) </summary>
-    private TimeSpan _rto;
-
-    private TimeSpan _sRtt, _rttVar; // Round-trip time values
-
-    /// <summary> General sync lock for this socket </summary>
-    /// <remarks>The locking in here is very broad, which technically could
-    /// slow us down. However, we're already slow, and correct is better than fast here.</remarks>
-    private readonly object _lock = new();
-
-    /// <summary>
-    /// Captured routing information from start of connection
-    /// </summary>
-    private readonly TcpRoute _route;
-
-    /// <summary>
-    /// Possible 'early' data from handshake
-    /// </summary>
-    private TcpSegment _earlyPayload = new();
-
-    /// <summary>
-    /// Rate limiting factor
-    /// </summary>
-    private int _backoff;
-
-    /// <summary>
-    /// True if we are the active party (requester, initiator, client)
-    /// False if we are the passive (listener, receiver, server)
-    /// </summary>
-    private bool _isActive;
-    
-    /// <summary>
-    /// Retransmit event timer. Null if all messages are acknowledged.
-    /// </summary>
-    private TcpTimedEvent? _rtoEvent; // most recent retransmit timeout, if any
-
-    /// <summary>
-    /// Monotonic TCP waiting timer. Null if nothing is waiting.
-    /// </summary>
-    private readonly TcpTimedEvent _timeWait;
-    
-    private readonly AutoResetEvent _sendWait;
-    private readonly AutoResetEvent _readWait;
-
-    #endregion
-
     /// <summary>
     /// Create a new virtual TCP socket interface for the VPN tunnel
     /// </summary>
@@ -140,21 +71,22 @@ public class TcpSocket
 
         _tcb = new TransmissionControlBlock();
         _route = new TcpRoute();
-        _sendWait = new AutoResetEvent(true);
-        _readWait = new AutoResetEvent(true);
     }
 
     /// <summary>
     /// Drive any time-based functions.
     /// This needs to be called periodically.
+    /// <p></p>
+    /// Returns true if any action was taken.
     /// </summary>
-    public void EventPump()
+    public bool EventPump()
     {
         // check for any timers or queues that need driving through this socket
         
-        SendIfPossible();
-        _rtoEvent?.TriggerIfExpired();
-        _timeWait.TriggerIfExpired();
+        var acted = SendIfPossible();
+        acted |= _rtoEvent?.TriggerIfExpired() ?? false;
+        acted |= _timeWait.TriggerIfExpired();
+        return acted;
     }
 
     /// <summary>
@@ -355,6 +287,72 @@ public class TcpSocket
         _timeWait.ForceSet();
     }
 
+    #region Private state
+
+    /// <summary> Tunnel interface (used instead of sockets) </summary>
+    private readonly ITcpAdaptor _adaptor;
+
+    /// <summary> State of this 'socket' </summary>
+    private TcpSocketState _state;
+
+    /// <summary> State machine variables </summary>
+    private readonly TransmissionControlBlock _tcb;
+
+    /// <summary> Maximum Segment Size </summary>
+    private UInt16 _mss;
+
+    /// <summary> Blocks of sent data, in case of retransmission </summary>
+    private readonly SendBuffer _sendBuffer = new();
+
+    /// <summary> Sorted list of incoming TCP packets </summary>
+    private readonly ReceiveBuffer _receiveQueue = new();
+
+    /// <summary> Sequence numbers of unacknowledged segments.</summary>
+    private readonly SegmentAckList _unAckedSegments = new();
+
+    /// <summary> Retransmit Time-Out (RTO) value (calculated from _rtt) </summary>
+    private TimeSpan _rto;
+
+    private TimeSpan _sRtt, _rttVar; // Round-trip time values
+
+    /// <summary> General sync lock for this socket </summary>
+    /// <remarks>The locking in here is very broad, which technically could
+    /// slow us down. However, we're already slow, and correct is better than fast here.</remarks>
+    private readonly object _lock = new();
+
+    /// <summary>
+    /// Captured routing information from start of connection
+    /// </summary>
+    private readonly TcpRoute _route;
+
+    /// <summary>
+    /// Possible 'early' data from handshake
+    /// </summary>
+    private TcpSegment _earlyPayload = new();
+
+    /// <summary>
+    /// Rate limiting factor
+    /// </summary>
+    private int _backoff;
+
+    /// <summary>
+    /// True if we are the active party (requester, initiator, client)
+    /// False if we are the passive (listener, receiver, server)
+    /// </summary>
+    private bool _isActive;
+    
+    /// <summary>
+    /// Retransmit event timer. Null if all messages are acknowledged.
+    /// </summary>
+    private TcpTimedEvent? _rtoEvent; // most recent retransmit timeout, if any
+
+    /// <summary>
+    /// Monotonic TCP waiting timer. Null if nothing is waiting.
+    /// </summary>
+    private readonly TcpTimedEvent _timeWait;
+
+    #endregion
+
     #region private
     
 
@@ -389,15 +387,17 @@ public class TcpSocket
 
     /// <summary>
     /// Send next chunk of data that will fit in the destination's
-    /// receive window. This might be zero
+    /// receive window. This might be zero.
+    /// <p></p>
+    /// Returns true if an action was attempted
     /// </summary>
-    private void SendIfPossible() // lib/tcp/user.c:141
+    private bool SendIfPossible() // lib/tcp/user.c:141
     {
         lock (_lock)
         {
-            if (!ValidStateForSend()) return; // can't send
+            if (!ValidStateForSend()) return false; // can't send
             
-            if (!_sendBuffer.HasDataAfter(_tcb.Snd.Nxt)) return; // nothing to send
+            if (!_sendBuffer.HasDataAfter(_tcb.Snd.Nxt)) return false; // nothing to send
             
             Log.Debug($"Entering SendIfPossible. Send buffer claims {_sendBuffer.Count()} bytes, some of which have not been transmitted");
 
@@ -411,12 +411,13 @@ public class TcpSocket
             if (space <= 0)
             {
                 Log.Info("No space in send window. Waiting for an incoming ACK");
-                return;
+                return true; // didn't take an action, but we want to
             }
 
             var total = _sendBuffer.Count();
             var sent = SendData(sequence: _tcb.Snd.Nxt, maxSize: (int)space, flags: TcpSegmentFlags.None, isRetransmit: false);
             Log.Debug($"SendIfPossible - sent {sent} bytes, {total - sent} remaining");
+            return true;
         }
     }
     
@@ -553,7 +554,7 @@ public class TcpSocket
                 case TcpSocketState.Closing:
                 case TcpSocketState.CloseWait:
                     // Should and any blocking calls to Receive
-                    EndAllReceive();
+                    _receiveQueue.SetComplete();
                     break;
 
                 case TcpSocketState.Closed:
@@ -573,14 +574,6 @@ public class TcpSocket
         _timeWait.Clear();
         _rtoEvent = null;
         _adaptor.Close();
-    }
-
-    /// <summary>
-    /// cancel any blocking receive calls
-    /// </summary>
-    private void EndAllReceive()
-    {
-        _readWait.Set();
     }
 
     /// <summary>
@@ -932,8 +925,6 @@ public class TcpSocket
             {
                 SetState(TcpSocketState.Closed);
                 ErrorCode = SocketError.TimedOut;
-                _sendWait.Set();
-                _readWait.Set();
                 return;
             }
 
@@ -1072,7 +1063,6 @@ public class TcpSocket
         }
 
         // We are now "EOF"
-        _readWait.Set();
         _receiveQueue.SetComplete();
 
         Log.Debug("End of stream. Sending ACK");
@@ -1197,8 +1187,6 @@ public class TcpSocket
                     {
                         _receiveQueue.SetComplete();
                     }
-
-                    _readWait.Set(); // unlock readers
                 }
 
                 break;
@@ -1369,7 +1357,6 @@ public class TcpSocket
                     UpdateRtq(); // Remove any segments from the rtq that are ACKd
 
                     ResetBackoff();
-                    _sendWait.Set(); // there might be newly available space in the send window
 
                     if (SeqGt(segAck, _tcb.Snd.Nxt) && !SeqLt(segAck, _tcb.Snd.Una))
                     {

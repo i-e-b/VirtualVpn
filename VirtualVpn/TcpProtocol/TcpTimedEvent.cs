@@ -17,10 +17,11 @@ public class TcpTimedEvent
     public Action<TcpTimedEvent>? Action { get; set; }
     
     private readonly object _lock = new();
-    private volatile bool _fired = false;
+    private volatile bool _fired;
 
     public TcpTimedEvent(Action<TcpTimedEvent> action, TimeSpan timeout)
     {
+        _fired = false;
         Action = action;
         Timeout = timeout;
         Timer = new Stopwatch();
@@ -38,17 +39,20 @@ public class TcpTimedEvent
     /// <p></p>
     /// If the event has already been triggered, or the
     /// timeout has not expired, this does nothing.
+    /// <p></p>
+    /// Returns true if action fired
     /// </summary>
-    public void TriggerIfExpired()
+    public bool TriggerIfExpired()
     {
-        if (_fired) return; // already done
+        if (_fired) return false; // already done
         lock (_lock)
         {
-            if (_fired) return; // already done
-            if (Timer.Elapsed < Timeout) return; // not time yet
+            if (_fired) return false; // already done
+            if (Timer.Elapsed < Timeout) return false; // not time yet
             
             _fired = true; // trigger before calling action, so the action can reset
             Action?.Invoke(this);
+            return true;
         }
     }
 

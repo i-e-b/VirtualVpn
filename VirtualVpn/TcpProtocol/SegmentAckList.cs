@@ -59,12 +59,11 @@ internal class SegmentAckList : IEnumerable<TcpTimedSequentialData>
             if (_checkList.ContainsKey(data.Sequence))
             {
                 var ok = _checkList.Remove(data.Sequence);
-                if (ok) Log.Debug($"Ack list - removed sequence={data.Sequence}. Still waiting=[{string.Join(", ",_checkList.Keys)}]");
-                else Log.Warn($"Ack list - FAILED to remove sequence={data.Sequence}");
+                if (!ok) Log.Warn($"Ack list - FAILED to remove sequence={data.Sequence}");
             }
             else
             {
-                Log.Error($"Sequence did not exist in ACK list. Request was {data.Sequence}, but I have {string.Join(", ",_checkList.Keys)}");
+                Log.Error($"Sequence did not exist in ACK list. Request was {data.Sequence}, but I have {string.Join(", ", _checkList.Keys)}");
             }
         }
     }

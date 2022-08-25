@@ -1,6 +1,7 @@
 ﻿using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
+using System.Text;
 using VirtualVpn.Enums;
 using VirtualVpn.EspProtocol;
 using VirtualVpn.Helpers;
@@ -139,67 +140,32 @@ public class TcpAdaptor : ITcpAdaptor
         
         // Pump through the TCP session logic
         TcpSocket.FeedIncomingPacket(tcp, ipv4);
+        TcpSocket.EventPump();
 
-        /*
-        var replyPkt = new TcpSegment
+        if (TcpSocket.State == TcpSocketState.Established
+         && TcpSocket.ReadDataComplete)
         {
-            SourcePort = tcp.DestinationPort,
-            DestinationPort = tcp.SourcePort,
-            SequenceNumber = _localSeq,
-            AcknowledgmentNumber = _remoteSeq,
-            DataOffset = 5,
-            Reserved = 0,
-            Flags = TcpSegmentFlags.SynAck,
-            WindowSize = tcp.WindowSize,
-            Options = Array.Empty<byte>(),
-            Payload = Array.Empty<byte>()
-        };
-        Reply(sender: ipv4, message: replyPkt);*/
+            var buffer = new byte[TcpSocket.BytesOfReadDataWaiting];
+            var actual = TcpSocket.ReadData(buffer);
+            var message = Encoding.UTF8.GetString(buffer, 0, actual);
+            Log.Warn($"Complete message received, {actual} bytes of an expected {buffer.Length}. Message:\r\n{message}");
+            
+            // TODO: pass to the web app now, wait for response (maybe sending ACKs back to keep-alive?)
+            //       then send the complete response back to tunnel
+            
+            // FAKE for now
+            Log.Warn("Sending fake response");
+            TcpSocket.SendData(Encoding.UTF8.GetBytes("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 5\r\n\r\nHello"));
+            while (TcpSocket.BytesOfSendDataWaiting > 0 && TcpSocket.ErrorCode == SocketError.Success)
+            {
+                TcpSocket.EventPump();
+                Log.Warn($"{TcpSocket.BytesOfSendDataWaiting} bytes remaining");
+                Thread.Sleep(250);
+            }
+        }
+
         return true;
     }
-
-    /// <summary>
-    /// Send a reply through the connected gateway, back to original sender,
-    /// with a new message. This increments local sequence number.
-    ///
-    /// The IPv4 'sender' and 'destination' should be left as it came in, we will flip src+dst and update checksums.
-    /// The Ports on the tcp message should be correct for the reply (these are not flipped here)
-    /// </summary>
-    private void Reply(IpV4Packet sender, TcpSegment message)
-    {
-        // Set message checksum
-        message.UpdateChecksum(sender.Destination.Value, sender.Source.Value);
-        Log.Info($"Tcp checksum={message.Checksum:x4} (" +
-                  $"virtualSender={sender.Destination.AsString}, replyDest={sender.Source.AsString}, proto={(byte)IpV4Protocol.TCP}, " +
-                  $"virtualPort={message.SourcePort}, replyPort={message.DestinationPort}, " +
-                  $"seq={message.SequenceNumber}, ack#={message.AcknowledgmentNumber})");
-        var tcpPayload = ByteSerialiser.ToBytes(message);
-        
-        // prepare container
-        var reply = new IpV4Packet
-        {
-            Version = IpV4Version.Version4,
-            HeaderLength = 5,
-            ServiceType = 0,
-            TotalLength = 20 + tcpPayload.Length,
-            PacketId = 0, // TODO: fix this. Should be random
-            Flags = IpV4HeaderFlags.None,
-            FragmentIndex = 0,
-            Ttl = 64,
-            Protocol = IpV4Protocol.TCP,
-            Checksum = 0,
-            Source = sender.Destination,
-            Destination = sender.Source,
-            Options = Array.Empty<byte>(),
-            Payload = tcpPayload
-        };
-        
-        reply.UpdateChecksum();
-        Log.Info($"IPv4 checksum={reply.Checksum:x4}");
-        
-        _transport.Send(reply, Gateway);
-    }
-
 
     /// <summary>
     /// Send a TCP packet back down the tunnel interface
@@ -238,15 +204,19 @@ public class TcpAdaptor : ITcpAdaptor
         
         Log.Info($"Sending message to tunnel {route.LocalAddress}:{message.SourcePort} -> {route.RemoteAddress}:{message.DestinationPort}");
         _transport.Send(reply, Gateway);
+        TcpSocket.EventPump();
     }
 
     /// <summary>
     /// Trigger time-based actions.
     /// This should be called periodically
+    /// <p></p>
+    /// Returns true if any action was taken.
     /// </summary>
-    public void EventPump()
+    public bool EventPump()
     {
-        TcpSocket.EventPump();
+        var acted = TcpSocket.EventPump();
         if (TcpSocket.ErrorCode != SocketError.Success) Log.Error($"Tcp virtual socket is in errored state: {TcpSocket.ErrorCode.ToString()}");
+        return acted;
     }
 }

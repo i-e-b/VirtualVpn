@@ -39,13 +39,14 @@ public static class Settings
     
     /// <summary>
     /// How long to pause between event pump runs.
+    /// If connections are active, the event pump will run faster.
     /// </summary>
-    public static TimeSpan EventPumpRate => TimeSpan.FromSeconds(5);
+    public static TimeSpan EventPumpRate => TimeSpan.FromSeconds(0.5);
 
     /// <summary>
     /// How long a TCP session is allowed to go without any traffic before being closed.
     /// </summary>
-    public static TimeSpan TcpTimeout => TimeSpan.FromSeconds(30);
+    public static TimeSpan TcpTimeout => TimeSpan.FromSeconds(60);
 
     /// <summary>
     /// TCP port of the app we're tunnelling

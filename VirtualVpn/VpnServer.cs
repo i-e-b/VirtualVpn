@@ -235,7 +235,7 @@ public class VpnServer : IDisposable
         {
             try
             {
-                Thread.Sleep(Settings.EventPumpRate);
+                var goFaster = false;
                 Log.Debug("Triggering event pump");
 
                 foreach (var session in _sessions.Values)
@@ -254,17 +254,22 @@ public class VpnServer : IDisposable
                 {
                     try
                     {
-                        childSa.EventPump();
+                        goFaster |= childSa.EventPump();
                     }
                     catch (Exception ex)
                     {
                         Log.Error("Event pump failure, ChildSA", ex);
                     }
                 }
+                
+                // Wait before looping, unless any of the ChildSA are active,
+                // in which case we go full speed.
+                if (!goFaster) Thread.Sleep(Settings.EventPumpRate);
             }
             catch (Exception ex)
             {
-                Log.Warn($"Outer event pump failure: {ex.Message}"); // most likely a thread conflict
+                Log.Warn($"Outer event pump failure: {ex.Message}"); // most likely a thread conflict?
+                Thread.Sleep(Settings.EventPumpRate);
             }
         }
     }

@@ -46,11 +46,14 @@ public class ChildSa : ITransportTunnel
     }
 
     /// <summary>
-    /// This method should be called periodically
+    /// Drive timed events. This method should be called periodically
+    /// <p></p>
+    /// Returns true if any action was taken.
     /// </summary>
-    public void EventPump()
+    public bool EventPump()
     {
         // Check TCP sessions, close them if they are timed out.
+        var acted = false;
         var allSessions = _tcpSessions.Keys.ToList();
         foreach (var tcpKey in allSessions)
         {
@@ -63,9 +66,10 @@ public class ChildSa : ITransportTunnel
             }
             else
             {
-                tcp.EventPump();
+                acted |= tcp.EventPump();
             }
         }
+        return acted;
     }
 
     public UInt32 SpiIn { get; set; }

@@ -159,6 +159,10 @@ public class IpTrafficTests
         RouteNextMessageAndRemove(from: clientNet, to: server, TcpSegmentFlags.Ack);
         Assert.That(clientNet.IsEmpty, "more client messages");
         Assert.That(server.State, Is.EqualTo(TcpSocketState.Closed), "server state");
+        
+        // check that a close gets propagated to the adaptor
+        Assert.That(clientNet.IsClosed, Is.True, "client adaptor not closed");
+        Assert.That(serverNet.IsClosed, Is.True, "server adaptor not closed");
     }
     
     [Test] // See https://upload.wikimedia.org/wikipedia/commons/f/f6/Tcp_state_diagram_fixed_new.svg
@@ -194,6 +198,10 @@ public class IpTrafficTests
         
         client.TriggerMainWaitTimer(); client.EventPump();
         Assert.That(client.State, Is.EqualTo(TcpSocketState.Closed), "client state");
+        
+        // check that a close gets propagated to the adaptor
+        Assert.That(clientNet.IsClosed, Is.True, "client adaptor not closed");
+        Assert.That(serverNet.IsClosed, Is.True, "server adaptor not closed");
     }
 
     [Test]
@@ -256,6 +264,10 @@ public class IpTrafficTests
         
         Assert.That(client.State, Is.EqualTo(TcpSocketState.Closed), "client state");
         Assert.That(server.State, Is.EqualTo(TcpSocketState.Closed), "server state");
+        
+        // check that a close gets propagated to the adaptor
+        Assert.That(clientNet.IsClosed, Is.True, "client adaptor not closed");
+        Assert.That(serverNet.IsClosed, Is.True, "server adaptor not closed");
     }
 
     [Test]
@@ -503,48 +515,6 @@ public class IpTrafficTests
         
         Assert.That(client.State, Is.EqualTo(TcpSocketState.Established), "client state");
         Assert.That(server.State, Is.EqualTo(TcpSocketState.Established), "server state");
-    }
-
-    private static void MakeTcpPacket(int seq, int ack, TcpSegmentFlags flags, out TcpSegment tcp, out IpV4Packet ip)
-    {
-        tcp = new TcpSegment
-        {
-            SourcePort = 123,
-            DestinationPort = 456,
-            SequenceNumber = seq,
-            AcknowledgmentNumber = ack,
-            DataOffset = 5,
-            Reserved = 0,
-            Flags = flags,
-            WindowSize = 8122,
-            Checksum = 0,
-            UrgentPointer = 0,
-            Options = Array.Empty<byte>(),
-            Payload = Array.Empty<byte>()
-        };
-        
-        tcp.UpdateChecksum(IpV4Address.Localhost.Value, IpV4Address.Localhost.Value);
-        var tcpBytes = ByteSerialiser.ToBytes(tcp);
-
-        ip = new IpV4Packet
-        {
-            Version = IpV4Version.Version4,
-            HeaderLength = 5,
-            ServiceType = 0,
-            TotalLength = 20 + tcpBytes.Length,
-            PacketId = 0,
-            Flags = IpV4HeaderFlags.None,
-            FragmentIndex = 0,
-            Ttl = 0,
-            Protocol = IpV4Protocol.HOPOPT,
-            Checksum = 0,
-            Source = IpV4Address.Localhost,
-            Destination = IpV4Address.Localhost,
-            Options = Array.Empty<byte>(),
-            Payload = tcpBytes
-        };
-        
-        ip.UpdateChecksum();
     }
 }
 
