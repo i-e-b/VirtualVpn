@@ -69,6 +69,10 @@ public class ReceiveBuffer
         }
     }
 
+    /// <summary>
+    /// Size of all data in all segments.
+    /// This may be larger than the output data if segments overlap.
+    /// </summary>
     public long EntireSize => _segments.Sum(s => s.Payload.Length);
     
     private static bool SeqGtEq(long a, long b) => (a - b) >= 0;
@@ -154,6 +158,7 @@ public class ReceiveBuffer
                 _segments.RemoveAt(0);
             }
         }
+        _readHead += total;
         return total;
     }
 
