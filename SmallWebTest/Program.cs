@@ -1,4 +1,5 @@
 using SmallWebTest;
+using SmallWebTest.Controllers;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -8,6 +9,10 @@ builder.Services.AddControllers();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddMvc(options =>
+{
+    options.InputFormatters.Insert(0, new BinaryInputFormatter());
+});
 
 var app = builder.Build();
 

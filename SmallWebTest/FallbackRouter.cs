@@ -11,7 +11,9 @@ public class FallbackRouter : IRouter
         Console.WriteLine($"Request: {url}");
         
         // if it's a known path, return without adding a request handler
-        if (url.Contains("/swagger/") || url.Contains("/weather")) return Task.CompletedTask;
+        if (url.Contains("/swagger/")
+         || url.Contains("/weather")
+         ) return Task.CompletedTask;
         
         // if a handler is already bound, use that
         if (context.Handler is not null) return Task.CompletedTask;

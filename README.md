@@ -41,28 +41,23 @@ https://github.com/jacqueskang/IpcServiceFramework
 
 ### Now
 
-- https://en.wikipedia.org/wiki/Internet_checksum
-- https://en.wikipedia.org/wiki/IPv4#Header
-- https://en.wikipedia.org/wiki/List_of_IP_protocol_numbers
-- https://en.wikipedia.org/wiki/Ping_(networking_utility)#Message_format
+https://curl.se/docs/manpage.html#-d
+```
+curl -X 'POST' \
+    'http://55.55.55.55:5223/WeatherForecast/checksum' \
+    -H 'accept: */*' \
+    -H 'Content-Type: application/octet-stream' \
+    -d @filename
+```
 
-`tcpdump -i vti_h -v`
-
-- [x] Read IP packets
-- [x] Encrypt ESP packets
-- [x] Respond to ping (then dance around the room a bit)
-- [x] TCP connection / handshake etc
-- [x] Read wget and give some kind of dummy response
-- [ ] Close connection
-- [ ] Read and write across fragments
+- [ ] Add POST endpoint to the test web app, and post something big to it from Curl
+- [ ] Need to be able to start a SA from this side
 
 ### Next
 
 - [ ] Migrate Payloads to Bitwise serialiser? (this would need counts & looping)
-- [ ] Need to be able to start a SA from this side
 
 ### Future
 
-- [ ] Either host an app, or pass network requests to one
 - [ ] Go through the collection types and make them thread safe
 - [ ] Check all "to-do" items
