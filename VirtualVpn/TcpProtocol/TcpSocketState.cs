@@ -1,6 +1,6 @@
 ﻿using System.Diagnostics.CodeAnalysis;
 
-namespace VirtualVpn.TransmissionControlProtocol;
+namespace VirtualVpn.TcpProtocol;
 
 /// <summary>
 /// States for an individual TCP session

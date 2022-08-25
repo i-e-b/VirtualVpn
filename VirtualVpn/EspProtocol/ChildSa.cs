@@ -3,13 +3,13 @@ using VirtualVpn.Crypto;
 using VirtualVpn.Enums;
 using VirtualVpn.Helpers;
 using VirtualVpn.InternetProtocol;
-using VirtualVpn.TransmissionControlProtocol;
+using VirtualVpn.TcpProtocol;
 
 // ReSharper disable BuiltInTypeReferenceStyle
 
 namespace VirtualVpn.EspProtocol;
 
-public class ChildSa
+public class ChildSa : ITransportTunnel
 {
     private readonly byte[] _spiIn;
     private readonly byte[] _spiOut;
@@ -20,7 +20,7 @@ public class ChildSa
     private long _msgIdOut;
     private long _captureNumber;
     
-    private readonly Dictionary<SenderPort, TcpSession> _tcpSessions = new();
+    private readonly Dictionary<SenderPort, TcpAdaptor> _tcpSessions = new();
 
     // pvpn/server.py:18
     public ChildSa(byte[] spiIn, byte[] spiOut, IkeCrypto cryptoIn, IkeCrypto cryptoOut, UdpServer? server)
@@ -60,6 +60,10 @@ public class ChildSa
                 Log.Debug($"Old session: {tcp.LastContact.Elapsed}; remote={Bit.ToIpAddressString(tcp.RemoteAddress)}:{tcp.RemotePort}," +
                           $" local={Bit.ToIpAddressString(tcp.LocalAddress)}:{tcp.LocalPort}. Closing");
                 CloseConnection(tcpKey);
+            }
+            else
+            {
+                tcp.EventPump();
             }
         }
     }
@@ -128,7 +132,7 @@ public class ChildSa
     {
         try
         {
-            var key = TcpSession.ReadSenderAndPort(incomingIpv4Message);
+            var key = TcpAdaptor.ReadSenderAndPort(incomingIpv4Message);
             if (key.DestinationPort == 0 || key.SenderAddress == 0)
             {
                 Log.Info("Invalid TCP/IP request: address or port not recognised");
@@ -152,7 +156,7 @@ public class ChildSa
             else
             {
                 // start new session
-                var newSession = new TcpSession(this, sender, key);
+                var newSession = new TcpAdaptor(this, sender, key);
                 var sessionOk = newSession.Start(incomingIpv4Message);
                 if (sessionOk) _tcpSessions.Add(key, newSession);
             }

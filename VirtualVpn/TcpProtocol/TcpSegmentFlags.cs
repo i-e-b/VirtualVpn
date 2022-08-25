@@ -1,7 +1,10 @@
 ﻿using System.Diagnostics.CodeAnalysis;
 
-namespace VirtualVpn.TransmissionControlProtocol;
+namespace VirtualVpn.TcpProtocol;
 
+/// <summary>
+/// TCP protocol "Control" flags.
+/// </summary>
 [Flags]
 [SuppressMessage("ReSharper", "UnusedMember.Global")]
 public enum TcpSegmentFlags
@@ -13,7 +16,7 @@ public enum TcpSegmentFlags
     /// </summary>
     SynAck = Syn | Ack,
     
-    /// <summary> FIN: Last packet from sender </summary>
+    /// <summary> FIN: Last packet from sender. Assume session is closed after this. </summary>
     Fin = 1 << 0,
     
     /// <summary>
@@ -28,7 +31,11 @@ public enum TcpSegmentFlags
     /// <summary> RST: Reset the connection </summary>
     Rst = 1 << 2,
     
-    /// <summary> PSH: Push function. Asks to push the buffered data to the receiving application </summary>
+    /// <summary>
+    /// PSH: Push function.
+    /// Asks to push the buffered data to the receiving application.
+    /// This is usually used to mark the end of a block of data.
+    /// e.g. The end of a http request, or end of a chunk in chunked mode.</summary>
     Psh = 1 << 3,
     
     /// <summary> ACK: Indicates that the Acknowledgment field is significant. All packets after the initial SYN packet sent by the client should have this flag set </summary>

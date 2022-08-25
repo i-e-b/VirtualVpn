@@ -415,8 +415,6 @@ Aug  8 14:21:58 Gertrud charon: 01[IKE]   16: 85 FE DB D6 52 1D F5 B3 BC 0E E8 4
         var result = IkeMessage.ReadSinglePayload(bytes, null, ref idx, ref nextPayload, body);
         
         Console.WriteLine(Json.Freeze(result));
-        
-        Assert.Inconclusive("not yet tested");
     }
     
     [Test]
@@ -465,8 +463,6 @@ Aug  8 14:21:58 Gertrud charon: 01[IKE]   16: 85 FE DB D6 52 1D F5 B3 BC 0E E8 4
         var result = IkeMessage.ReadSinglePayload(bytes, myCrypto, ref idx, ref nextPayload);
         
         Console.WriteLine(Json.Freeze(result));
-        
-        Assert.Inconclusive("not yet tested");
     }
 
     private static byte[] RndKey32Byte()
