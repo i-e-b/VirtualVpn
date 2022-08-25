@@ -177,8 +177,10 @@ public class TcpAdaptor : ITcpAdaptor
     private void TransferToWebApp(byte[] buffer, int length)
     {
         // Connect to web app
+        Log.Debug("Connecting to web app");
         using var webApiSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
         webApiSocket.Connect(new IPAddress(Settings.WebAppIpAddress), Settings.WebAppPort);
+        Log.Debug("connection up");
         
         // Send data to web app
         var sent = webApiSocket.Send(buffer, 0, length, SocketFlags.None);
@@ -187,20 +189,32 @@ public class TcpAdaptor : ITcpAdaptor
             Log.Warn($"Unexpected send length. Tried to send {length} bytes, but transmitted {sent} bytes.");
         }
         
+        Log.Info("Message sent to web api, reading reply");
+        
+        // Wait for reply to become available
+        while (webApiSocket.Available <= 0)
+        {
+            Log.Debug("Waiting for web app to reply");
+            Thread.Sleep(100);
+        }
+
         // Read reply back from web app
         var finalBytes = new List<byte>();
         var receiveBuffer = new byte[1800]; // big enough for a TCP packet
-        int received;
-        do
+        while (webApiSocket.Available > 0)
         {
-            received = webApiSocket.Receive(receiveBuffer);
+            Log.Debug("Trying to receive");
+            var received = webApiSocket.Receive(receiveBuffer);
             if (received > 0) finalBytes.AddRange(receiveBuffer.Take(received));
-        } while (received > 0);
-        
+            
+            Log.Debug($"Got {received} bytes from socket");
+        }
+
         Log.Info($"Web app replied with {finalBytes.Count} bytes of data");
         
         // Send reply back to virtual socket. The event pump will continue to send connection and state.
         VirtualSocket.SendData(finalBytes.ToArray());
+        Log.Debug($"Virtual socket has {VirtualSocket.BytesOfSendDataWaiting} bytes remaining to send");
     }
 
     /// <summary>
