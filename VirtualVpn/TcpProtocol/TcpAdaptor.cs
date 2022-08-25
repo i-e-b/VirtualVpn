@@ -16,14 +16,10 @@ namespace VirtualVpn.TcpProtocol;
 /// </summary>
 public class TcpAdaptor : ITcpAdaptor
 {
-    /// <summary>
-    /// The tunnel gateway we expect to be talking to
-    /// </summary>
+    /// <summary> The tunnel gateway we expect to be talking to </summary>
     public IPEndPoint Gateway { get; }
 
-    /// <summary>
-    /// The tunnel session we are connected to (used for sending replies)
-    /// </summary>
+    /// <summary> The tunnel session we are connected to (used for sending replies) </summary>
     private readonly ChildSa _transport;
 
     private readonly SenderPort _selfKey;
@@ -38,29 +34,19 @@ public class TcpAdaptor : ITcpAdaptor
     /// </summary>
     public Stopwatch LastContact { get; set; }
 
-    /// <summary>
-    /// Address of remote side
-    /// </summary>
+    /// <summary> Address of remote side </summary>
     public byte[] RemoteAddress { get; private set; } = Array.Empty<byte>();
 
-    /// <summary>
-    /// Port declared by remote side
-    /// </summary>
+    /// <summary> Port declared by remote side </summary>
     public int RemotePort { get; private set; }
 
-    /// <summary>
-    /// Address requested for this session
-    /// </summary>
+    /// <summary> Address requested for this session </summary>
     public byte[] LocalAddress { get; private set; } = Array.Empty<byte>();
 
-    /// <summary>
-    /// Local port requested for this session
-    /// </summary>
+    /// <summary> Local port requested for this session </summary>
     public int LocalPort { get; private set; }
 
-    /// <summary>
-    /// TcpSocket that represents the connection through the ChildSa tunnel
-    /// </summary>
+    /// <summary> TcpSocket that represents the connection through the ChildSa tunnel </summary>
     public TcpSocket VirtualSocket { get; set; }
 
     public TcpAdaptor(ChildSa transport, IPEndPoint gateway, SenderPort selfKey)
@@ -293,7 +279,6 @@ public class TcpAdaptor : ITcpAdaptor
     public bool EventPump()
     {
         var acted = VirtualSocket.EventPump();
-        Log.Debug($"Ran socket event pump. {(acted?"Action taken":"No actions were taken")}");
 
         switch (VirtualSocket.ErrorCode)
         {

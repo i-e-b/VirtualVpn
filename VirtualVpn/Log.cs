@@ -18,6 +18,11 @@ public enum LogLevel
     Crypto = 5,
     
     /// <summary>
+    /// Include very verbose messages
+    /// </summary>
+    Trace = 6,
+    
+    /// <summary>
     /// Output all logs
     /// </summary>
     Everything = 255
@@ -30,6 +35,20 @@ public static class Log
     {
         Console.WriteLine($"Log level set to {(int)level} ({level.ToString()})");
         _level = level;
+    }
+
+    public static void Crypto(string msg)
+    {
+        if (_level < LogLevel.Crypto) return;
+        Console.WriteLine(msg);
+    }
+
+    public static void Trace(string msg)
+    {
+        if (_level < LogLevel.Trace) return;
+        
+        Console.Write("                       "); // same spacing as timestamp
+        Console.WriteLine(msg);
     }
 
     public static void Debug(string msg, Func<IEnumerable<string>>? subLines = null)
@@ -46,13 +65,6 @@ public static class Log
             Console.Write("    ");
             Console.WriteLine(line);
         }
-    }
-
-
-    public static void Crypto(string msg)
-    {
-        if (_level < LogLevel.Crypto) return;
-        Console.WriteLine(msg);
     }
     
     public static void Debug(IEnumerable<string> messages)

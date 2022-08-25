@@ -308,6 +308,30 @@ public class TcpIpTrafficTests
         Assert.That(triggered, Is.EqualTo(2));
     }
 
+    [Test]
+    public void packets_are_resent_if_no_ack_in_timeout()
+    {
+        Log.SetLevel(LogLevel.Everything);
+        
+        const string sendMessage = "This is a short message from the client to the server";
+        TwoConnectedSockets(out var server, out var serverNet, out var client, out var clientNet);
+
+        // Send a message
+        var senderBuffer = Encoding.UTF8.GetBytes(sendMessage);
+        client.SendData(senderBuffer);
+        
+        Assert.That(clientNet.SentSegments.Count, Is.EqualTo(0), "before first tick");
+        client.EventPump();
+        Assert.That(clientNet.SentSegments.Count, Is.EqualTo(1), "after first tick");
+        client.EventPump();
+        Assert.That(clientNet.SentSegments.Count, Is.EqualTo(1), "after second tick");
+        
+        // expire the retry-time-out
+        client.TriggerRtoTimer();
+        client.EventPump();
+        Assert.That(clientNet.SentSegments.Count, Is.EqualTo(2), "after timeout");
+    }
+
     /// <summary>
     /// Send packets in both directions until both are empty.
     /// This will check that error flag remains at 'success'

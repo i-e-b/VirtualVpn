@@ -83,7 +83,7 @@ public class TcpSocket
     {
         // check for any timers or queues that need driving through this socket
         
-        Log.Debug("TcpSocket.EventPump");
+        Log.Trace("TcpSocket.EventPump");
         var acted = SendIfPossible();
         acted |= _rtoEvent?.TriggerIfExpired() ?? false;
         acted |= _timeWait.TriggerIfExpired();
@@ -143,7 +143,7 @@ public class TcpSocket
                 case TcpSocketState.Closed:
                 case TcpSocketState.Listen:
                 case TcpSocketState.TimeWait:
-                    Log.Debug("Starting connection process");
+                    Log.Trace("Starting connection process");
                     break;
 
                 default:
@@ -241,7 +241,7 @@ public class TcpSocket
         {
             if (!_sendBuffer.SequenceIsSet())
             {
-                Log.Debug($"Starting send stream at sequence {_tcb.Snd.Nxt} for {length} bytes");
+                Log.Trace($"Starting send stream at sequence {_tcb.Snd.Nxt} for {length} bytes");
                 _sendBuffer.SetStartSequence(_tcb.Snd.Nxt);
             }
             
@@ -398,17 +398,17 @@ public class TcpSocket
         {
             if (!ValidStateForSend())
             {
-                Log.Debug("TcpSocket.SendIfPossible - wrong state for send");
+                Log.Trace("TcpSocket.SendIfPossible - wrong state for send");
                 return false; // can't send
             }
 
             if (!_sendBuffer.HasDataAfter(_tcb.Snd.Nxt))
             {
-                Log.Debug("TcpSocket.SendIfPossible - I think I've sent everything");
+                Log.Trace("TcpSocket.SendIfPossible - I think I've sent everything");
                 return false; // nothing to send
             }
 
-            Log.Debug($"Entering SendIfPossible. Send buffer claims {_sendBuffer.Count()} bytes, some of which have not been transmitted");
+            Log.Trace($"Entering SendIfPossible. Send buffer claims {_sendBuffer.Count()} bytes, some of which have not been transmitted");
 
             long inflight = 0;
             foreach (var segment in _unAckedSegments)
@@ -425,7 +425,7 @@ public class TcpSocket
 
             var total = _sendBuffer.Count();
             var sent = SendData(sequence: _tcb.Snd.Nxt, maxSize: (int)space, flags: TcpSegmentFlags.None, isRetransmit: false);
-            Log.Debug($"SendIfPossible - sent {sent} bytes, {total - sent} remaining");
+            Log.Trace($"SendIfPossible - sent {sent} bytes, {total - sent} remaining");
             return true;
         }
     }
@@ -551,7 +551,7 @@ public class TcpSocket
 
     private void SetState(TcpSocketState newState) // lib/tcp/tcp.c:178
     {
-        Log.Debug($"Transition from state {_state.ToString()} to {newState.ToString()}");
+        Log.Trace($"Transition from state {_state.ToString()} to {newState.ToString()}");
 
         lock (_lock)
         {
@@ -616,13 +616,13 @@ public class TcpSocket
         {
             // If Ack flag is off, sequence number zero is used
             // SEQ=0; ACK=SEG.SEQ+SEG.LEN; CTL=RST,ACK.
-            Log.Debug("No ACK on first message from Closed. Sending RST+ACK");
+            Log.Trace("No ACK on first message from Closed. Sending RST+ACK");
             SendRstAck(sequence: 0, ackNumber: frame.Tcp.SequenceNumber + frame.Tcp.Payload.Length);
         }
         else
         {
             // SEQ=SEG.ACK; CTL=RST
-            Log.Debug("Received ACK on closed socket. Sending RST");
+            Log.Trace("Received ACK on closed socket. Sending RST");
             SendRst(sequence: frame.Tcp.AcknowledgmentNumber);
         }
     }
@@ -679,7 +679,7 @@ public class TcpSocket
     /// </summary>
     private void QueueUnacknowledged(long sequence, int dataLength, TcpSegmentFlags flags) // lib/tcp/output.c:219
     {
-        Log.Debug($"Queuing data that needs to be ACKd. Seq={sequence}, length={dataLength}");
+        Log.Trace($"Queuing data that needs to be ACKd. Seq={sequence}, length={dataLength}");
         
         // Start re-transmission timeout if needed
         if (_unAckedSegments.Count < 1) StartRto(dataLength, flags);
@@ -687,21 +687,21 @@ public class TcpSocket
         // Don't queue segment if it is a retransmission
         if (sequence != _tcb.Snd.Nxt)
         {
-            Log.Debug($"Not queueing segment for sequence {sequence} (SND.NXT={_tcb.Snd.Nxt})");
+            Log.Trace($"Not queueing segment for sequence {sequence} (SND.NXT={_tcb.Snd.Nxt})");
             return;
         }
 
         // Don't queue empty ACK packets
         if (dataLength < 1 && flags == TcpSegmentFlags.Ack)
         {
-            Log.Debug($"Not queueing ACK at sequence {sequence} -- it is empty");
+            Log.Trace($"Not queueing ACK at sequence {sequence} -- it is empty");
             return;
         }
 
         // Don't duplicate
         if (_unAckedSegments.Any(item => item.Sequence == sequence))
         {
-            Log.Debug($"Not queueing ACK at sequence {sequence} -- already in list");
+            Log.Trace($"Not queueing ACK at sequence {sequence} -- already in list");
             return;
         }
 
@@ -712,7 +712,7 @@ public class TcpSocket
             Flags = flags,
         });
 
-        Log.Debug($"Adding segment to un-ack queue. Total waiting={_unAckedSegments.Count}, Seq={sequence}, flags={flags.ToString()}"); // lib/tcp/output.c:238
+        Log.Trace($"Adding segment to un-ack queue. Total waiting={_unAckedSegments.Count}, Seq={sequence}, flags={flags.ToString()}"); // lib/tcp/output.c:238
         
         // Advance SND.NXT past this segment
         _tcb.Snd.Nxt += (uint)dataLength;
@@ -745,7 +745,7 @@ public class TcpSocket
             var una = _tcb.Snd.Una;
             var end = seq + evt.Length - 1;
 
-            Log.Debug($"Retransmission timeout. Seq={seq}, Iss={_tcb.Iss}, data len={evt.Length}.");
+            Log.Trace($"Retransmission timeout. Seq={seq}, Iss={_tcb.Iss}, data len={evt.Length}.");
 
             // Retransmit a new segment starting from the latest un-acked data
             if (SeqLtEq(una, end)) // lib/tcp/retransmission.c:88
@@ -774,7 +774,7 @@ public class TcpSocket
             // If there are no more segments waiting to be acknowledged, don't schedule another check
             if (_unAckedSegments.Count <= 0)
             {
-                Log.Debug("RetransmissionTimeout - unacknowledged queue empty. Stopping RTO event");
+                Log.Trace("RetransmissionTimeout - unacknowledged queue empty. Stopping RTO event");
                 _rtoEvent = null;
                 return; // lib/tcp/retransmission.c:114
             }
@@ -798,7 +798,7 @@ public class TcpSocket
                 Timeout = TcpDefaults.InitialRto.Multiply(_backoff)
             };
 
-            Log.Debug($"Backoff for next retransmit: {next.Timeout}");
+            Log.Trace($"Backoff for next retransmit: {next.Timeout}");
 
             _rtoEvent = next;
         }
@@ -811,7 +811,7 @@ public class TcpSocket
     /// <returns>Number of bytes sent</returns>
     private int SendData(uint sequence, int maxSize, TcpSegmentFlags flags, bool isRetransmit) // lib/tcp/output.c:135
     {
-        Log.Debug($"Call to SendData: sequence={sequence}, max size={maxSize}, flags={flags.ToString()}, is retransmit={isRetransmit}");
+        Log.Trace($"Call to SendData: sequence={sequence}, max size={maxSize}, flags={flags.ToString()}, is retransmit={isRetransmit}");
         
         // lib/tcp/output.c:153
         var ackN = _tcb.Rcv.Nxt;
@@ -902,7 +902,7 @@ public class TcpSocket
         // The timer will be rescheduled each time on expiry
         if (_backoff < 1)
         {
-            Log.Debug("Starting SYN RTO");
+            Log.Trace("Starting SYN RTO");
 
             _rtoEvent = new TcpTimedEvent
             {
@@ -1021,7 +1021,7 @@ public class TcpSocket
             HandleFinFlag(segSeq);
         }
 
-        Log.Debug("End of receive");
+        Log.Trace("End of receive");
     }
 
     private void HandleFinFlag(uint segSeq)
@@ -1073,7 +1073,7 @@ public class TcpSocket
         // We are now "EOF"
         _receiveQueue.SetComplete();
 
-        Log.Debug("End of stream. Sending ACK");
+        Log.Trace("End of stream. Sending ACK");
         _tcb.Rcv.Nxt = segSeq + 1;
         SendAck();
     }
@@ -1185,7 +1185,7 @@ public class TcpSocket
                 // Calculate and Acknowledge the largest contiguous segment we have
                 _tcb.Rcv.Nxt = _receiveQueue.ContiguousSequence(_tcb.Rcv.Nxt);
                 
-                Log.Debug($"ProcessSegmentData - segment queued. {segLen} bytes. Receive queue has {_receiveQueue.EntireSize} bytes. Sending ACK.");
+                Log.Trace($"ProcessSegmentData - segment queued. {segLen} bytes. Receive queue has {_receiveQueue.EntireSize} bytes. Sending ACK.");
                 
                 SendAck();
 
@@ -1411,7 +1411,7 @@ public class TcpSocket
 
         _rtoEvent = null; // cancel syn-sent timer
 
-        Log.Debug($"Tcp session: first byte={segSeq}, SND.WND={_tcb.Snd.Wnd}, RCV.WND={_tcb.Rcv.Wnd}");
+        Log.Trace($"Tcp session: first byte={segSeq}, SND.WND={_tcb.Snd.Wnd}, RCV.WND={_tcb.Rcv.Wnd}");
 
         // The source does set-up of the send buffer here, but we handle it dynamically
         
@@ -1454,7 +1454,7 @@ public class TcpSocket
                     /*
                       ESTABLISHED, FIN-WAIT-1, FIN-WAIT-2, CLOSE-WAIT
 
-                        If the RST bit is set then, any outstanding RECEIVEs and SEND
+                        If the RST bit is set then, any outstanding RECEIVE and SEND
                         should receive "reset" responses.  All segment queues should be
                         flushed.  Users should also receive an unsolicited general
                         "connection reset" signal.  Enter the CLOSED state, delete the
@@ -1500,7 +1500,7 @@ public class TcpSocket
           SYN-RECEIVED, ESTABLISHED, FIN-WAIT-1, FIN-WAIT-2, CLOSE-WAIT, CLOSING, LAST-ACK, TIME-WAIT,
 
         If the SYN is in the window it is an error, send a reset, any
-        outstanding RECEIVEs and SEND should receive "reset" responses,
+        outstanding RECEIVE and SEND should receive "reset" responses,
         all segment queues should be flushed, the user should also
         receive an unsolicited general "connection reset" signal, enter
         the CLOSED state, delete the TCB, and return.
@@ -1635,7 +1635,7 @@ public class TcpSocket
 
     private void HandleSynSent(TcpFrame frame, uint segAck, bool ackOk, uint segSeq) // lib/tcp/input.c:257
     {
-        Log.Debug($"Packet arrived after SYN sent (remote {_route.RemoteAddress}:{_route.RemotePort})");
+        Log.Trace($"Packet arrived after SYN sent (remote {_route.RemoteAddress}:{_route.RemotePort})");
         /*If the ACK bit is set
 
               If SEG.ACK =< ISS, or SEG.ACK > SND.NXT, send a reset (unless
@@ -1714,7 +1714,7 @@ public class TcpSocket
 
                 ConnectionEstablished(segSeq + 1);
 
-                Log.Debug("SYN+ACK ok, sending ACK");
+                Log.Trace("SYN+ACK ok, sending ACK");
                 SendAck();
 
                 // If there were any waiting processes, we could signal them now
@@ -1731,7 +1731,7 @@ public class TcpSocket
               has been reached, return. */
 
         SetState(TcpSocketState.SynReceived);
-        Log.Debug("Sending SYN+ACK");
+        Log.Trace("Sending SYN+ACK");
         SendSynAck();
 
         // There SHOULD NOT be any data here, but
@@ -1747,7 +1747,7 @@ public class TcpSocket
     {
         lock (_lock)
         {
-            var unack = _tcb.Snd.Una;
+            var unacknowledgedSequence = _tcb.Snd.Una;
             switch (_state)
             {
                 case TcpSocketState.SynSent:
@@ -1756,15 +1756,15 @@ public class TcpSocket
                 default:
                     if (FinWasAcked()) // Ensure we don't try to consume the non-existent ACK byte for our FIN
                     {
-                        unack--;
+                        unacknowledgedSequence--;
                     }
 
                     // Release all acknowledged bytes from send buffer
-                    _sendBuffer.ConsumeTo(unack);
+                    _sendBuffer.ConsumeTo(unacknowledgedSequence);
                     break;
             }
 
-            Log.Debug($"UpdateRtq - Checking {_unAckedSegments.Count} unacknowledged segments"); // lib/tcp/retransmission.c:172
+            Log.Trace($"UpdateRtq - Checking {_unAckedSegments.Count} unacknowledged segments"); // lib/tcp/retransmission.c:172
 
             TcpTimedSequentialData? latest = null;
             foreach (var data in _unAckedSegments) // lib/tcp/retransmission.c:174
@@ -1775,7 +1775,7 @@ public class TcpSocket
 
                 if (SeqGt(_tcb.Snd.Una, end))
                 {
-                    Log.Debug($"Removing acknowledged segment: length={data.Length}, seq={seq}, initial offset={iss} Range={seq - iss}..{end - iss}");
+                    Log.Trace($"Removing acknowledged segment: length={data.Length}, seq={seq}, initial offset={iss} Range={seq - iss}..{end - iss}");
 
                     // Store the latest ACKed segment for updating the rtt
                     // Retransmitted segments should NOT be used for rtt calculation
@@ -1790,7 +1790,7 @@ public class TcpSocket
                 // Update the round-trip time with the latest ACK received
                 var iss = _tcb.Iss;
                 var end = latest.Sequence + latest.Length - 1;
-                Log.Debug($"Updating RTT with segment {latest.Sequence - iss}..{end - iss}");
+                Log.Trace($"Updating RTT with segment {latest.Sequence - iss}..{end - iss}");
                 UpdateRtt(latest);
             }
 
@@ -1835,7 +1835,7 @@ public class TcpSocket
         rto = Math.Max(rto, TcpDefaults.MinimumRto.Ticks);
         _rto = TimeSpan.FromTicks((long)rto);
 
-        Log.Debug($"RTO <- {_rto}");
+        Log.Trace($"RTO <- {_rto}");
     }
 
 
