@@ -20,7 +20,7 @@ public class ChildSa : ITransportTunnel
     private long _msgIdOut;
     private long _captureNumber;
     
-    private readonly Dictionary<SenderPort, TcpAdaptor> _tcpSessions = new();
+    private readonly ThreadSafeMap<SenderPort, TcpAdaptor> _tcpSessions = new();
 
     // pvpn/server.py:18
     public ChildSa(byte[] spiIn, byte[] spiOut, IkeCrypto cryptoIn, IkeCrypto cryptoOut, UdpServer? server)
@@ -58,6 +58,8 @@ public class ChildSa : ITransportTunnel
         foreach (var tcpKey in allSessions)
         {
             var tcp = _tcpSessions[tcpKey];
+            if (tcp is null) continue;
+            
             if (tcp.LastContact.Elapsed > Settings.TcpTimeout)
             {
                 Log.Debug($"Old session: {tcp.LastContact.Elapsed}; remote={Bit.ToIpAddressString(tcp.RemoteAddress)}:{tcp.RemotePort}," +
@@ -144,10 +146,10 @@ public class ChildSa : ITransportTunnel
             }
 
             // Is it a known session?
-            if (_tcpSessions.ContainsKey(key))
+            var session = _tcpSessions[key];
+            if (session is not null)
             {
                 // check that this session is still coming through the original tunnel
-                var session = _tcpSessions[key];
                 if (!session.Gateway.Address.Equals(sender.Address))
                 {
                     Log.Warn($"Crossed connection in TCP? Expected gateway {session.Gateway.Address}, but got gateway {sender.Address} -- not replying");
@@ -162,7 +164,7 @@ public class ChildSa : ITransportTunnel
                 // start new session
                 var newSession = new TcpAdaptor(this, sender, key);
                 var sessionOk = newSession.Start(incomingIpv4Message);
-                if (sessionOk) _tcpSessions.Add(key, newSession);
+                if (sessionOk) _tcpSessions[key] = newSession;
             }
         }
         catch (Exception ex)
@@ -232,7 +234,7 @@ public class ChildSa : ITransportTunnel
             var session = _tcpSessions[key];
             _tcpSessions.Remove(key);
 
-            session.Close();
+            session?.Close();
         }
         catch (Exception ex)
         {
@@ -322,10 +324,5 @@ public class ChildSa : ITransportTunnel
         
         File.WriteAllText(Settings.FileBase + $"IPv4_{_captureNumber}_{direction}.txt", Bit.Describe($"ipv4_{_captureNumber}_{direction}", plain));
         _captureNumber++;
-    }
-
-    public void EndSession(SenderPort tcpKey)
-    {
-        CloseConnection(tcpKey);
     }
 }

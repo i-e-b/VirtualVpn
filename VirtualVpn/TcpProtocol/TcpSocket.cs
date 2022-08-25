@@ -433,7 +433,6 @@ public class TcpSocket
             case TcpSocketState.Listen:
             case TcpSocketState.SynSent:
             case TcpSocketState.SynReceived:
-                ErrorCode = SocketError.NotConnected;
                 return false;
                 
             case TcpSocketState.FinWait1:
@@ -441,7 +440,6 @@ public class TcpSocket
             case TcpSocketState.Closing:
             case TcpSocketState.LastAck:
             case TcpSocketState.TimeWait:
-                ErrorCode = SocketError.Shutdown;
                 return false;
             
             default:

@@ -232,7 +232,6 @@ public class TcpAdaptor : ITcpAdaptor
             case SocketError.NotConnected:
             case SocketError.Shutdown:
                 Log.Info($"Tcp virtual socket is closed: {TcpSocket.ErrorCode.ToString()}");
-                Close();
                 return acted;
             
             default:
