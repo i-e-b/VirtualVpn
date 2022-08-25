@@ -27,6 +27,7 @@ public class TcpAdaptor : ITcpAdaptor
     private readonly ChildSa _transport;
 
     private readonly SenderPort _selfKey;
+    private volatile bool _haveSentWebAppRequest;
 
     /// <summary>
     /// Time since last packets send or received.
@@ -63,6 +64,7 @@ public class TcpAdaptor : ITcpAdaptor
     {
         _transport = transport;
         _selfKey = selfKey;
+        _haveSentWebAppRequest = false;
         
         Gateway = gateway;
         VirtualSocket = new TcpSocket(this);
@@ -145,11 +147,18 @@ public class TcpAdaptor : ITcpAdaptor
         
         // Pump through the TCP session logic
         VirtualSocket.FeedIncomingPacket(tcp, ipv4);
-        VirtualSocket.EventPump();
+        VirtualSocket.EventPump(); // not strictly needed, but reduces latency a bit
 
         if (VirtualSocket.State == TcpSocketState.Established
          && VirtualSocket.ReadDataComplete)
         {
+            if (_haveSentWebAppRequest)
+            {
+                Log.Debug("Have already triggered web api. This should be ACKs");
+                return true;
+            }
+
+            _haveSentWebAppRequest = true;
             var buffer = new byte[VirtualSocket.BytesOfReadDataWaiting];
             var actual = VirtualSocket.ReadData(buffer);
             var message = Encoding.UTF8.GetString(buffer, 0, actual);
