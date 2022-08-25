@@ -19,6 +19,16 @@ public readonly struct SenderPort
     /// </summary>
     public readonly ushort DestinationPort;
 
+    public override bool Equals(object? obj)
+    {
+        if (obj is SenderPort other)
+        {
+            return DestinationPort == other.DestinationPort
+                && SenderAddress   == other.SenderAddress;
+        }
+        return false;
+    }
+
     public SenderPort(byte[] senderAddress, int destinationPort)
     {
         SenderAddress = Bit.BytesToUInt64Msb(senderAddress);
@@ -27,9 +37,13 @@ public readonly struct SenderPort
 
     public override int GetHashCode()
     {
-        int h = DestinationPort + (DestinationPort << 16);
+        var h = DestinationPort + (DestinationPort << 16);
         h ^= (int)(SenderAddress >>  0);
         h ^= (int)(SenderAddress >> 32);
         return h;
     }
+
+    public static bool operator ==(SenderPort left, SenderPort right) => left.Equals(right);
+
+    public static bool operator !=(SenderPort left, SenderPort right) => !(left == right);
 }

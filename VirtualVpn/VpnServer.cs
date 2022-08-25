@@ -52,6 +52,11 @@ public class VpnServer : IDisposable
 
             switch (cmd)
             {
+                case "trace":
+                {
+                    Log.SetLevel(LogLevel.Trace);
+                    break;
+                }
                 case "loud":
                 {
                     Log.SetLevel(LogLevel.Debug);
@@ -63,7 +68,10 @@ public class VpnServer : IDisposable
                     break;
                 }
                 default:
-                    Console.WriteLine("Known commands: loud, less;");
+                    Console.WriteLine("Known commands:");
+                    Console.WriteLine("    Logging:");
+                    Console.WriteLine("        trace, loud, less");
+                    // TODO: command to start VPN connection
                     break;
             }
         }
@@ -236,7 +244,7 @@ public class VpnServer : IDisposable
             try
             {
                 var goFaster = false;
-                Log.Debug("Triggering event pump");
+                Log.Trace("Triggering event pump");
 
                 foreach (var session in _sessions.Values)
                 {
