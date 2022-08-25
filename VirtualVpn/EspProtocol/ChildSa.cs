@@ -58,6 +58,11 @@ public class ChildSa : ITransportTunnel
                           $" local={Bit.ToIpAddressString(tcp.LocalAddress)}:{tcp.LocalPort}. Closing");
                 CloseConnection(tcpKey);
             }
+            else if (tcp.VirtualSocket.State == TcpSocketState.Closed)
+            {
+                Log.Debug($"Old session closed: {Bit.ToIpAddressString(tcp.RemoteAddress)}:{tcp.RemotePort} -> {Bit.ToIpAddressString(tcp.LocalAddress)}:{tcp.LocalPort}");
+                CloseConnection(tcpKey);
+            }
             else
             {
                 acted |= tcp.EventPump();

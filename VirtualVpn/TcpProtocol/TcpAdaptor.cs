@@ -27,6 +27,7 @@ public class TcpAdaptor : ITcpAdaptor
     // Transaction state triggers
     private volatile bool _haveSentWebAppRequest;
     private volatile bool _haveStartedShutDown;
+    private volatile bool _closeCalled;
 
     /// <summary>
     /// Time since last packets send or received.
@@ -55,6 +56,7 @@ public class TcpAdaptor : ITcpAdaptor
         _selfKey = selfKey;
         _haveSentWebAppRequest = false;
         _haveStartedShutDown = false;
+        _closeCalled = false;
         
         Gateway = gateway;
         VirtualSocket = new TcpSocket(this);
@@ -116,6 +118,14 @@ public class TcpAdaptor : ITcpAdaptor
 
     public void Close()
     {
+        if (_closeCalled)
+        {
+            Log.Trace("Repeated call to TcpAdaptor.Close()");
+            return;
+        }
+
+        _closeCalled = true;
+        
         Log.Info("Ending connection");
         VirtualSocket.StartClose();
         _transport.CloseConnection(_selfKey);
