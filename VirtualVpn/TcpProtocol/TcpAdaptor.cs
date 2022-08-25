@@ -157,7 +157,7 @@ public class TcpAdaptor : ITcpAdaptor
             
             // FAKE for now
             Log.Warn("Sending fake response");
-            TcpSocket.SendData(Encoding.UTF8.GetBytes("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 5\r\n\r\nHello"));
+            TcpSocket.SendData(Encoding.UTF8.GetBytes("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 8\r\n\r\n\r\nHello\r\n"));
             while (TcpSocket.BytesOfSendDataWaiting > 0 && TcpSocket.ErrorCode == SocketError.Success)
             {
                 TcpSocket.EventPump();
@@ -218,7 +218,26 @@ public class TcpAdaptor : ITcpAdaptor
     public bool EventPump()
     {
         var acted = TcpSocket.EventPump();
-        if (TcpSocket.ErrorCode != SocketError.Success) Log.Error($"Tcp virtual socket is in errored state: {TcpSocket.ErrorCode.ToString()}");
-        return acted;
+
+        switch (TcpSocket.ErrorCode)
+        {
+            case SocketError.Success:
+            case SocketError.IsConnected:
+                return acted;
+            
+            case SocketError.Disconnecting:
+                Log.Info($"Tcp virtual socket is closing: {TcpSocket.ErrorCode.ToString()}");
+                return acted;
+            
+            case SocketError.NotConnected:
+            case SocketError.Shutdown:
+                Log.Info($"Tcp virtual socket is closed: {TcpSocket.ErrorCode.ToString()}");
+                Close();
+                return acted;
+            
+            default:
+                Log.Error($"Tcp virtual socket is in errored state: {TcpSocket.ErrorCode.ToString()}");
+                return false;
+        }
     }
 }
