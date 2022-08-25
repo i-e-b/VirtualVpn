@@ -13,14 +13,14 @@ public enum LogLevel
     Debug = 4,
     
     /// <summary>
-    /// Include raw data for debugging crypto
-    /// </summary>
-    Crypto = 5,
-    
-    /// <summary>
     /// Include very verbose messages
     /// </summary>
-    Trace = 6,
+    Trace = 5,
+    
+    /// <summary>
+    /// Include raw data for debugging crypto
+    /// </summary>
+    Crypto = 6,
     
     /// <summary>
     /// Output all logs

@@ -153,6 +153,7 @@ public class TcpAdaptor : ITcpAdaptor
         }
         
         // Pump through the TCP session logic
+        Log.Trace("### Data incoming...");
         VirtualSocket.FeedIncomingPacket(tcp, ipv4);
         VirtualSocket.EventPump(); // not strictly needed, but reduces latency a bit
 
@@ -183,7 +184,8 @@ public class TcpAdaptor : ITcpAdaptor
         var buffer = new byte[VirtualSocket.BytesOfReadDataWaiting];
         var actual = VirtualSocket.ReadData(buffer);
         var message = Encoding.UTF8.GetString(buffer, 0, actual);
-        Log.Warn($"Complete message received, {actual} bytes of an expected {buffer.Length}. Message:\r\n{message}");
+        Log.Info($"Complete message received, {actual} bytes of an expected {buffer.Length}.");
+        Log.Trace(message);
 
         // Pass to the web app now, wait for response (maybe sending ACKs back to keep-alive?)
         // then send the complete response back to tunnel
@@ -242,8 +244,12 @@ public class TcpAdaptor : ITcpAdaptor
 
         Log.Info($"Web app replied with {finalBytes.Count} bytes of data");
         
+        var outgoingBuffer = finalBytes.ToArray();
+        var message = Encoding.UTF8.GetString(outgoingBuffer);
+        Log.Trace(message);
+        
         // Send reply back to virtual socket. The event pump will continue to send connection and state.
-        VirtualSocket.SendData(finalBytes.ToArray());
+        VirtualSocket.SendData(outgoingBuffer);
         Log.Debug($"Virtual socket has {VirtualSocket.BytesOfSendDataWaiting} bytes remaining to send");
     }
 
