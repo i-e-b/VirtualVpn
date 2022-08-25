@@ -5,7 +5,7 @@ namespace VirtualVpn.TcpProtocol;
 /// <summary>
 /// Schedule slot for Retransmission Time-Out (RTO)
 /// </summary>
-internal class TcpTimedEvent
+public class TcpTimedEvent
 {
     public uint Sequence { get; set; }
     public int Length { get; set; }

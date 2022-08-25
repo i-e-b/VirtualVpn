@@ -1488,7 +1488,7 @@ public class TcpSocket
                     SetState(TcpSocketState.Closed);
                     Log.Warn("Received RST flagged message during handshake");
                     ErrorCode = SocketError.ConnectionReset;
-                    throw new SocketException((int)ErrorCode);
+                    return true;
                 }
 
                 break;

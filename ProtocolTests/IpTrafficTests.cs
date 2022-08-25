@@ -199,7 +199,6 @@ public class IpTrafficTests
     [Test]
     public void tcp_socket_send_and_receive_data()
     {
-        Log.SetLevel(LogLevel.None);
         Log.SetLevel(LogLevel.Everything);
         
         //
@@ -215,9 +214,9 @@ public class IpTrafficTests
         client.SendData(senderBuffer);
         
         // Transmit
-        Log.Info($"##### Data is {senderBuffer.Length} bytes. Client has {client.BytesOfSendDataWaiting} bytes, server has {server.BytesOfReadDataWaiting} bytes. #######");
+        Log.Info($"Send ##### Data is {senderBuffer.Length} bytes. Client has {client.BytesOfSendDataWaiting} bytes, server has {server.BytesOfReadDataWaiting} bytes. #######");
         SendAllWaitingPackets(server, serverNet, client, clientNet);
-        Log.Info($"##### Data is {senderBuffer.Length} bytes. Client has {client.BytesOfSendDataWaiting} bytes, server has {server.BytesOfReadDataWaiting} bytes. #######");
+        Log.Info($"Send ##### Data is {senderBuffer.Length} bytes. Client has {client.BytesOfSendDataWaiting} bytes, server has {server.BytesOfReadDataWaiting} bytes. #######");
         
         // Check message is received and ACKd client->server
         Assert.That(server.ReadDataComplete, Is.True, "Read complete flag on server");
@@ -235,21 +234,71 @@ public class IpTrafficTests
         server.SendData(replyBuffer);
        
         // Transmit 
-        Log.Info($"##### Data is {senderBuffer.Length} bytes. Client has {client.BytesOfSendDataWaiting} bytes, server has {server.BytesOfReadDataWaiting} bytes. #######");
+        Log.Info($"Receive ##### Data is {replyBuffer.Length} bytes. Client has {client.BytesOfReadDataWaiting} bytes, server has {server.BytesOfSendDataWaiting} bytes. #######");
         SendAllWaitingPackets(server, serverNet, client, clientNet);
-        Log.Info($"##### Data is {senderBuffer.Length} bytes. Client has {client.BytesOfSendDataWaiting} bytes, server has {server.BytesOfReadDataWaiting} bytes. #######");
+        Log.Info($"Receive ##### Data is {replyBuffer.Length} bytes. Client has {client.BytesOfReadDataWaiting} bytes, server has {server.BytesOfSendDataWaiting} bytes. #######");
 
         // Check message is received and ACKd server->client
         Assert.That(client.ReadDataComplete, Is.True, "Read complete flag on client");
         Assert.That(client.BytesOfReadDataWaiting, Is.EqualTo(replyBuffer.Length), "client did not receive all data");
         Assert.That(server.BytesOfSendDataWaiting, Is.Zero, "not all sent data was acknowledged by client");
         
+        // Read the data that was received
+        readBuffer = new byte[client.BytesOfReadDataWaiting];
+        actual = client.ReadData(readBuffer);
+        Assert.That(actual, Is.EqualTo(replyBuffer.Length), "Transmit size");
+        Assert.That(Encoding.UTF8.GetString(readBuffer), Is.EqualTo(replyMessage), "Transmit message");
         
-        Assert.Inconclusive("not implemented");
+        
+        // Now we should be able to close the connection
+        client.StartClose();
+        SendAllWaitingPacketsForClosing(server, serverNet, client, clientNet);
+        
+        Assert.That(client.State, Is.EqualTo(TcpSocketState.Closed), "client state");
+        Assert.That(server.State, Is.EqualTo(TcpSocketState.Closed), "server state");
+    }
+
+    [Test]
+    public void timeout_trigger_fires_once_after_time_expires()
+    {
+        var triggered = 0;
+        var subject = new TcpTimedEvent(_ => { triggered++; }, TimeSpan.FromMilliseconds(125));
+        
+        // doesn't fire before timeout
+        subject.TriggerIfExpired();
+        Assert.That(triggered, Is.Zero);
+        
+        Thread.Sleep(200);
+        
+        // will fire now
+        subject.TriggerIfExpired();
+        Assert.That(triggered, Is.EqualTo(1));
+        
+        // but not again
+        subject.TriggerIfExpired();
+        Assert.That(triggered, Is.EqualTo(1));
+        
+        // after resetting,
+        subject.Reset();
+        
+        // doesn't fire before timeout
+        subject.TriggerIfExpired();
+        Assert.That(triggered, Is.EqualTo(1));
+        
+        Thread.Sleep(200);
+        
+        // will fire now
+        subject.TriggerIfExpired();
+        Assert.That(triggered, Is.EqualTo(2));
+        
+        // but not again
+        subject.TriggerIfExpired();
+        Assert.That(triggered, Is.EqualTo(2));
     }
 
     /// <summary>
-    /// Send packets in both directions until both are empty
+    /// Send packets in both directions until both are empty.
+    /// This will check that error flag remains at 'success'
     /// </summary>
     private static void SendAllWaitingPackets(TcpSocket server, TestAdaptor serverNet, TcpSocket client, TestAdaptor clientNet)
     {
@@ -267,6 +316,32 @@ public class IpTrafficTests
             transmit |= TryRouteNextMessageAndRemove(from: serverNet, to: client);
             client.EventPump();
             Assert.That(client.ErrorCode, Is.EqualTo(SocketError.Success), "client faulted");
+            
+            if ( transmit ) rounds = 0;
+            else rounds++;
+        }
+    }
+    
+    /// <summary>
+    /// Send packets in both directions until both are empty.
+    /// This will ignore any error flags, and will trigger timers
+    /// </summary>
+    private static void SendAllWaitingPacketsForClosing(TcpSocket server, TestAdaptor serverNet, TcpSocket client, TestAdaptor clientNet)
+    {
+        var rounds = 0;
+        while (rounds < 2)
+        {
+            var transmit = false;
+            
+            Log.Debug("------------- server -------------------");
+            transmit |= TryRouteNextMessageAndRemove(from: clientNet, to: server);
+            server.TriggerMainWaitTimer();
+            server.EventPump();
+            
+            Log.Debug("------------- client -------------------");
+            transmit |= TryRouteNextMessageAndRemove(from: serverNet, to: client);
+            server.TriggerMainWaitTimer();
+            client.EventPump();
             
             if ( transmit ) rounds = 0;
             else rounds++;
