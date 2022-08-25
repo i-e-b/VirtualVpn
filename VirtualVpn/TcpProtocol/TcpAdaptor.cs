@@ -27,7 +27,10 @@ public class TcpAdaptor : ITcpAdaptor
     private readonly ChildSa _transport;
 
     private readonly SenderPort _selfKey;
+    
+    // Transaction state triggers
     private volatile bool _haveSentWebAppRequest;
+    private volatile bool _haveStartedShutDown;
 
     /// <summary>
     /// Time since last packets send or received.
@@ -65,6 +68,7 @@ public class TcpAdaptor : ITcpAdaptor
         _transport = transport;
         _selfKey = selfKey;
         _haveSentWebAppRequest = false;
+        _haveStartedShutDown = false;
         
         Gateway = gateway;
         VirtualSocket = new TcpSocket(this);
@@ -149,33 +153,47 @@ public class TcpAdaptor : ITcpAdaptor
         VirtualSocket.FeedIncomingPacket(tcp, ipv4);
         VirtualSocket.EventPump(); // not strictly needed, but reduces latency a bit
 
-        if (VirtualSocket.State == TcpSocketState.Established
-         && VirtualSocket.ReadDataComplete)
+        // Then check states
+        if (VirtualSocket.State != TcpSocketState.Established) return true; // not connected yet
+        if (!VirtualSocket.ReadDataComplete) return true; // haven't got the entire request yet
+        
+        // More packet incoming after we've sent our response?
+        if (_haveSentWebAppRequest)
         {
-            if (_haveSentWebAppRequest)
+            if (VirtualSocket.BytesOfSendDataWaiting > 0)
             {
                 Log.Debug("Have already triggered web api. This should be ACKs");
                 return true;
             }
 
-            _haveSentWebAppRequest = true;
-            var buffer = new byte[VirtualSocket.BytesOfReadDataWaiting];
-            var actual = VirtualSocket.ReadData(buffer);
-            var message = Encoding.UTF8.GetString(buffer, 0, actual);
-            Log.Warn($"Complete message received, {actual} bytes of an expected {buffer.Length}. Message:\r\n{message}");
+            if (_haveStartedShutDown) return true; // already closing. Just let things happen.
             
-            // Pass to the web app now, wait for response (maybe sending ACKs back to keep-alive?)
-            // then send the complete response back to tunnel
-            try
-            {
-                TransferToWebApp(buffer, actual);
-            }
-            catch (Exception ex)
-            {
-                Log.Error("Failed to transfer between web app and virtual socket", ex);
-                // TODO: sent some kind of error message back.
-            }
+            // Everything is done. Close down.
+            _haveStartedShutDown = true;
+            VirtualSocket.StartClose();
+            return true;
         }
+
+        // Have all the request data, but have not passed to web app yet
+        // Flip the switch and do the transaction
+        _haveSentWebAppRequest = true;
+        var buffer = new byte[VirtualSocket.BytesOfReadDataWaiting];
+        var actual = VirtualSocket.ReadData(buffer);
+        var message = Encoding.UTF8.GetString(buffer, 0, actual);
+        Log.Warn($"Complete message received, {actual} bytes of an expected {buffer.Length}. Message:\r\n{message}");
+
+        // Pass to the web app now, wait for response (maybe sending ACKs back to keep-alive?)
+        // then send the complete response back to tunnel
+        try
+        {
+            TransferToWebApp(buffer, actual);
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Failed to transfer between web app and virtual socket", ex);
+            // TODO: sent some kind of error message back?
+        }
+
 
         return true;
     }
