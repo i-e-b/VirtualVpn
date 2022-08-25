@@ -72,6 +72,8 @@ public class TcpAdaptor : ITcpAdaptor
     public bool Start(IpV4Packet ipv4)
     {
         Log.Debug("TCP session initiation");
+        
+        TcpSocket.Listen(); // must be in this state, or it will try to close the connection
 
         var ok = HandleMessage(ipv4, out var tcp);
         if (!ok)
