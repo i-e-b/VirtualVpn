@@ -38,8 +38,9 @@ public static class Settings
     //public const string HttpPrefix = "://localhost:8011/"; // <-- use this if testing locally
     
     /// <summary>
-    /// How long to pause between event pump runs.
+    /// Median time to pause between event pump runs.
     /// If connections are active, the event pump will run faster.
+    /// If no connections are up, the event pump will run slower.
     /// </summary>
     public static TimeSpan EventPumpRate => TimeSpan.FromSeconds(0.5);
 
