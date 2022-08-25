@@ -48,7 +48,8 @@ public class TcpSocket
 
     /// <summary>
     /// Returns true if we processed an in-sequence FIN message,
-    /// indicating that all data is here and received.
+    /// or that we received a PSH flag and have all segments,
+    /// either of which indicate that all data is received.
     /// </summary>
     public bool ReadDataComplete => _receiveQueue.IsComplete;
 
@@ -297,9 +298,11 @@ public class TcpSocket
     /// You should call EventPump() until the error
     /// code changes or SendBufferLength becomes zero.
     /// </summary>
-    public void SendData(byte[] buffer, int offset, int length) // lib/tcp/user.c:122
+    public void SendData(byte[] buffer, int offset=0, int length=-1) // lib/tcp/user.c:122
     {
         if (!ValidStateForSend()) throw new Exception($"Socket is not ready for sending. State={_state.ToString()}");
+        if (length < 0) length = buffer.Length;
+        if (length == 0) return;
 
         lock (_lock)
         {
@@ -319,8 +322,10 @@ public class TcpSocket
     /// if transmission is not complete.
     /// </summary>
     /// <returns>Actual bytes copied</returns>
-    public int ReadData(byte[] buffer, int offset, int length)
+    public int ReadData(byte[] buffer, int offset=0, int length=-1)
     {
+        if (length < 0) length = buffer.Length;
+        if (length == 0) return 0;
         lock (_lock)
         {
             return _receiveQueue.ReadOutAndUpdate(buffer, offset, length);
@@ -1188,6 +1193,11 @@ public class TcpSocket
 
                 if (inOrder)
                 {
+                    if (frame.Tcp.Flags.FlagsSet(TcpSegmentFlags.Psh))
+                    {
+                        _receiveQueue.SetComplete();
+                    }
+
                     _readWait.Set(); // unlock readers
                 }
 

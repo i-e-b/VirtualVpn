@@ -199,29 +199,52 @@ public class IpTrafficTests
     [Test]
     public void tcp_socket_send_and_receive_data()
     {
+        Log.SetLevel(LogLevel.None);
         Log.SetLevel(LogLevel.Everything);
         
         //
         // Do a full transaction, with data coming from both sides
         //
         
+        const string sendMessage = "This is a short message from the client to the server";
+        const string replyMessage = "This is a different message from the server back to the client in response to the first";
         TwoConnectedSockets(out var server, out var serverNet, out var client, out var clientNet);
 
-        var senderBuffer = Encoding.UTF8.GetBytes("This is a short message from the client to the server");
-        client.SendData(senderBuffer, 0, senderBuffer.Length);
-        Log.Info($"##### Data is {senderBuffer.Length} bytes. Client has {client.BytesOfSendDataWaiting} bytes, server has {server.BytesOfReadDataWaiting} bytes. #######");
+        // Send a message
+        var senderBuffer = Encoding.UTF8.GetBytes(sendMessage);
+        client.SendData(senderBuffer);
         
+        // Transmit
+        Log.Info($"##### Data is {senderBuffer.Length} bytes. Client has {client.BytesOfSendDataWaiting} bytes, server has {server.BytesOfReadDataWaiting} bytes. #######");
         SendAllWaitingPackets(server, serverNet, client, clientNet);
-        
         Log.Info($"##### Data is {senderBuffer.Length} bytes. Client has {client.BytesOfSendDataWaiting} bytes, server has {server.BytesOfReadDataWaiting} bytes. #######");
         
-        Assert.That(server.BytesOfReadDataWaiting, Is.EqualTo(senderBuffer.Length), "did not receive all data");
-        Assert.That(client.BytesOfSendDataWaiting, Is.Zero, "did not send all data"); // it's getting there, but not clearing the send buffer
+        // Check message is received and ACKd client->server
+        Assert.That(server.ReadDataComplete, Is.True, "Read complete flag on server");
+        Assert.That(server.BytesOfReadDataWaiting, Is.EqualTo(senderBuffer.Length), "server did not receive all data");
+        Assert.That(client.BytesOfSendDataWaiting, Is.Zero, "not all sent data was acknowledged by server");
 
+        // Read the data that was received
+        var readBuffer = new byte[server.BytesOfReadDataWaiting];
+        var actual = server.ReadData(readBuffer);
+        Assert.That(actual, Is.EqualTo(senderBuffer.Length), "Transmit size");
+        Assert.That(Encoding.UTF8.GetString(readBuffer), Is.EqualTo(sendMessage), "Transmit message");
         
-        // IEB: Next, test sending a reply back.
+        // Send a reply
+        var replyBuffer = Encoding.UTF8.GetBytes(replyMessage);
+        server.SendData(replyBuffer);
+       
+        // Transmit 
+        Log.Info($"##### Data is {senderBuffer.Length} bytes. Client has {client.BytesOfSendDataWaiting} bytes, server has {server.BytesOfReadDataWaiting} bytes. #######");
+        SendAllWaitingPackets(server, serverNet, client, clientNet);
+        Log.Info($"##### Data is {senderBuffer.Length} bytes. Client has {client.BytesOfSendDataWaiting} bytes, server has {server.BytesOfReadDataWaiting} bytes. #######");
 
-
+        // Check message is received and ACKd server->client
+        Assert.That(client.ReadDataComplete, Is.True, "Read complete flag on client");
+        Assert.That(client.BytesOfReadDataWaiting, Is.EqualTo(replyBuffer.Length), "client did not receive all data");
+        Assert.That(server.BytesOfSendDataWaiting, Is.Zero, "not all sent data was acknowledged by client");
+        
+        
         Assert.Inconclusive("not implemented");
     }
 
@@ -231,16 +254,16 @@ public class IpTrafficTests
     private static void SendAllWaitingPackets(TcpSocket server, TestAdaptor serverNet, TcpSocket client, TestAdaptor clientNet)
     {
         var rounds = 0;
-        while (rounds < 3)
+        while (rounds < 2)
         {
             var transmit = false;
             
-            Console.WriteLine("------------- server -------------------");
+            Log.Debug("------------- server -------------------");
             transmit |= TryRouteNextMessageAndRemove(from: clientNet, to: server);
             server.EventPump();
             Assert.That(server.ErrorCode, Is.EqualTo(SocketError.Success), "server faulted");
             
-            Console.WriteLine("------------- client -------------------");
+            Log.Debug("------------- client -------------------");
             transmit |= TryRouteNextMessageAndRemove(from: serverNet, to: client);
             client.EventPump();
             Assert.That(client.ErrorCode, Is.EqualTo(SocketError.Success), "client faulted");
