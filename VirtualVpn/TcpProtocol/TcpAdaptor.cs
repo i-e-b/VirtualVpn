@@ -157,15 +157,7 @@ public class TcpAdaptor : ITcpAdaptor
             
             // FAKE for now
             Log.Warn("Sending fake response");
-            TcpSocket.SendData(Encoding.UTF8.GetBytes("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 8\r\n\r\n\r\nHello\r\n"));
-            
-            // Can't do this as its stopping the reply trigger?
-            /*while (TcpSocket.BytesOfSendDataWaiting > 0 && TcpSocket.ErrorCode == SocketError.Success)
-            {
-                TcpSocket.EventPump();
-                Log.Warn($"TcpAdaptor - after {TcpSocket.BytesOfSendDataWaiting} bytes remaining");
-                Thread.Sleep(250);
-            }*/
+            TcpSocket.SendData(Encoding.UTF8.GetBytes("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 9\r\n\r\n\r\nHello\r\n"));
         }
 
         return true;
