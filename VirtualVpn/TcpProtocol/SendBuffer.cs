@@ -56,7 +56,7 @@ public class SendBuffer
 
         Log.Trace($"SendBuffer:PullInternal - requested offset={offset} up to max of {maxSize} bytes.");
         if (_segments.Count < 1) return Array.Empty<byte>();
-        
+
         var found = FindFirstSegmentForSequence(offset, out var sequenceStart, out var orderedOffsets);
 
         if (!found) return Array.Empty<byte>(); // can't find any matching data
@@ -126,7 +126,6 @@ public class SendBuffer
             {
                 Log.Debug($"SendBuffer:ConsumeTo - no data to release. Next sequence={newStart}");
                 Start = newStart;
-                ReadHead = newStart;
                 return;
             }
 
@@ -137,9 +136,10 @@ public class SendBuffer
                 if (end <= newStart) _segments.Remove(offset);
             }
 
-            Log.Debug($"SendBuffer:ConsumeTo - releasing from {Start} to {newStart} ({newStart-Start} bytes)");
+            Log.Debug($"SendBuffer:ConsumeTo - releasing from {Start} to {newStart} ({newStart - Start} bytes)");
             Start = newStart;
             if (Start > ReadHead) ReadHead = Start;
+            if (Start > End) End = Start;
         }
     }
 
@@ -151,11 +151,12 @@ public class SendBuffer
         // should we chop this into MSS chunks, or just feed it directly in?
         lock (_lock)
         {
-            if (Start < 0 || ReadHead < 0) throw new Exception("Tried to write before setting start sequence");
+            if (Start < 0) throw new Exception("Tried to write before setting start sequence");
+            if (ReadHead < 0) ReadHead = Start;
             if (End < 0) End = Start + Count();
 
             var nextSequence = End;
-            
+
             int written;
             if (offset == 0 && length == buffer.Length)
             {
@@ -198,15 +199,19 @@ public class SendBuffer
         lock (_lock)
         {
             if (_segments.Count < 1) return false;
-            
+
             return FindFirstSegmentForSequence(sequence, out _, out _);
         }
     }
 
     public long RemainingData()
     {
-        if (End < 0) return 0;
-        if (ReadHead < 0) return End - Start;
-        return End - ReadHead;
+        lock (_lock)
+        {
+            if (_segments.Count < 1) return 0;
+            if (End < 0) return 0;
+            if (ReadHead < 0) return End - Start;
+            return End - ReadHead;
+        }
     }
 }

@@ -250,7 +250,11 @@ public class TcpSocket
                 Log.Trace($"Starting send stream at sequence {_tcb.Snd.Nxt} for {length} bytes");
                 _sendBuffer.SetStartSequence(_tcb.Snd.Nxt);
             }
+            else Log.Trace("Send buffer sequence has been set already");
             
+            Log.Trace("Writing data for send." +
+                      $" Send buffer=({_sendBuffer.Count()})->[{_sendBuffer.Start}|{_sendBuffer.ReadHead}|{_sendBuffer.End}];" +
+                      $" ExpectedSequence={_tcb.Snd.Nxt}");
             _sendBuffer.Write(buffer, offset, length);
         }
     }
@@ -477,6 +481,7 @@ public class TcpSocket
                 _nudgeDataSent = false;
             }
 
+            // BUG: _tcb.Snd.Nxt is one ahead of the send buffer!
             var sent = SendData(sequence: _tcb.Snd.Nxt, maxSize: (int)space, flags: TcpSegmentFlags.None, isRetransmit: false, isNudge: _nudgeDataSent);
             Log.Trace($"SendIfPossible - sent {sent} bytes, {_sendBuffer.RemainingData()} remaining");
             return true;
@@ -1411,6 +1416,7 @@ public class TcpSocket
     /// </summary>
     private bool FinWasAcked() // include/netstack/tcp/tcp.h:418
     {
+        if (_sendBuffer.Start < 0) return true; // Socket closing before any messages sent
         //return _tcb.Snd.Una == (_sendBuffer.Start + _sendBuffer.Count() + 1); // Not sure if this works when no data has been sent
         return _tcb.Snd.Una == (_sendBuffer.Start + _sendBuffer.Count());
     }
@@ -1875,7 +1881,11 @@ public class TcpSocket
                     }
 
                     // Release all acknowledged bytes from send buffer
-                    _sendBuffer.ConsumeTo(unacknowledgedSequence);
+                    if (_sendBuffer.Count() > 0)
+                    {
+                        _sendBuffer.ConsumeTo(unacknowledgedSequence);
+                    }
+
                     break;
             }
 
