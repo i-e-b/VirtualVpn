@@ -79,7 +79,7 @@ public class Integrity
     public byte[] Compute(byte[] key, byte[] data)
     {
         var full = _algo(key, data);
-        Log.Crypto("------HASH----->\r\n" + Bit.Describe("key", key) + Bit.Describe("data", data) + Bit.Describe("ICV (hash)", full));
+        //Log.Crypto("------HASH----->\r\n" + Bit.Describe("key", key) + Bit.Describe("data", data) + Bit.Describe("ICV (hash)", full));
         if (full.Length <= HashSize) return full;
         return full.Take(HashSize).ToArray();
     }
