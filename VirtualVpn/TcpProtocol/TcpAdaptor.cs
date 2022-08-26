@@ -243,6 +243,14 @@ public class TcpAdaptor : ITcpAdaptor
     {
         try
         {
+            if (VirtualSocket.BytesOfReadDataWaiting < 1)
+            {
+                Log.Trace("No data to move to web app");
+                // IEB: experiment-- try pushing tail byte?
+                var pushed = _realSocketToWebApp?.Send(new byte[]{0}, 0, 1, SocketFlags.None) ?? -1;
+                Log.Trace($"Tried to push a tailing byte. {pushed} of 1 sent.");
+            }
+
             // read from tunnel
             var buffer = new byte[VirtualSocket.BytesOfReadDataWaiting];
             var actual = VirtualSocket.ReadData(buffer);

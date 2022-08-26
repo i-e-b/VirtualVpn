@@ -183,6 +183,7 @@ public class ReceiveBuffer
     /// </summary>
     public long RemainingData()
     {
+        if (_segments.Count < 1) return 0;
         return ContiguousSequence(_readHead) - _readHead;
     }
 }
