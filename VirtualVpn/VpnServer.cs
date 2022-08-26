@@ -123,6 +123,7 @@ public class VpnServer : IDisposable
             if (childSession.Value.Gateway == requestedGateway)
             {
                 Log.Error($"A VPN session is already open with {requestedGateway} as {childSession.Key}. Try 'kill {childSession.Key}' if you want to restart");
+                return;
             }
         }
         
@@ -132,6 +133,7 @@ public class VpnServer : IDisposable
             if (vpnSession.Value.Gateway == requestedGateway)
             {
                 Log.Error($"A VPN session is in progress with {requestedGateway} as {vpnSession.Key}. Try 'kill {vpnSession.Key}' if you want to restart");
+                return;
             }
         }
         

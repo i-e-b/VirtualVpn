@@ -8,10 +8,10 @@ namespace VirtualVpn.InternetProtocol;
 /// Serialisation definition for IPv4 address
 /// </summary>
 [ByteLayout]
-public class IpV4Address
+public class IpV4Address: IEquatable<IpV4Address>
 {
     [ByteString(bytes:4, order:0)]
-    public byte[] Value = Array.Empty<byte>();
+    public readonly byte[] Value = Array.Empty<byte>();
 
     public IpV4Address() { }
     public IpV4Address(byte[] address) { Value = address; }
@@ -22,13 +22,13 @@ public class IpV4Address
     /// <summary>
     /// IP address of the local loop-back interface
     /// </summary>
-    public static IpV4Address Localhost => new() { Value = new byte[]{127,0,0,1}};
+    public static IpV4Address Localhost => new(new byte[] { 127, 0, 0, 1 });
     
     /// <summary>
     /// IP address for unspecified location.
     /// Can mean 'any' or 'none' depending on context.
     /// </summary>
-    public static IpV4Address Any => new() { Value = new byte[]{0,0,0,0}};
+    public static IpV4Address Any => new(new byte[] { 0, 0, 0, 0 });
 
     public override string ToString()
     {
@@ -74,4 +74,37 @@ public class IpV4Address
     {
         return new IpV4Address(endPoint.Address.GetAddressBytes());
     }
+
+    public override bool Equals(object? obj)
+    {
+        if (obj is not IpV4Address other) return false;
+        
+        for (int i = 0; i < 4; i++)
+        {
+            if (Value[i] != other.Value[i]) return false;
+        }
+        
+        return true;
+    }
+
+    public bool Equals(IpV4Address? other)
+    {
+        if (other is null) return false;
+        
+        for (int i = 0; i < 4; i++)
+        {
+            if (Value[i] != other.Value[i]) return false;
+        }
+        
+        return true;
+    }
+
+    public override int GetHashCode()
+    {
+        return Value.GetHashCode();
+    }
+    
+    public static bool operator ==(IpV4Address left, IpV4Address right) => left.Equals(right);
+
+    public static bool operator !=(IpV4Address left, IpV4Address right) => !(left == right);
 }

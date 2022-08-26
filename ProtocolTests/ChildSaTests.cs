@@ -1,4 +1,5 @@
-﻿using NUnit.Framework;
+﻿using System.Diagnostics.CodeAnalysis;
+using NUnit.Framework;
 using VirtualVpn;
 using VirtualVpn.Crypto;
 using VirtualVpn.Enums;
@@ -11,6 +12,24 @@ namespace ProtocolTests;
 [TestFixture]
 public class ChildSaTests
 {
+    [Test]
+    [SuppressMessage("ReSharper", "EqualExpressionComparison")]
+    public void ipv4_addresses_compare()
+    {
+        var a = new IpV4Address(new byte[]{192,168,5,4});
+        var b = new IpV4Address(new byte[]{170,30,0,1});
+        var c = IpV4Address.FromString("192.168.5.4");
+        Assert.True(a == c);
+        Assert.True(a == a);
+        Assert.True(a != b);
+        Assert.True(b != c);
+        
+        Assert.False(a != c);
+        Assert.False(a != a);
+        Assert.False(a == b);
+        Assert.False(b == c);
+    }
+
     [Test]
     public void ipv4_writing()
     {
@@ -26,8 +45,8 @@ public class ChildSaTests
             Ttl = 0x08,
             Protocol = (IpV4Protocol)0x09,
             Checksum = 0x1011,
-            Source = new IpV4Address{Value = new byte[]{0x12,0x13,0x14,0x15}},
-            Destination = new IpV4Address{Value = new byte[]{0x16,0x17,0x18,0x19}},
+            Source = new IpV4Address(new byte[]{0x12,0x13,0x14,0x15}),
+            Destination = new IpV4Address(new byte[]{0x16,0x17,0x18,0x19}),
             Options = new byte[]
             {
                0x20
@@ -164,8 +183,8 @@ public class ChildSaTests
             Ttl = 0x08,
             Protocol = (IpV4Protocol)0x09,
             Checksum = 0x1011,
-            Source = new IpV4Address{Value = new byte[]{0x12,0x13,0x14,0x15}},
-            Destination = new IpV4Address{Value = new byte[]{0x16,0x17,0x18,0x19}},
+            Source = new IpV4Address( new byte[]{0x12,0x13,0x14,0x15}),
+            Destination = new IpV4Address(new byte[]{0x16,0x17,0x18,0x19}),
             Options = Array.Empty<byte>(),
             Payload = new byte[]
             {

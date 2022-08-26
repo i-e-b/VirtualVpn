@@ -65,7 +65,7 @@ void SendPackets()
             Ttl = 0,
             Protocol = IpV4Protocol.TCP,
             Checksum = 0,
-            Source = new IpV4Address { Value = new byte[] { 55, 55, 55, 40 } },
+            Source = new IpV4Address(new byte[] { 55, 55, 55, 40 }),
             Destination = IpV4Address.Localhost,
             Options = Array.Empty<byte>()
         };
