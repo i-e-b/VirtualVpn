@@ -209,6 +209,7 @@ public class TcpAdaptor : ITcpAdaptor
 
         Log.Trace($"END Run Data Transfer anyMove={anyData}, vRead={_totalVirtualRead}, rSend={_totalRealSent}, rRead={_totalRealRead}, vSend={_totalVirtualSent}," +
                   $" vSocket={VirtualSocket.State.ToString()}, webApp connected={_realSocketToWebApp?.Connected ?? false}");
+        
         return anyData;
     }
 
@@ -236,13 +237,16 @@ public class TcpAdaptor : ITcpAdaptor
             Log.Info($"Web app replied with {finalBytes.Count} bytes of data");
 
             var outgoingBuffer = finalBytes.ToArray();
-            _totalRealRead += outgoingBuffer.Length;
-            Log.Trace("OUTGOING:\r\n", () => Encoding.UTF8.GetString(outgoingBuffer));
+            if (outgoingBuffer.Length > 0)
+            {
+                _totalRealRead += outgoingBuffer.Length;
+                Log.Trace("OUTGOING:\r\n", () => Encoding.UTF8.GetString(outgoingBuffer));
 
-            // Send reply back to virtual socket. The event pump will continue to send connection and state.
-            VirtualSocket.SendData(outgoingBuffer);
-            _totalVirtualSent += outgoingBuffer.Length;
-            Log.Debug($"Virtual socket has {VirtualSocket.BytesOfSendDataWaiting} bytes remaining to send");
+                // Send reply back to virtual socket. The event pump will continue to send connection and state.
+                VirtualSocket.SendData(outgoingBuffer);
+                _totalVirtualSent += outgoingBuffer.Length;
+                Log.Debug($"Virtual socket has {VirtualSocket.BytesOfSendDataWaiting} bytes remaining to send");
+            }
 
             VirtualSocket.EventPump(); // not strictly needed, but reduces latency a bit
             return outgoingBuffer.Length > 0;
