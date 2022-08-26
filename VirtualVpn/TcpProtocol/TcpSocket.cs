@@ -430,7 +430,7 @@ public class TcpSocket
                 return false; // nothing to send
             }
 
-            Log.Trace($"Entering SendIfPossible. Send buffer claims {_sendBuffer.Count()} bytes, some of which have not been transmitted");
+            Log.Trace($"Entering SendIfPossible. Send buffer claims {_sendBuffer.Count()} bytes, {_sendBuffer.RemainingData()} of which have not been transmitted");
 
             long inflight = 0;
             foreach (var segment in _unAckedSegments)
@@ -477,9 +477,8 @@ public class TcpSocket
                 _nudgeDataSent = false;
             }
 
-            var total = _sendBuffer.Count();
             var sent = SendData(sequence: _tcb.Snd.Nxt, maxSize: (int)space, flags: TcpSegmentFlags.None, isRetransmit: false, isNudge: _nudgeDataSent);
-            Log.Trace($"SendIfPossible - sent {sent} bytes, {total - sent} remaining");
+            Log.Trace($"SendIfPossible - sent {sent} bytes, {_sendBuffer.RemainingData()} remaining");
             return true;
         }
     }
@@ -880,7 +879,12 @@ public class TcpSocket
     private int SendData(uint sequence, int maxSize, TcpSegmentFlags flags, bool isRetransmit, bool isNudge) // lib/tcp/output.c:135
     {
         Log.Trace($"Call to SendData: sequence={sequence}, max size={maxSize}, flags={flags.ToString()}, is retransmit={isRetransmit}");
-        
+
+        if (sequence > _sendBuffer.ReadHead)
+        {
+            Log.Warn($"Misalignment? Send buffer is at {_sendBuffer.ReadHead)}, but sent requested {sequence} ({sequence - _sendBuffer.ReadHead)} bytes lost?)");
+        }
+
         // lib/tcp/output.c:153
         var ackN = _tcb.Rcv.Nxt;
         flags |= TcpSegmentFlags.Ack;
