@@ -148,7 +148,7 @@ public class SendBuffer
         // should we chop this into MSS chunks, or just feed it directly in?
         lock (_lock)
         {
-            if (Start < 0) throw new Exception("Tried to write before setting start sequence");
+            if (Start < 0 || ReadHead < 0) throw new Exception("Tried to write before setting start sequence");
             if (End < 0) End = Start + Count();
 
             var nextSequence = End;
@@ -171,7 +171,7 @@ public class SendBuffer
                 End = nextSequence + written;
             }
 
-            Log.Debug($"Wrote to SendBuffer. Buffer start seq={Start}, write start seq={nextSequence}, write end seq={End}");
+            Log.Debug($"Wrote to SendBuffer. Buffer start seq={Start}, write start seq={nextSequence}, write end seq={End}; read head={ReadHead}");
         }
     }
 
@@ -182,6 +182,7 @@ public class SendBuffer
         lock (_lock)
         {
             Start = sndNxt;
+            ReadHead = Start;
         }
     }
 
