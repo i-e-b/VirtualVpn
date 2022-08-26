@@ -168,13 +168,21 @@ public class TcpAdaptor : ITcpAdaptor
 
     private bool RunDataTransfer()
     {
-        // Then check if we're ready to open a socket to the web app
-        if (VirtualSocket.State != TcpSocketState.Established) return false;
-        if (VirtualSocket.BytesOfReadDataWaiting < 1) return false;
-
         // We are ready to talk to web app. Make sure we have a real socket
-        _realSocketToWebApp ??= ConnectToWebApp();
+        if (VirtualSocket.State == TcpSocketState.Established)
+        {
+            if (_realSocketToWebApp is null) Log.Trace("Connecting to web app");
+            _realSocketToWebApp ??= ConnectToWebApp();
+        }
 
+        if (_realSocketToWebApp is null)
+        {
+            Log.Trace($"Not ready to move data (no web app socket). Virtual socket has {VirtualSocket.BytesOfReadDataWaiting} bytes ready.");
+            return false;
+        }
+        
+        Log.Trace($"Attempting tunnel<->webApp. Tunnel has {VirtualSocket.BytesOfReadDataWaiting} bytes ready. Web app has {_realSocketToWebApp?.Available ?? 0} bytes ready.");
+        
         var anyData = false;
         
         // check to see if there is virtual port data to pass to the web app
@@ -182,9 +190,11 @@ public class TcpAdaptor : ITcpAdaptor
         {
             anyData |= MoveDataFromTunnelToWebApp();
         }
+        else  Log.Trace("Virtual socket is empty");
 
         // Read reply back from web app
         anyData |= MoveDataFromWebAppBackToTunnel();
+        
         return anyData;
     }
 
