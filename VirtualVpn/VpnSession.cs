@@ -5,9 +5,9 @@ using SkinnyJson;
 using VirtualVpn.Crypto;
 using VirtualVpn.Enums;
 using VirtualVpn.EspProtocol;
+using VirtualVpn.EspProtocol.Payloads;
+using VirtualVpn.EspProtocol.Payloads.PayloadSubunits;
 using VirtualVpn.Helpers;
-using VirtualVpn.Payloads;
-using VirtualVpn.Payloads.PayloadSubunits;
 
 namespace VirtualVpn;
 

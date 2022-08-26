@@ -1,7 +1,7 @@
 ﻿using VirtualVpn.Crypto;
 using VirtualVpn.Enums;
 
-namespace VirtualVpn.Payloads;
+namespace VirtualVpn.EspProtocol.Payloads;
 
 /// <summary>
 /// Represents an 'SK' message (type 46).

@@ -1,7 +1,7 @@
 ﻿using System.Text;
 using VirtualVpn.Enums;
 
-namespace VirtualVpn.Payloads;
+namespace VirtualVpn.EspProtocol.Payloads;
 
 public class PayloadVendorId : MessagePayload
 {

@@ -1,6 +1,6 @@
 ﻿using VirtualVpn.Enums;
 
-namespace VirtualVpn.Payloads;
+namespace VirtualVpn.EspProtocol.Payloads;
 
 /// <summary>
 /// Payload for messages we don't understand

@@ -1,8 +1,8 @@
 ﻿using NUnit.Framework;
 using VirtualVpn.Enums;
 using VirtualVpn.EspProtocol;
-using VirtualVpn.Payloads;
-using VirtualVpn.Payloads.PayloadSubunits;
+using VirtualVpn.EspProtocol.Payloads;
+using VirtualVpn.EspProtocol.Payloads.PayloadSubunits;
 
 #pragma warning disable CS8602
 

@@ -2,7 +2,7 @@
 using VirtualVpn.Enums;
 using VirtualVpn.Helpers;
 
-namespace VirtualVpn.Payloads;
+namespace VirtualVpn.EspProtocol.Payloads;
 
 /// <summary>
 /// Flip side of <see cref="PayloadIDr"/>.

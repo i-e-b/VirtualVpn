@@ -1,15 +1,19 @@
-﻿// See https://aka.ms/new-console-template for more information
-
-using VirtualVpn;
+﻿using VirtualVpn;
 using VirtualVpn.Web;
 
 Log.SetLevel(Settings.DefaultLogLevel);
 
-// Mini web site to grab captures
-var http = new HttpCapture();
-http.Start();
-
+if (Settings.RunAirliftSite)
+{
+    // Mini web site for file captures
+    var http = new HttpCapture();
+    http.Start();
+}
 
 // Run the VPN server
+// This also listens for console input
+// for various commands, including for
+// starting IP-SEC connections, and to
+// set log levels.
 using var vpnServer = new VpnServer();
 vpnServer.Run();

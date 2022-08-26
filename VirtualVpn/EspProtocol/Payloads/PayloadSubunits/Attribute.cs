@@ -1,7 +1,7 @@
 ﻿using VirtualVpn.Enums;
 using VirtualVpn.Helpers;
 
-namespace VirtualVpn.Payloads.PayloadSubunits;
+namespace VirtualVpn.EspProtocol.Payloads.PayloadSubunits;
 
 public class TransformAttribute
 {

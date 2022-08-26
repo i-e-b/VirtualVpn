@@ -1,7 +1,7 @@
 ﻿using VirtualVpn.Enums;
-using VirtualVpn.Payloads.PayloadSubunits;
+using VirtualVpn.EspProtocol.Payloads.PayloadSubunits;
 
-namespace VirtualVpn.Payloads;
+namespace VirtualVpn.EspProtocol.Payloads;
 
 /// <summary>
 /// Base class. Use Tsi or Tsr

@@ -1,9 +1,9 @@
 ﻿using VirtualVpn.Crypto;
 using VirtualVpn.Enums;
+using VirtualVpn.EspProtocol.Payloads.PayloadSubunits;
 using VirtualVpn.Helpers;
-using VirtualVpn.Payloads.PayloadSubunits;
 
-namespace VirtualVpn.Payloads;
+namespace VirtualVpn.EspProtocol.Payloads;
 
 // pvpn.message.PayloadSA - pvpn/message.py:286
 public class PayloadSa : MessagePayload

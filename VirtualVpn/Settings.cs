@@ -7,6 +7,20 @@ public static class Settings
     /// </summary>
     public const string FileBase = "/root/airlift/";
     //public const string FileBase = @"C:\temp\zzz";
+    
+    /// <summary>
+    /// Listener prefix for the web "airlift". This helps you pull logs.
+    /// </summary>
+    public const string HttpPrefix = "://+:8011/"; // <-- this will require root/admin access.
+    //public const string HttpPrefix = "://localhost:8011/"; // <-- use this if testing locally
+    
+    /// <summary>
+    /// If true, VirtualVPN will listen for HTTP connections
+    /// NOT on an IPSEC tunnel, and will allow access to the
+    /// network capture files.  This is only for development
+    /// and diagnostics and should normally be 'false'.
+    /// </summary>
+    public const bool RunAirliftSite = true;
 
     /// <summary>
     /// Declared IP address of this VPN node.
@@ -32,12 +46,6 @@ public static class Settings
     /// Otherwise it looks like StrongSwan log format.
     /// </summary>
     public static bool CodeModeForDescription = true;
-    
-    /// <summary>
-    /// Listener prefix for the web "airlift". This helps you pull logs.
-    /// </summary>
-    public const string HttpPrefix = "://+:8011/"; // <-- this will require root/admin access.
-    //public const string HttpPrefix = "://localhost:8011/"; // <-- use this if testing locally
     
     /// <summary>
     /// Median time to pause between event pump runs.
