@@ -189,7 +189,7 @@ public class TcpAdaptor : ITcpAdaptor
         // check to see if there is virtual port data to pass to the web app
         //if (VirtualSocket.BytesOfReadDataWaiting > 0)
         //{
-            anyData |= MoveDataFromTunnelToWebApp();
+        anyData |= MoveDataFromTunnelToWebApp();
         //}
         //else Log.Trace("Virtual socket is empty");
 
@@ -198,6 +198,10 @@ public class TcpAdaptor : ITcpAdaptor
 
         return anyData;
     }
+
+    private volatile bool _sendLatch = false;
+    private volatile bool _receiveLatch = false;
+    private volatile bool _tailLatch = false;
 
     private bool MoveDataFromWebAppBackToTunnel()
     {
@@ -217,6 +221,7 @@ public class TcpAdaptor : ITcpAdaptor
                 var received = _realSocketToWebApp.Receive(_receiveBuffer);
                 if (received > 0) finalBytes.AddRange(_receiveBuffer.Take(received));
 
+                _receiveLatch = true;
                 Log.Debug($"Got {received} bytes from socket");
             }
 
@@ -246,9 +251,15 @@ public class TcpAdaptor : ITcpAdaptor
             if (VirtualSocket.BytesOfReadDataWaiting < 1)
             {
                 Log.Trace("No data to move to web app");
+                
+                
                 // IEB: experiment-- try pushing tail byte?
-                var pushed = _realSocketToWebApp?.Send(new byte[]{0}, 0, 1, SocketFlags.None) ?? -1;
-                Log.Trace($"Tried to push a tailing byte. {pushed} of 1 sent.");
+                if (_sendLatch && !_receiveLatch && !_tailLatch)
+                {
+                    _tailLatch = true;
+                    var pushed = _realSocketToWebApp?.Send(new byte[] { 0 }, 0, 1, SocketFlags.None) ?? -1;
+                    Log.Trace($"Tried to push a tailing byte. {pushed} of 1 sent.");
+                }
             }
 
             // read from tunnel
@@ -256,6 +267,7 @@ public class TcpAdaptor : ITcpAdaptor
             var actual = VirtualSocket.ReadData(buffer);
             Log.Info($"Message received from tunnel, {actual} bytes of an expected {buffer.Length}.");
             Log.Trace("INCOMING:\r\n", () => Encoding.UTF8.GetString(buffer, 0, actual));
+            if (actual > 0) _sendLatch = true;
 
             // Send data to web app
             var sent = _realSocketToWebApp?.Send(buffer, 0, actual, SocketFlags.None) ?? -1;

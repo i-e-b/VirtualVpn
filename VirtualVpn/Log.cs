@@ -40,8 +40,7 @@ public static class Log
 
     public static void Crypto(string msg)
     {
-        if ((int)_level < (int)LogLevel.Crypto) return;
-        Console.WriteLine(msg);
+        if (_level == LogLevel.Crypto) Console.WriteLine(msg);
     }
 
     public static void Trace(string msg)
