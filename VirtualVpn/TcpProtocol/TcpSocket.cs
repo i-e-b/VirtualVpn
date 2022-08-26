@@ -430,7 +430,7 @@ public class TcpSocket
 
             if (!_sendBuffer.HasDataAfter(_tcb.Snd.Nxt))
             {
-                Log.Trace("TcpSocket.SendIfPossible - I think I've sent everything");
+                Log.Trace("TcpSocket.SendIfPossible - no data to send");
                 return false; // nothing to send
             }
 

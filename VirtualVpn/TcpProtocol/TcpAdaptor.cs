@@ -102,8 +102,12 @@ public class TcpAdaptor : ITcpAdaptor
     /// </summary>
     public void Accept(IpV4Packet ipv4)
     {
-        LastContact.Restart(); // back to zero, keep counting
-        HandleMessage(ipv4, out _);
+        var ok = HandleMessage(ipv4, out _);
+        if (ok)
+        {
+            Log.Trace("Restarting last contact timer");
+            LastContact.Restart(); // back to zero, keep counting
+        }
     }
 
     /// <summary>
@@ -165,9 +169,13 @@ public class TcpAdaptor : ITcpAdaptor
         return true;
     }
 
+    #region Transfer between web app and VPN tunnel
     long _totalVirtualSent, _totalVirtualRead, _totalRealSent, _totalRealRead;
+    bool _shutdownTransfer = false;
     private bool RunDataTransfer()
     {
+        if (_shutdownTransfer) return false;
+
         Log.Trace($"### Run Data Transfer ### vRead={_totalVirtualRead}, rSend={_totalRealSent}, rRead={_totalRealRead}, vSend={_totalVirtualSent}," +
                   $" vSocket={VirtualSocket.State.ToString()}, webApp connected={_realSocketToWebApp?.Connected ?? false}");
 
@@ -188,7 +196,7 @@ public class TcpAdaptor : ITcpAdaptor
 
         if (!_realSocketToWebApp.Connected)
         {
-            Log.Info("Web app socket is closed. Not transferring any data");
+            Log.Trace("Web app socket is closed. Not transferring any data");
             return false;
         }
 
@@ -215,6 +223,7 @@ public class TcpAdaptor : ITcpAdaptor
             && VirtualSocket.BytesOfSendDataWaiting < 1)
         {
             // Everything is finished. Close down
+            _shutdownTransfer = true;
             VirtualSocket.StartClose();
         }
 
@@ -313,6 +322,7 @@ public class TcpAdaptor : ITcpAdaptor
         Log.Debug("connection up");
         return webApiSocket;
     }
+    #endregion
 
     /// <summary>
     /// Send a TCP packet back down the tunnel interface
@@ -369,6 +379,12 @@ public class TcpAdaptor : ITcpAdaptor
     /// </summary>
     public bool EventPump()
     {
+        if (VirtualSocket.State == TcpSocketState.Closed)
+        {
+            Log.Trace("Virtual socket closed. Nothing to pump");
+            return false;
+        }
+
         var acted = RunDataTransfer();
         acted |= VirtualSocket.EventPump();
 
