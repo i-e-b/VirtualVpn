@@ -885,8 +885,8 @@ public class TcpSocket
         var ackN = _tcb.Rcv.Nxt;
         flags |= TcpSegmentFlags.Ack;
 
-        var bytesAvailable = _sendBuffer.Count();
-        if (bytesAvailable < 1)
+        var bytesBuffered = _sendBuffer.Count();
+        if (bytesBuffered < 1)
         {
             ErrorCode = SocketError.NoData;
             Log.Error("Call to SendData, with no data in outgoing buffer");
@@ -926,13 +926,15 @@ public class TcpSocket
         // then clamp the value to at most the requested payload size
         // https://tools.ietf.org/html/rfc793#section-3.7
         // (see https://tools.ietf.org/html/rfc879 for details)
-        var willFitInPacket = Min(_mss, (int)bytesAvailable);
+        var willFitInPacket = Min(_mss, (int)bytesBuffered);
+        
+        var willFitInWindow = Min(willFitInPacket, receiveWindow);
 
         // Make sure we don't send more than requested
-        var toSend = (maxSize > 0) ? Min(maxSize, willFitInPacket) : willFitInPacket;
+        var toSend = (maxSize > 0) ? Min(maxSize, willFitInWindow) : willFitInWindow;
 
         // Set 'push' flag if the buffer is going to be empty
-        if (toSend >= bytesAvailable) seg.Flags |= TcpSegmentFlags.Psh;
+        if (toSend >= bytesBuffered) seg.Flags |= TcpSegmentFlags.Psh;
 
         // Add to queue waiting for ACK
         QueueUnacknowledged(sequence, toSend, seg.Flags);
@@ -946,7 +948,12 @@ public class TcpSocket
             return 0;
         }
 
-        Log.Info($"SendData: Transmitting data. Payload length={seg.Payload.Length}");
+        Log.Info($"SendData: Transmitting data. Expected length={toSend}, Payload length={seg.Payload.Length}");
+        if (toSend != seg.Payload.Length)
+        {
+            Log.Critical($"Wrong payload length! Expected {toSend}, but got {seg.Payload.Length}. Error in send buffer?");
+        }
+
         Send(seg, _route); // lib/tcp/output.c:212
         return seg.Payload.Length;
     }

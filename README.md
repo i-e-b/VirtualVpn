@@ -34,7 +34,9 @@ https://www.rfc-editor.org/rfc/rfc9293
 
 ### Now
 
-- [x] Add POST endpoint to the test web app, and post something big to it from Curl
+- [ ] Add POST endpoint to the test web app, and post something big to it from Curl
+      This has a bug!
+
 - [ ] Need to be able to start a SA from this side
 
 ### Next
