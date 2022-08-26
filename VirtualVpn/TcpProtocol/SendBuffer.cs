@@ -54,6 +54,7 @@ public class SendBuffer
         // 2. Gather data in chunks until we reach the end of the buffer, or the size requested.
         //    Note: we may have overlap in the offsets we have to account for
 
+        Log.Trace($"SendBuffer:PullInternal - requested offset={offset} up to max of {maxSize} bytes.");
         if (_segments.Count < 1) return Array.Empty<byte>();
         
         var found = FindFirstSegmentForSequence(offset, out var sequenceStart, out var orderedOffsets);
@@ -125,6 +126,7 @@ public class SendBuffer
             {
                 Log.Debug($"SendBuffer:ConsumeTo - no data to release. Next sequence={newStart}");
                 Start = newStart;
+                ReadHead = newStart;
                 return;
             }
 
@@ -137,6 +139,7 @@ public class SendBuffer
 
             Log.Debug($"SendBuffer:ConsumeTo - releasing from {Start} to {newStart} ({newStart-Start} bytes)");
             Start = newStart;
+            if (Start > ReadHead) ReadHead = Start;
         }
     }
 
@@ -182,7 +185,7 @@ public class SendBuffer
         lock (_lock)
         {
             Start = sndNxt;
-            ReadHead = Start;
+            ReadHead = sndNxt;
         }
     }
 
