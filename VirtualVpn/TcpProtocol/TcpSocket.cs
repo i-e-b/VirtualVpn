@@ -438,7 +438,7 @@ public class TcpSocket
                 inflight += segment.Length;
             }
 
-            long space = Max(0, _tcb.Snd.Wnd - inflight); // BUG: _tcb.Snd.Wnd is getting set to zero
+            long space = Max(0, _tcb.Snd.Wnd - inflight);
             if (space <= 0)
             {
                 // If we get here, and the inflight count is zero, the other
@@ -1278,7 +1278,7 @@ public class TcpSocket
                 }
                 else
                 {
-                    _tcb.Rcv.Wnd -= (ushort)segLen; // BUG: This is never being adjusted
+                    _tcb.Rcv.Wnd -= (ushort)segLen;
                     Log.Trace($"Receive window at {_tcb.Rcv.Wnd} bytes");
                 }
 
@@ -1950,7 +1950,7 @@ public class TcpSocket
         // https://tools.ietf.org/html/rfc1122#page-94
         if (segment.WindowSize < 1)
         {
-            Log.Warn("Window size went to zero!"); // BUG: zero window coming IN here
+            Log.Warn("Window size went to zero!");
         }
 
         _tcb.Snd.Wnd = (ushort)segment.WindowSize;

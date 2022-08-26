@@ -60,6 +60,13 @@ public static class Log
         Console.Write(msg);
         Console.WriteLine(more());
     }
+    public static void Trace(Func<string> msg)
+    {
+        if (_level < LogLevel.Trace) return;
+        
+        Console.Write("                       "); // same spacing as timestamp
+        Console.Write(msg());
+    }
 
     public static void Debug(string msg, Func<IEnumerable<string>>? subLines = null)
     {

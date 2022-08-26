@@ -166,22 +166,29 @@ public class TcpAdaptor : ITcpAdaptor
     }
 
 
-    long _totalVirtRead, _totalRealSent, _totalRealRead;
+    long _totalVirtualRead, _totalRealSent, _totalRealRead;
     private bool RunDataTransfer()
     {
-        Log.Trace($"### Run Data Transfer ### vRead={_totalVirtRead}, rSend={_totalRealSent}, rRead={_totalRealRead}," +
+        Log.Trace($"### Run Data Transfer ### vRead={_totalVirtualRead}, rSend={_totalRealSent}, rRead={_totalRealRead}," +
                   $" vSocket={VirtualSocket.State.ToString()}, webApp connected={_realSocketToWebApp?.Connected ?? false}");
 
+        // Virtual socket not up? Nothing to do.
+        if (VirtualSocket.State != TcpSocketState.Established) return false;
+        
+        
         // If we are ready to talk to web app, make sure we have a real socket
-        if (VirtualSocket.State == TcpSocketState.Established)
-        {
-            if (_realSocketToWebApp is null) Log.Trace("Connecting to web app");
-            _realSocketToWebApp ??= ConnectToWebApp();
-        }
+        if (_realSocketToWebApp is null) Log.Trace("Connecting to web app");
+        _realSocketToWebApp ??= ConnectToWebApp();
 
         if (_realSocketToWebApp is null)
         {
             Log.Trace($"Not ready to move data (no web app socket). Virtual socket has {VirtualSocket.BytesOfReadDataWaiting} bytes ready.");
+            return false;
+        }
+
+        if (!_realSocketToWebApp.Connected)
+        {
+            Log.Info("Web app socket is closed. Not transferring any data");
             return false;
         }
 
@@ -190,16 +197,16 @@ public class TcpAdaptor : ITcpAdaptor
         var anyData = false;
 
         // check to see if there is virtual port data to pass to the web app
-        //if (VirtualSocket.BytesOfReadDataWaiting > 0)
-        //{
-        anyData |= MoveDataFromTunnelToWebApp();
-        //}
-        //else Log.Trace("Virtual socket is empty");
+        if (VirtualSocket.BytesOfReadDataWaiting > 0)
+        {
+            anyData |= MoveDataFromTunnelToWebApp();
+        }
+        else Log.Trace("Virtual socket is empty");
 
         // Read reply back from web app
         anyData |= MoveDataFromWebAppBackToTunnel();
 
-        Log.Trace($"END Run Data Transfer anyMove={anyData}, vRead={_totalVirtRead}, rSend={_totalRealSent}, rRead={_totalRealRead}," +
+        Log.Trace($"END Run Data Transfer anyMove={anyData}, vRead={_totalVirtualRead}, rSend={_totalRealSent}, rRead={_totalRealRead}," +
                   $" vSocket={VirtualSocket.State.ToString()}, webApp connected={_realSocketToWebApp?.Connected ?? false}");
         return anyData;
     }
@@ -252,15 +259,18 @@ public class TcpAdaptor : ITcpAdaptor
             if (VirtualSocket.BytesOfReadDataWaiting < 1)
             {
                 Log.Trace("No data to move to web app");
+                return false;
             }
 
             // read from tunnel
             var buffer = new byte[VirtualSocket.BytesOfReadDataWaiting];
             var actual = VirtualSocket.ReadData(buffer);
-            _totalVirtRead += actual;
+            _totalVirtualRead += actual;
             Log.Info($"Message received from tunnel, {actual} bytes of an expected {buffer.Length}.");
             Log.Trace("INCOMING:\r\n", () => Encoding.UTF8.GetString(buffer, 0, actual));
 
+            if (actual < 1) return false;
+            
             // Send data to web app
             var sent = _realSocketToWebApp?.Send(buffer, 0, actual, SocketFlags.None) ?? -1;
             if (sent != actual)
