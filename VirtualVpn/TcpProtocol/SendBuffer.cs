@@ -73,7 +73,7 @@ public class SendBuffer
             var available = chunk.Length - chunkOffset;
 
             // check that this is a valid selection (in case of major overlap)
-            if (available <= 0)
+            if (available < 0)
             {
                 sequenceStart++;
                 continue;
@@ -81,14 +81,15 @@ public class SendBuffer
 
             var toTake = remaining < available ? remaining : available;
 
-            result.AddRange(chunk.Skip((int)chunkOffset).Take((int)toTake));
-            remaining -= toTake;
-            loc += toTake;
+            var byteSlice = chunk.Skip((int)chunkOffset).Take((int)toTake).ToArray();
+            result.AddRange(byteSlice);
+            remaining -= byteSlice.Length;
+            loc += byteSlice.Length;
             sequenceStart++;
         }
 
         ReadHead = offset + result.Count;
-        Log.Debug($"SendBuffer:Pull - read head moved from {offset} to {ReadHead}");
+        Log.Debug($"SendBuffer:Pull - read head moved from {offset} to {ReadHead} ({ReadHead - offset} bytes)");
         return result.ToArray();
     }
 

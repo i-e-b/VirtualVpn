@@ -166,6 +166,26 @@ public class ReadWriteBufferTests
         Assert.That(subject.RemainingData(), Is.EqualTo(15), "data left");
     }
 
+    [Test]
+    public void send_buffer_slice_over_multiple()
+    {
+        var subject = new SendBuffer();
+        var chunk_1 = new byte[] { 1, 2 };
+        var chunk_2 = new byte[] { 3, 4, 5, 6, 7 };
+        var chunk_3 = new byte[] { 8, 9, 10 };
+
+        // fill the buffer
+        subject.SetStartSequence(420);
+        subject.Write(chunk_1, 0, chunk_1.Length);
+        subject.Write(chunk_2, 0, chunk_2.Length);
+        subject.Write(chunk_3, 0, chunk_3.Length);
+        
+        var exact = subject.Pull(420, 10);
+        Assert.That(exact, Is.EqualTo(new byte[]{1,2,3,4,5,6,7,8,9,10}).AsCollection, "exact slice size");
+        
+        var oversize = subject.Pull(420, 20);
+        Assert.That(oversize, Is.EqualTo(new byte[]{1,2,3,4,5,6,7,8,9,10}).AsCollection, "oversize slice");
+    }
 
     private void Clear(byte[] buffer)
     {
