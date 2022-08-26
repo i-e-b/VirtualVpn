@@ -165,9 +165,12 @@ public class TcpAdaptor : ITcpAdaptor
         return true;
     }
 
+
+    long _totalVirtRead, _totalRealSent, _totalRealRead;
     private bool RunDataTransfer()
     {
-        Log.Trace($"### Run Data Transfer ### vSocket={VirtualSocket.State.ToString()}, webApp connected={_realSocketToWebApp?.Connected ?? false}");
+        Log.Trace($"### Run Data Transfer ### vRead={_totalVirtRead}, rSend={_totalRealSent}, rRead={_totalRealRead}," +
+                  $" vSocket={VirtualSocket.State.ToString()}, webApp connected={_realSocketToWebApp?.Connected ?? false}");
 
         // If we are ready to talk to web app, make sure we have a real socket
         if (VirtualSocket.State == TcpSocketState.Established)
@@ -196,12 +199,10 @@ public class TcpAdaptor : ITcpAdaptor
         // Read reply back from web app
         anyData |= MoveDataFromWebAppBackToTunnel();
 
+        Log.Trace($"END Run Data Transfer anyMove={anyData}, vRead={_totalVirtRead}, rSend={_totalRealSent}, rRead={_totalRealRead}," +
+                  $" vSocket={VirtualSocket.State.ToString()}, webApp connected={_realSocketToWebApp?.Connected ?? false}");
         return anyData;
     }
-
-    private volatile bool _sendLatch = false;
-    private volatile bool _receiveLatch = false;
-    private volatile bool _tailLatch = false;
 
     private bool MoveDataFromWebAppBackToTunnel()
     {
@@ -221,13 +222,13 @@ public class TcpAdaptor : ITcpAdaptor
                 var received = _realSocketToWebApp.Receive(_receiveBuffer);
                 if (received > 0) finalBytes.AddRange(_receiveBuffer.Take(received));
 
-                _receiveLatch = true;
                 Log.Debug($"Got {received} bytes from socket");
             }
 
             Log.Info($"Web app replied with {finalBytes.Count} bytes of data");
 
             var outgoingBuffer = finalBytes.ToArray();
+            _totalRealRead += outgoingBuffer.Length;
             Log.Trace("OUTGOING:\r\n", () => Encoding.UTF8.GetString(outgoingBuffer));
 
             // Send reply back to virtual socket. The event pump will continue to send connection and state.
@@ -243,7 +244,7 @@ public class TcpAdaptor : ITcpAdaptor
             return false;
         }
     }
-
+    
     private bool MoveDataFromTunnelToWebApp()
     {
         try
@@ -251,25 +252,14 @@ public class TcpAdaptor : ITcpAdaptor
             if (VirtualSocket.BytesOfReadDataWaiting < 1)
             {
                 Log.Trace("No data to move to web app");
-                
-                
-                // IEB: experiment-- try closing connection?
-                if (_sendLatch && !_receiveLatch && !_tailLatch)
-                {
-                    _tailLatch = true;
-                    //var pushed = _realSocketToWebApp?.Send(new byte[] { 0 }, 0, 1, SocketFlags.None) ?? -1;
-                    //Log.Trace($"Tried to push a tailing byte. {pushed} of 1 sent.");
-                    
-                    _realSocketToWebApp?.Shutdown(SocketShutdown.Send);
-                }
             }
 
             // read from tunnel
             var buffer = new byte[VirtualSocket.BytesOfReadDataWaiting];
             var actual = VirtualSocket.ReadData(buffer);
+            _totalVirtRead += actual;
             Log.Info($"Message received from tunnel, {actual} bytes of an expected {buffer.Length}.");
             Log.Trace("INCOMING:\r\n", () => Encoding.UTF8.GetString(buffer, 0, actual));
-            if (actual > 0) _sendLatch = true;
 
             // Send data to web app
             var sent = _realSocketToWebApp?.Send(buffer, 0, actual, SocketFlags.None) ?? -1;
@@ -277,6 +267,7 @@ public class TcpAdaptor : ITcpAdaptor
             {
                 Log.Warn($"Unexpected send length. Tried to send {actual} bytes, but transmitted {sent} bytes.");
             }
+            _totalRealSent += sent;
 
             Log.Trace($"Tunnel data sent to web app. {actual} bytes of {sent}.");
 
