@@ -162,30 +162,42 @@ public class TcpAdaptor : ITcpAdaptor
         VirtualSocket.FeedIncomingPacket(tcp, ipv4);
         VirtualSocket.EventPump(); // not strictly needed, but reduces latency a bit
         
-        // Then check if we're ready to open a socket to the web app
-        if (VirtualSocket.State != TcpSocketState.Established) return true; // not connected yet
-        if (VirtualSocket.ReadDataState < TcpReadDataState.Cached) return true; // no data yet
-        
-        // We are ready to talk to web app. Make sure we have a real socket
-        _realSocketToWebApp ??= ConnectToWebApp();
-
-        // check to see if there is virtual port data to pass to the web app
-        if (VirtualSocket.BytesOfReadDataWaiting > 0)
-        {
-            MoveDataFromTunnelToWebApp();
-        }
-
-        // Read reply back from web app
-        MoveDataFromWebAppBackToTunnel();
-
+        RunDataTransfer();
         return true;
     }
 
-    private void MoveDataFromWebAppBackToTunnel()
+    private bool RunDataTransfer()
+    {
+        // Then check if we're ready to open a socket to the web app
+        if (VirtualSocket.State != TcpSocketState.Established) return false;
+        if (VirtualSocket.BytesOfReadDataWaiting < 1) return false;
+
+        // We are ready to talk to web app. Make sure we have a real socket
+        _realSocketToWebApp ??= ConnectToWebApp();
+
+        var anyData = false;
+        
+        // check to see if there is virtual port data to pass to the web app
+        if (VirtualSocket.BytesOfReadDataWaiting > 0)
+        {
+            anyData |= MoveDataFromTunnelToWebApp();
+        }
+
+        // Read reply back from web app
+        anyData |= MoveDataFromWebAppBackToTunnel();
+        return anyData;
+    }
+
+    private bool MoveDataFromWebAppBackToTunnel()
     {
         try
         {
             var finalBytes = new List<byte>();
+
+            if ((_realSocketToWebApp?.Available ?? 0) < 1)
+            {
+                Log.Trace("Web app reporting no data yet");
+            }
 
             while (_realSocketToWebApp is not null
                    && _realSocketToWebApp.Available > 0)
@@ -207,33 +219,39 @@ public class TcpAdaptor : ITcpAdaptor
             Log.Debug($"Virtual socket has {VirtualSocket.BytesOfSendDataWaiting} bytes remaining to send");
             
             VirtualSocket.EventPump(); // not strictly needed, but reduces latency a bit
+            return outgoingBuffer.Length > 0;
         }
         catch (Exception ex)
         {
             Log.Error("Failed to move data from Web App back to tunnel", ex);
+            return false;
         }
     }
 
-    private void MoveDataFromTunnelToWebApp()
+    private bool MoveDataFromTunnelToWebApp()
     {
         try
         {
             // read from tunnel
             var buffer = new byte[VirtualSocket.BytesOfReadDataWaiting];
             var actual = VirtualSocket.ReadData(buffer);
-            Log.Info($"Complete message received, {actual} bytes of an expected {buffer.Length}.");
+            Log.Info($"Message received from tunnel, {actual} bytes of an expected {buffer.Length}.");
             Log.Trace("INCOMING:\r\n", () => Encoding.UTF8.GetString(buffer, 0, actual));
 
             // Send data to web app
-            var sent = _realSocketToWebApp?.Send(buffer, 0, actual, SocketFlags.None) ?? -1;
+            var sent = _realSocketToWebApp?.Send(buffer, 0, actual, SocketFlags.Partial) ?? -1;
             if (sent != actual)
             {
                 Log.Warn($"Unexpected send length. Tried to send {actual} bytes, but transmitted {sent} bytes.");
             }
+            Log.Trace($"Tunnel data sent to web app. {actual} bytes of {sent}.");
+            
+            return sent > 0;
         }
         catch (Exception ex)
         {
             Log.Error("Failed to move data from tunnel to Web App", ex);
+            return false;
         }
     }
 
@@ -301,7 +319,8 @@ public class TcpAdaptor : ITcpAdaptor
     /// </summary>
     public bool EventPump()
     {
-        var acted = VirtualSocket.EventPump();
+        var acted = RunDataTransfer();
+           acted |= VirtualSocket.EventPump();
 
         switch (VirtualSocket.ErrorCode)
         {
