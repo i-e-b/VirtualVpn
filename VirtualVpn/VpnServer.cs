@@ -3,6 +3,7 @@ using SkinnyJson;
 using VirtualVpn.Enums;
 using VirtualVpn.EspProtocol;
 using VirtualVpn.Helpers;
+using VirtualVpn.InternetProtocol;
 
 // ReSharper disable BuiltInTypeReferenceStyle
 
@@ -48,9 +49,10 @@ public class VpnServer : IDisposable
         {
             // wait for local commands
             var cmd = Console.ReadLine();
-            Console.Write($"CMD: `{cmd}`");
+            var prefix = Min2(cmd?.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+            Console.Write($"CMD: `{prefix[0]}` ({prefix[1]})");
 
-            switch (cmd)
+            switch (prefix[0])
             {
                 case "trace":
                 {
@@ -67,14 +69,86 @@ public class VpnServer : IDisposable
                     Log.SetLevel(LogLevel.Info);
                     break;
                 }
+                
+                case "kill":
+                    Log.Error("Not implemented yet");
+                    break;
+                case "list":
+                {
+                    ListGateways();
+                    break;
+                }
+                case "start":
+                {
+                    try
+                    {
+                        StartVpnConnection(prefix[1]);
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Error("Could not start VPN connection: ", ex);
+                    }
+                    break;
+                }
                 default:
                     Console.WriteLine("Known commands:");
                     Console.WriteLine("    Logging:");
                     Console.WriteLine("        trace, loud, less");
-                    // TODO: command to start VPN connection
+                    Console.WriteLine("    Connection:");
+                    Console.WriteLine("        list, start [gateway], kill [gateway]");
                     break;
             }
         }
+    }
+
+    private void ListGateways()
+    {
+        Console.WriteLine("\r\nEstablished connections:");
+        foreach (var session in _childSessions)
+        {
+            Console.WriteLine($"    {session.Value.Gateway} [{session.Key}]");
+        }
+    }
+
+    private void StartVpnConnection(string gatewayAddress)
+    {
+        // Assume gateway address is IPv4 decimals for now.
+        Log.Info($"Requested connection to [{gatewayAddress}], searching for existing connections");
+        
+        var requestedGateway = IpV4Address.FromString(gatewayAddress);
+        
+        // first, see if we've already got a connection up:
+        foreach (var childSession in _childSessions)
+        {
+            if (childSession.Value.Gateway == requestedGateway)
+            {
+                Log.Error($"A VPN session is already open with {requestedGateway} as {childSession.Key}. Try 'kill {childSession.Key}' if you want to restart");
+            }
+        }
+        
+        // next, see if we've already got a connection pending:
+        foreach (var vpnSession in _sessions)
+        {
+            if (vpnSession.Value.Gateway == requestedGateway)
+            {
+                Log.Error($"A VPN session is in progress with {requestedGateway} as {vpnSession.Key}. Try 'kill {vpnSession.Key}' if you want to restart");
+            }
+        }
+        
+        Log.Critical($"Should start connection to [{gatewayAddress}]");
+    }
+
+    /// <summary>
+    /// Return at least two items from the array,
+    /// even if the array is null or shorter than
+    /// two items.
+    /// </summary>
+    private string[] Min2(string[]? split)
+    {
+        if (split is null) return new string[2];
+        if (split.Length <= 0) return new string[2];
+        if (split.Length == 1) return new[]{split[0], ""};
+        return split;
     }
 
     public void Dispose()
@@ -150,7 +224,7 @@ public class VpnServer : IDisposable
         Log.Info($"    it's for a new session  {ikeMessage.SpiI:x16} => {ikeMessage.SpiR:x16}");
             
         // Start a new session and store it, keyed by the initiator id
-        var newSession = new VpnSession(_server, this, ikeMessage.SpiI);
+        var newSession = new VpnSession(IpV4Address.FromEndpoint(sender), _server, this, ikeMessage.SpiI);
         _sessions.Add(ikeMessage.SpiI, newSession);
             
         // Pass message to new session

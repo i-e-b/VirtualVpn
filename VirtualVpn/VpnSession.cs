@@ -8,6 +8,7 @@ using VirtualVpn.EspProtocol;
 using VirtualVpn.EspProtocol.Payloads;
 using VirtualVpn.EspProtocol.Payloads.PayloadSubunits;
 using VirtualVpn.Helpers;
+using VirtualVpn.InternetProtocol;
 
 namespace VirtualVpn;
 
@@ -58,9 +59,10 @@ public class VpnSession
     private readonly ulong _localSpi;
     private readonly byte[] _localNonce;
 
-    public VpnSession(UdpServer server, VpnServer sessionHost, ulong peerSpi)
+    public VpnSession(IpV4Address gateway, UdpServer server, VpnServer sessionHost, ulong peerSpi)
     {
         // pvpn/server.py:208
+        Gateway = gateway;
         _server = server;
         _sessionHost = sessionHost;
         _peerSpi = peerSpi;
@@ -74,6 +76,7 @@ public class VpnSession
 
     public DateTime LastTouchUtc { get; set; }
     public TimeSpan AgeNow => DateTime.UtcNow - LastTouchUtc;
+    public IpV4Address Gateway { get; set; }
 
 
     /// <summary>
@@ -338,7 +341,7 @@ public class VpnSession
             return;
         }
 
-        var childKey = CreateChildKey(chosenChildProposal, _peerNonce, _localNonce);
+        var childKey = CreateChildKey(sender, chosenChildProposal, _peerNonce, _localNonce);
         Log.Debug($"    New ESP SPI = {childKey.SpiIn:x8}");
         chosenChildProposal.SpiData = Bit.UInt32ToBytes(childKey.SpiIn); // Used to refer to the child SA in ESP messages?
         chosenChildProposal.SpiSize = 4;
@@ -416,7 +419,7 @@ public class VpnSession
         yield return msg;
     }
 
-    private ChildSa CreateChildKey(Proposal childProposal, byte[] peerNonce, byte[] localNonce)
+    private ChildSa CreateChildKey(IPEndPoint gateway, Proposal childProposal, byte[] peerNonce, byte[] localNonce)
     {
         // pvpn/server.py:237
 
@@ -452,7 +455,7 @@ public class VpnSession
         RandomNumberGenerator.Fill(randomSpi);
 
         var spiOut = Bit.BytesToUInt32(randomSpi);
-        var childSa = new ChildSa(randomSpi, childProposal.SpiData, cryptoIn, cryptoOut, _server);
+        var childSa = new ChildSa(IpV4Address.FromEndpoint(gateway), randomSpi, childProposal.SpiData, cryptoIn, cryptoOut, _server);
 
         // '_thisSessionChildren' using spiOut, '_sessionHost' using spiIn.
         // Note: we may need to fiddle these around (or use both) if sessions don't look like they're working

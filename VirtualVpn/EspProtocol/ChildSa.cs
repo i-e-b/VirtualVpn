@@ -13,10 +13,12 @@ public class ChildSa : ITransportTunnel
 {
     public UInt32 SpiIn { get; }
     public UInt32 SpiOut { get; }
+    public IpV4Address Gateway { get; set; }
 
     // pvpn/server.py:18
-    public ChildSa(byte[] spiIn, byte[] spiOut, IkeCrypto cryptoIn, IkeCrypto cryptoOut, UdpServer? server)
+    public ChildSa(IpV4Address gateway, byte[] spiIn, byte[] spiOut, IkeCrypto cryptoIn, IkeCrypto cryptoOut, UdpServer? server)
     {
+        Gateway = gateway;
         _spiIn = spiIn;
         _spiOut = spiOut;
         _cryptoIn = cryptoIn;

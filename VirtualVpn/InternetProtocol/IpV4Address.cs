@@ -1,4 +1,6 @@
-﻿using VirtualVpn.Helpers;
+﻿using System.Globalization;
+using System.Net;
+using VirtualVpn.Helpers;
 
 namespace VirtualVpn.InternetProtocol;
 
@@ -48,5 +50,28 @@ public class IpV4Address
                 [3] = Value[3]
             }
         };
+    }
+
+    public static IpV4Address FromString(string addressString)
+    {
+        var bits = addressString.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (bits.Length != 4) throw new Exception($"Could not parse '{addressString}' as an IPv4 address");
+        
+        var bytes = new byte[4];
+        for (int i = 0; i < 4; i++)
+        {
+            var ok = byte.TryParse(bits[i], NumberStyles.Integer, null, out var b);
+            if (!ok)
+            {
+                throw new Exception($"Could not parse '{bits[i]}' as decimal byte value");
+            }
+            bytes[i] = b;
+        }
+        return new IpV4Address(bytes);
+    }
+
+    public static IpV4Address FromEndpoint(IPEndPoint endPoint)
+    {
+        return new IpV4Address(endPoint.Address.GetAddressBytes());
     }
 }
