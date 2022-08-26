@@ -50,7 +50,7 @@ public class VpnServer : IDisposable
             // wait for local commands
             var cmd = Console.ReadLine();
             var prefix = Min2(cmd?.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
-            Console.Write($"CMD: `{prefix[0]}` ({prefix[1]})");
+            Console.WriteLine($"CMD: `{prefix[0]}` ({prefix[1]})\r\n");
 
             switch (prefix[0])
             {
@@ -122,7 +122,7 @@ public class VpnServer : IDisposable
         {
             if (childSession.Value.Gateway == requestedGateway)
             {
-                Log.Error($"A VPN session is already open with {requestedGateway} as {childSession.Key}. Try 'kill {childSession.Key}' if you want to restart");
+                Console.WriteLine($"A VPN session is already open with {requestedGateway} as {childSession.Key}.\r\nTry 'kill {childSession.Key}' if you want to restart");
                 return;
             }
         }
@@ -132,7 +132,7 @@ public class VpnServer : IDisposable
         {
             if (vpnSession.Value.Gateway == requestedGateway)
             {
-                Log.Error($"A VPN session is in progress with {requestedGateway} as {vpnSession.Key}. Try 'kill {vpnSession.Key}' if you want to restart");
+                Console.WriteLine($"A VPN session is in progress with {requestedGateway} as {vpnSession.Key}.\r\nTry 'kill {vpnSession.Key}' if you want to restart");
                 return;
             }
         }

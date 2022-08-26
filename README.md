@@ -16,10 +16,11 @@ enough for a basic API that is called a few times a second at most.
 
 ### Now
 
-- [ ] Need to be able to start a SA from this side
+- [ ] Need to be able to start an SA from this side
 
 ### Next
 
+- [ ] Need to be able to CLOSE an SA from this side (regardless of who started it)
 - [ ] Migrate Payloads to Bitwise serialiser? (this would need counts & looping)
 
 ### Future
