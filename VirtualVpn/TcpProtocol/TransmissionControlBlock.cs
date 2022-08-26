@@ -82,6 +82,7 @@ public class TransmissionControlBlock
 
     public void Reset()
     {
+        Log.Trace("TCB was reset!");
         Irs = 0;
         Iss = 0;
         
@@ -90,10 +91,10 @@ public class TransmissionControlBlock
         Snd.Up=0;
         Snd.Wl1=0;
         Snd.Wl2=0;
-        Snd.Wnd=0;
+        Snd.Wnd=65535;
         
         Rcv.Nxt=0;
-        Rcv.Wnd=0;
+        Rcv.Wnd=65535;
         Rcv.Up=0;
     }
 }

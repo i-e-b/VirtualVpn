@@ -267,7 +267,12 @@ public class TcpSocket
         if (length == 0) return 0;
         lock (_lock)
         {
-            return _receiveQueue.ReadOutAndUpdate(buffer, offset, length);
+            var actual =  _receiveQueue.ReadOutAndUpdate(buffer, offset, length);
+            
+            _tcb.Rcv.Wnd = (ushort)Math.Min(UInt16.MaxValue, _tcb.Rcv.Wnd + actual); // data is released. Increase available window.
+            Log.Trace($"Receive window at {_tcb.Rcv.Wnd} bytes");
+            
+            return actual;
         }
     }
 
@@ -361,6 +366,14 @@ public class TcpSocket
     /// <summary> Number of times we've changed state </summary>
     private int _stateTransitions;
 
+    /// <summary>
+    /// Flag to indicate that the receiver declared their window full,
+    /// but has ACKd all data, and we have more data to send.
+    /// We add one extra segment to the un-acked queue as a sentinel
+    /// for the remote window clearing.
+    /// </summary>
+    private bool _nudgeDataSent;
+
     #endregion
 
     #region private
@@ -425,15 +438,47 @@ public class TcpSocket
                 inflight += segment.Length;
             }
 
-            long space = Max(0, _tcb.Snd.Wnd - inflight);
+            long space = Max(0, _tcb.Snd.Wnd - inflight); // BUG: _tcb.Snd.Wnd is getting set to zero
             if (space <= 0)
             {
-                Log.Info("No space in send window. Waiting for an incoming ACK");
-                return true; // didn't take an action, but we want to
+                // If we get here, and the inflight count is zero, the other
+                // side might have filled its buffer, but ACKd all we've sent
+                // We should try sending one more small chunk (and retrying)
+                // in case the remote machine clears its backlog and is
+                // ready to continue;
+                if (inflight < 1 && !_nudgeDataSent)
+                {
+                    Log.Warn("No space in send window, but all packets acknowledged. Receiver may be stalled. Sending a nudge packet.");
+                    space = 512;
+                    _nudgeDataSent = true; // set our flag, then fall through to normal send
+                }
+                else if (inflight == 1 && _nudgeDataSent)
+                {
+                    Log.Info("No space in send window, and we have sent a nudge packet. Will wait.");
+                    // The receiver has no space, and we already queued a nudge packet.
+                    // We won't send anything, and will return false (no data sent)
+                    // so that the poll rate can decrease.
+                    return false;
+                }
+                else
+                {
+                    // The receiver has no space, and we are waiting for
+                    // them to ACK some of our data.
+                    // We won't send anything, but will return true (data activity)
+                    // so that the poll will stay high ready for ACK packets
+                    Log.Info($"No space in send window. Waiting for an incoming ACK. {inflight} segments in-flight.");
+                    return true;
+                }
+            }
+            else
+            {
+                // There is space in the receiver's window for more data.
+                // Clear the stall-nudge flag.
+                _nudgeDataSent = false;
             }
 
             var total = _sendBuffer.Count();
-            var sent = SendData(sequence: _tcb.Snd.Nxt, maxSize: (int)space, flags: TcpSegmentFlags.None, isRetransmit: false);
+            var sent = SendData(sequence: _tcb.Snd.Nxt, maxSize: (int)space, flags: TcpSegmentFlags.None, isRetransmit: false, isNudge: _nudgeDataSent);
             Log.Trace($"SendIfPossible - sent {sent} bytes, {total - sent} remaining");
             return true;
         }
@@ -547,6 +592,12 @@ public class TcpSocket
 
         _tcb.Snd.Una = iss;
         _tcb.Snd.Nxt = iss + 1;
+        
+        
+        if (frame.Tcp.WindowSize < 1)
+        {
+            Log.Warn("Window size went to zero!");
+        }
         _tcb.Snd.Wnd = (ushort)frame.Tcp.WindowSize;
 
         _tcb.Rcv.Nxt = (uint)(segSeq + 1);
@@ -651,6 +702,11 @@ public class TcpSocket
     {
         // This should go through the tunnel. We don't need to do any routing ourselves.
 
+        if (_tcb.Rcv.Wnd < 1)
+        {
+            Log.Warn("TCB receive window went to zero!");
+        }
+        
         // lib/tcp/output.c:117
         var seg = new TcpSegment
         {
@@ -774,7 +830,7 @@ public class TcpSocket
                 if (evt.Length > 0)
                 {
                     Log.Info($"Retransmit data. Seq={una}, Byte count={evt.Length} Flags={evt.Flags.ToString()}");
-                    SendData(sequence: una, maxSize: evt.Length, flags: evt.Flags, isRetransmit: true);
+                    SendData(sequence: una, maxSize: evt.Length, flags: evt.Flags, isRetransmit: true, isNudge: false);
                 }
                 else
                 {
@@ -821,7 +877,7 @@ public class TcpSocket
     /// or as much as can fit in a single packet, from the socket data send queue.
     /// </summary>
     /// <returns>Number of bytes sent</returns>
-    private int SendData(uint sequence, int maxSize, TcpSegmentFlags flags, bool isRetransmit) // lib/tcp/output.c:135
+    private int SendData(uint sequence, int maxSize, TcpSegmentFlags flags, bool isRetransmit, bool isNudge) // lib/tcp/output.c:135
     {
         Log.Trace($"Call to SendData: sequence={sequence}, max size={maxSize}, flags={flags.ToString()}, is retransmit={isRetransmit}");
         
@@ -836,6 +892,16 @@ public class TcpSocket
             Log.Error("Call to SendData, with no data in outgoing buffer");
             return 0;
         }
+        
+        var receiveWindow = _tcb.Rcv.Wnd;
+        if (receiveWindow < 1)
+        {
+            Log.Warn("TCB receive window went to zero!");
+            if (isNudge)
+            {
+                receiveWindow = 512;
+            }
+        }
 
         var seg = new TcpSegment
         {
@@ -847,7 +913,7 @@ public class TcpSocket
             DataOffset = 5,
             Reserved = 0,
             Flags = flags,
-            WindowSize = _tcb.Rcv.Wnd,
+            WindowSize = receiveWindow,
             Checksum = 0,
             UrgentPointer = 0,
             Options = Array.Empty<byte>(),
@@ -892,6 +958,11 @@ public class TcpSocket
     {
         // This should go through the tunnel.
         // Syn has a lot of rate logic
+
+        if (_tcb.Rcv.Wnd < 1)
+        {
+            Log.Warn("TCB receive window went to zero!");
+        }
 
         var seg = new TcpSegment
         {
@@ -988,11 +1059,19 @@ public class TcpSocket
             return;
         }
 
-        if (!ValidateReceptionWindow(segLen, segSeq, segEnd))
+        if (!ValidateReceptionWindow(segLen, segSeq, segEnd)) // this should not ACK when our receive window is full.
         {
-            if (!frame.Tcp.Flags.FlagsClear(TcpSegmentFlags.Rst) || _state == TcpSocketState.TimeWait) return;
+            if (frame.Tcp.Flags.FlagsSet(TcpSegmentFlags.Rst) || _state == TcpSocketState.TimeWait) return;
+
+            if (_tcb.Rcv.Wnd < 1)
+            {
+                Log.Warn("Receive buffer full. Not sending ACK");
+                return;
+            }
+
             Log.Debug("Invalid sequence, but not in time-wait. Sending ACK");
             SendAck();
+
             return;
         }
 
@@ -1192,7 +1271,16 @@ public class TcpSocket
 
                 // Segments take up space in the receive window regardless
                 // of being in-order. Adjust the window:
-                _tcb.Rcv.Wnd -= (ushort)segLen;
+                if (segLen >= _tcb.Rcv.Wnd)
+                {
+                    Log.Warn("TCB receive window went to zero");
+                    _tcb.Rcv.Wnd = 0;
+                }
+                else
+                {
+                    _tcb.Rcv.Wnd -= (ushort)segLen; // BUG: This is never being adjusted
+                    Log.Trace($"Receive window at {_tcb.Rcv.Wnd} bytes");
+                }
 
                 // Calculate and Acknowledge the largest contiguous segment we have
                 _tcb.Rcv.Nxt = _receiveQueue.ContiguousSequence(_tcb.Rcv.Nxt);
@@ -1392,6 +1480,10 @@ public class TcpSocket
                 }
                 else
                 {
+                    if (frame.Tcp.WindowSize < 1)
+                    {
+                        Log.Warn("Window size went to zero!");
+                    }
                     _tcb.Snd.Wnd = (ushort)frame.Tcp.WindowSize;
                 }
 
@@ -1856,6 +1948,11 @@ public class TcpSocket
         // RFC 1122: Section 4.2.2.20 (c)
         // TCP event processing corrections
         // https://tools.ietf.org/html/rfc1122#page-94
+        if (segment.WindowSize < 1)
+        {
+            Log.Warn("Window size went to zero!"); // BUG: zero window coming IN here
+        }
+
         _tcb.Snd.Wnd = (ushort)segment.WindowSize;
         _tcb.Snd.Wl1 = (uint)segment.SequenceNumber;
         _tcb.Snd.Wl2 = (uint)segment.AcknowledgmentNumber;

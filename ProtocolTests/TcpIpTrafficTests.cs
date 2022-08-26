@@ -272,15 +272,15 @@ public class TcpIpTrafficTests
     }
     
     [Test]
-    public void tcp_socket_send_and_receive_data_very_large()
+    public void tcp_socket_send_and_receive_when_receiver_stalls()
     {
-        Log.SetLevel(LogLevel.Everything);
+        Log.SetLevel(LogLevel.Debug);
         
         //
         // Do a full transaction, with data coming from both sides
         //
         var rnd= new Random();
-        var bytesIn = new byte[70_000]; // needs to be larger than 65535
+        var bytesIn = new byte[70_000]; // needs to be larger than 65535, which is the maximum window
         rnd.NextBytes(bytesIn);
         
         TwoConnectedSockets(out var server, out var serverNet, out var client, out var clientNet);
@@ -299,49 +299,29 @@ public class TcpIpTrafficTests
         SendAllWaitingPackets(server, serverNet, client, clientNet);
         Log.Info($"Send ##### Data is {bytesIn.Length} bytes. Client has {client.BytesOfSendDataWaiting} bytes, server has {server.BytesOfReadDataWaiting} bytes. #######");
         
+        // This should stop at the receive window size, as we aren't pulling any data back out
+        
         // Check message is received and ACKd client->server
-        Assert.That(server.BytesOfReadDataWaiting, Is.EqualTo(bytesIn.Length), "server did not receive all data"); // BUG: This is getting stuck at 65535
-        Assert.That(client.BytesOfSendDataWaiting, Is.Zero, "not all sent data was acknowledged by server");
-
-        Assert.Inconclusive("need to reproduce error");
-        /*
-        // Read the data that was received
-        var readBuffer = new byte[server.BytesOfReadDataWaiting];
-        var actual = server.ReadData(readBuffer);
-        Assert.That(actual, Is.EqualTo(senderBuffer.Length), "Transmit size");
-        Assert.That(Encoding.UTF8.GetString(readBuffer), Is.EqualTo(sendMessage), "Transmit message");
+        Assert.That(server.BytesOfReadDataWaiting, Is.EqualTo(65535), "server did not receive all data"); // BUG: This is getting stuck at 65535
+        Assert.That(client.BytesOfSendDataWaiting, Is.EqualTo(bytesIn.Length - 65535 - 512), "not all sent data was acknowledged by server");
         
-        // Send a reply
-        var replyBuffer = Encoding.UTF8.GetBytes(replyMessage);
-        server.SendData(replyBuffer);
-       
-        // Transmit 
-        Log.Info($"Receive ##### Data is {replyBuffer.Length} bytes. Client has {client.BytesOfReadDataWaiting} bytes, server has {server.BytesOfSendDataWaiting} bytes. #######");
+        // Read all the data out (and ditch it)
+        var receptionBuffer = new byte[65535];
+        var read = server.ReadData(receptionBuffer);
+        Assert.That(read, Is.EqualTo(65535), "window size");
+        Assert.That(server.BytesOfReadDataWaiting, Is.Zero, "backlog cleared");
+        
+        // Trigger RTO on the client to get the nudge packet re-sent
+        client.TriggerRtoTimer();
+        client.EventPump();
+        
+        // NOW we should be able to continue transferring data
+        Log.Info($"Send ##### Data is {bytesIn.Length} bytes. Client has {client.BytesOfSendDataWaiting} bytes, server has {server.BytesOfReadDataWaiting} bytes. #######");
         SendAllWaitingPackets(server, serverNet, client, clientNet);
-        Log.Info($"Receive ##### Data is {replyBuffer.Length} bytes. Client has {client.BytesOfReadDataWaiting} bytes, server has {server.BytesOfSendDataWaiting} bytes. #######");
-
-        // Check message is received and ACKd server->client
-        Assert.That(client.ReadDataState, Is.EqualTo(TcpReadDataState.FlushRequest), "Read complete flag on client");
-        Assert.That(client.BytesOfReadDataWaiting, Is.EqualTo(replyBuffer.Length), "client did not receive all data");
-        Assert.That(server.BytesOfSendDataWaiting, Is.Zero, "not all sent data was acknowledged by client");
+        Log.Info($"Send ##### Data is {bytesIn.Length} bytes. Client has {client.BytesOfSendDataWaiting} bytes, server has {server.BytesOfReadDataWaiting} bytes. #######");
         
-        // Read the data that was received
-        readBuffer = new byte[client.BytesOfReadDataWaiting];
-        actual = client.ReadData(readBuffer);
-        Assert.That(actual, Is.EqualTo(replyBuffer.Length), "Transmit size");
-        Assert.That(Encoding.UTF8.GetString(readBuffer), Is.EqualTo(replyMessage), "Transmit message");
-        
-        
-        // Now we should be able to close the connection
-        client.StartClose();
-        SendAllWaitingPacketsForClosing(server, serverNet, client, clientNet);
-        
-        Assert.That(client.State, Is.EqualTo(TcpSocketState.Closed), "client state");
-        Assert.That(server.State, Is.EqualTo(TcpSocketState.Closed), "server state");
-        
-        // check that a close gets propagated to the adaptor
-        Assert.That(clientNet.IsClosed, Is.True, "client adaptor not closed");
-        Assert.That(serverNet.IsClosed, Is.True, "server adaptor not closed");*/
+        Assert.That(server.BytesOfReadDataWaiting, Is.EqualTo(bytesIn.Length - 65535), "server did not receive all data");
+        Assert.That(client.BytesOfSendDataWaiting, Is.Zero, "not all sent data was acknowledged by server");
     }
 
     [Test]
