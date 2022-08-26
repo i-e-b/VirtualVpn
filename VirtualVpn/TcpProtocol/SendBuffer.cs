@@ -118,7 +118,6 @@ public class SendBuffer
     /// </summary>
     public void ConsumeTo(long newStart)
     {
-        Log.SetLevel(LogLevel.Everything);
         lock (_lock)
         {
             if (_segments.Count < 1)

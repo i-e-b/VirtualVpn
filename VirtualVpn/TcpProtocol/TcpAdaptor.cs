@@ -217,7 +217,7 @@ public class TcpAdaptor : ITcpAdaptor
             while (_realSocketToWebApp is not null
                    && _realSocketToWebApp.Available > 0)
             {
-                Log.Debug("Trying to receive");
+                Log.Debug("~~~~~~~~~~~~~~~~~~~~~Trying to receive~~~~~~~~~~~~~~~~~~~~");
                 var received = _realSocketToWebApp.Receive(_receiveBuffer);
                 if (received > 0) finalBytes.AddRange(_receiveBuffer.Take(received));
 
@@ -253,12 +253,14 @@ public class TcpAdaptor : ITcpAdaptor
                 Log.Trace("No data to move to web app");
                 
                 
-                // IEB: experiment-- try pushing tail byte?
+                // IEB: experiment-- try closing connection?
                 if (_sendLatch && !_receiveLatch && !_tailLatch)
                 {
                     _tailLatch = true;
-                    var pushed = _realSocketToWebApp?.Send(new byte[] { 0 }, 0, 1, SocketFlags.None) ?? -1;
-                    Log.Trace($"Tried to push a tailing byte. {pushed} of 1 sent.");
+                    //var pushed = _realSocketToWebApp?.Send(new byte[] { 0 }, 0, 1, SocketFlags.None) ?? -1;
+                    //Log.Trace($"Tried to push a tailing byte. {pushed} of 1 sent.");
+                    
+                    _realSocketToWebApp?.Shutdown(SocketShutdown.Send);
                 }
             }
 

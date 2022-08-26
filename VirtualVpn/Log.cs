@@ -40,12 +40,13 @@ public static class Log
 
     public static void Crypto(string msg)
     {
-        if (_level == LogLevel.Crypto) Console.WriteLine(msg);
+        if (_level < LogLevel.Crypto) return;
+        Console.WriteLine(msg);
     }
 
     public static void Trace(string msg)
     {
-        if ((int)_level < (int)LogLevel.Trace) return;
+        if (_level < LogLevel.Trace) return;
         
         Console.Write("                       "); // same spacing as timestamp
         Console.WriteLine(msg);
@@ -53,7 +54,7 @@ public static class Log
     
     public static void Trace(string msg, Func<string> more)
     {
-        if ((int)_level < (int)LogLevel.Trace) return;
+        if (_level < LogLevel.Trace) return;
         
         Console.Write("                       "); // same spacing as timestamp
         Console.Write(msg);
@@ -62,7 +63,7 @@ public static class Log
 
     public static void Debug(string msg, Func<IEnumerable<string>>? subLines = null)
     {
-        if ((int)_level < (int)LogLevel.Debug) return;
+        if (_level < LogLevel.Debug) return;
         Timestamp();
         
         Console.WriteLine(msg);
@@ -78,7 +79,7 @@ public static class Log
     
     public static void Debug(IEnumerable<string> messages)
     {
-        if ((int)_level < (int)LogLevel.Debug) return;
+        if (_level < LogLevel.Debug) return;
         Timestamp();
         
         foreach (var msg in messages)
@@ -92,7 +93,7 @@ public static class Log
 
     public static void Info(string msg)
     {
-        if ((int)_level < (int)LogLevel.Info) return;
+        if (_level < LogLevel.Info) return;
         Timestamp();
         
         Console.WriteLine(msg);
@@ -100,7 +101,7 @@ public static class Log
     
     public static void Warn(string msg)
     {
-        if ((int)_level < (int)LogLevel.Warning) return;
+        if (_level < LogLevel.Warning) return;
         Timestamp();
         
         Console.WriteLine(msg);
@@ -108,7 +109,7 @@ public static class Log
     
     public static void Error(string msg)
     {
-        if ((int)_level < (int)LogLevel.Error) return;
+        if (_level < LogLevel.Error) return;
         Timestamp();
         
         Console.WriteLine(msg);
@@ -117,10 +118,10 @@ public static class Log
 
     public static void Error(string message, Exception ex)
     {
-        if ((int)_level < (int)LogLevel.Error) return;
+        if (_level < LogLevel.Error) return;
         Timestamp();
 
-        if ((int)_level >= (int)LogLevel.Debug)
+        if (_level >= LogLevel.Debug)
         {
             Console.WriteLine(message + ": " + ex); // full trace with debug
         }
