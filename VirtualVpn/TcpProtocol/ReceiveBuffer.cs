@@ -123,7 +123,7 @@ public class ReceiveBuffer
             
             if (_segments.Count < 1) return 0;
             
-            var endOfData = ContiguousSequence(_readHead);
+            var endOfData = ContiguousSequence(_readHead); // this is next sequence position after the data we have
             var available = endOfData - _readHead;
             
             var end = Min((int)available, buffer.Length - offset, length);
@@ -145,9 +145,10 @@ public class ReceiveBuffer
                 {
                     buffer[idx++] = segData[i];
                     total++;
-                    if (idx > end) break;
+                    _readHead++;
+                    if (idx >= end) break;
                 }
-                if (idx > end) break;
+                if (idx >= end) break;
             }
     
             // remove any segments that are used up
@@ -158,7 +159,6 @@ public class ReceiveBuffer
                 _segments.RemoveAt(0);
             }
         }
-        _readHead += total;
         return total;
     }
 
@@ -175,5 +175,14 @@ public class ReceiveBuffer
         var x = a > b ? b : a;
         var y = b > c ? c : b;
         return x > y ? y : x;
+    }
+
+    /// <summary>
+    /// Returns count of bytes that can be read.
+    /// This excludes data already read, and discontinuous data.
+    /// </summary>
+    public long RemainingData()
+    {
+        return ContiguousSequence(_readHead) - _readHead;
     }
 }

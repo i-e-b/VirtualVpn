@@ -44,7 +44,7 @@ public class TcpSocket
     /// This may be more than the total size of the stream if
     /// the remote side is sending overlaps
     /// </summary>
-    public long BytesOfReadDataWaiting => _receiveQueue.EntireSize;
+    public long BytesOfReadDataWaiting => _receiveQueue.RemainingData();
 
     /// <summary>
     /// Returns true if we processed an in-sequence FIN message,

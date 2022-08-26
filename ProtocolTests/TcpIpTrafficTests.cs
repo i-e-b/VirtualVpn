@@ -227,7 +227,7 @@ public class TcpIpTrafficTests
         Log.Info($"Send ##### Data is {senderBuffer.Length} bytes. Client has {client.BytesOfSendDataWaiting} bytes, server has {server.BytesOfReadDataWaiting} bytes. #######");
         
         // Check message is received and ACKd client->server
-        Assert.That(server.ReadDataState, Is.True, "Read complete flag on server");
+        Assert.That(server.ReadDataState, Is.EqualTo(TcpReadDataState.FlushRequest), "Read complete flag on server");
         Assert.That(server.BytesOfReadDataWaiting, Is.EqualTo(senderBuffer.Length), "server did not receive all data");
         Assert.That(client.BytesOfSendDataWaiting, Is.Zero, "not all sent data was acknowledged by server");
 
@@ -247,7 +247,7 @@ public class TcpIpTrafficTests
         Log.Info($"Receive ##### Data is {replyBuffer.Length} bytes. Client has {client.BytesOfReadDataWaiting} bytes, server has {server.BytesOfSendDataWaiting} bytes. #######");
 
         // Check message is received and ACKd server->client
-        Assert.That(client.ReadDataState, Is.True, "Read complete flag on client");
+        Assert.That(client.ReadDataState, Is.EqualTo(TcpReadDataState.FlushRequest), "Read complete flag on client");
         Assert.That(client.BytesOfReadDataWaiting, Is.EqualTo(replyBuffer.Length), "client did not receive all data");
         Assert.That(server.BytesOfSendDataWaiting, Is.Zero, "not all sent data was acknowledged by client");
         
