@@ -165,7 +165,6 @@ public class TcpAdaptor : ITcpAdaptor
         return true;
     }
 
-
     long _totalVirtualSent, _totalVirtualRead, _totalRealSent, _totalRealRead;
     private bool RunDataTransfer()
     {
@@ -209,7 +208,16 @@ public class TcpAdaptor : ITcpAdaptor
 
         Log.Trace($"END Run Data Transfer anyMove={anyData}, vRead={_totalVirtualRead}, rSend={_totalRealSent}, rRead={_totalRealRead}, vSend={_totalVirtualSent}," +
                   $" vSocket={VirtualSocket.State.ToString()}, webApp connected={_realSocketToWebApp?.Connected ?? false}");
-        
+
+        if (_realSocketToWebApp?.Connected != true
+            && _totalVirtualRead > 0
+            && _totalVirtualSent > 0
+            && VirtualSocket.BytesOfSendDataWaiting < 1)
+        {
+            // Everything is finished. Close down
+            VirtualSocket.StartClose();
+        }
+
         return anyData;
     }
 
