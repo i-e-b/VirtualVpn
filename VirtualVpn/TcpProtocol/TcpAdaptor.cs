@@ -23,10 +23,10 @@ public class TcpAdaptor : ITcpAdaptor
     private readonly ChildSa _transport;
 
     private readonly SenderPort _selfKey;
-    
+
     // Transaction state triggers
     private volatile bool _closeCalled;
-    
+
     private readonly byte[] _receiveBuffer = new byte[1800]; // big enough for a TCP packet
 
     /// <summary>
@@ -52,15 +52,15 @@ public class TcpAdaptor : ITcpAdaptor
 
     /// <summary> Operating system socket connected to the web app </summary>
     private Socket? _realSocketToWebApp;
-    
+
     public TcpAdaptor(ChildSa transport, IPEndPoint gateway, SenderPort selfKey)
     {
         _transport = transport;
         _selfKey = selfKey;
         _closeCalled = false;
-        
+
         _realSocketToWebApp = null;
-        
+
         Gateway = gateway;
         VirtualSocket = new TcpSocket(this);
         LastContact = new Stopwatch();
@@ -72,7 +72,7 @@ public class TcpAdaptor : ITcpAdaptor
     public bool Start(IpV4Packet ipv4)
     {
         Log.Debug("TCP session initiation");
-        
+
         VirtualSocket.Listen(); // must be in this state, or it will try to close the connection
 
         var ok = HandleMessage(ipv4, out var tcp);
@@ -105,7 +105,7 @@ public class TcpAdaptor : ITcpAdaptor
         LastContact.Restart(); // back to zero, keep counting
         HandleMessage(ipv4, out _);
     }
-    
+
     /// <summary>
     /// Read payload of an IPv4 packet to determine the source address
     /// and sender port. This is used to uniquely key sessions.
@@ -130,7 +130,7 @@ public class TcpAdaptor : ITcpAdaptor
         }
 
         _closeCalled = true;
-        
+
         Log.Info("Ending connection");
         VirtualSocket.StartClose();
         _transport.TerminateConnection(_selfKey);
@@ -156,19 +156,20 @@ public class TcpAdaptor : ITcpAdaptor
             Log.Debug(Bit.Describe("ipv4 payload", ipv4.Payload));
             return false;
         }
-        
+
         // Pump through the TCP session logic
-        Log.Trace("### Data incoming...");
         VirtualSocket.FeedIncomingPacket(tcp, ipv4);
         VirtualSocket.EventPump(); // not strictly needed, but reduces latency a bit
-        
+
         RunDataTransfer();
         return true;
     }
 
     private bool RunDataTransfer()
     {
-        // We are ready to talk to web app. Make sure we have a real socket
+        Log.Trace($"### Run Data Transfer ### vSocket={VirtualSocket.State.ToString()}, webApp connected={_realSocketToWebApp?.Connected ?? false}");
+
+        // If we are ready to talk to web app, make sure we have a real socket
         if (VirtualSocket.State == TcpSocketState.Established)
         {
             if (_realSocketToWebApp is null) Log.Trace("Connecting to web app");
@@ -180,21 +181,21 @@ public class TcpAdaptor : ITcpAdaptor
             Log.Trace($"Not ready to move data (no web app socket). Virtual socket has {VirtualSocket.BytesOfReadDataWaiting} bytes ready.");
             return false;
         }
-        
+
         Log.Trace($"Attempting tunnel<->webApp. Tunnel has {VirtualSocket.BytesOfReadDataWaiting} bytes ready. Web app has {_realSocketToWebApp?.Available ?? 0} bytes ready.");
-        
+
         var anyData = false;
-        
+
         // check to see if there is virtual port data to pass to the web app
-        if (VirtualSocket.BytesOfReadDataWaiting > 0)
-        {
+        //if (VirtualSocket.BytesOfReadDataWaiting > 0)
+        //{
             anyData |= MoveDataFromTunnelToWebApp();
-        }
-        else  Log.Trace("Virtual socket is empty");
+        //}
+        //else Log.Trace("Virtual socket is empty");
 
         // Read reply back from web app
         anyData |= MoveDataFromWebAppBackToTunnel();
-        
+
         return anyData;
     }
 
@@ -227,7 +228,7 @@ public class TcpAdaptor : ITcpAdaptor
             // Send reply back to virtual socket. The event pump will continue to send connection and state.
             VirtualSocket.SendData(outgoingBuffer);
             Log.Debug($"Virtual socket has {VirtualSocket.BytesOfSendDataWaiting} bytes remaining to send");
-            
+
             VirtualSocket.EventPump(); // not strictly needed, but reduces latency a bit
             return outgoingBuffer.Length > 0;
         }
@@ -254,8 +255,9 @@ public class TcpAdaptor : ITcpAdaptor
             {
                 Log.Warn($"Unexpected send length. Tried to send {actual} bytes, but transmitted {sent} bytes.");
             }
+
             Log.Trace($"Tunnel data sent to web app. {actual} bytes of {sent}.");
-            
+
             return sent > 0;
         }
         catch (Exception ex)
@@ -287,7 +289,7 @@ public class TcpAdaptor : ITcpAdaptor
                   $"virtualPort={message.SourcePort}, replyPort={message.DestinationPort}, " +
                   $"seq={message.SequenceNumber}, ack#={message.AcknowledgmentNumber})");
         var tcpPayload = ByteSerialiser.ToBytes(message);
-        
+
         // prepare container
         var reply = new IpV4Packet
         {
@@ -306,10 +308,10 @@ public class TcpAdaptor : ITcpAdaptor
             Options = Array.Empty<byte>(),
             Payload = tcpPayload
         };
-        
+
         reply.UpdateChecksum();
         Log.Debug($"IPv4 checksum={reply.Checksum:x4}");
-        
+
         Log.Info($"Sending message to tunnel {route.LocalAddress}:{message.SourcePort} -> {route.RemoteAddress}:{message.DestinationPort}");
         _transport.Send(reply, Gateway);
         VirtualSocket.EventPump();
@@ -319,6 +321,7 @@ public class TcpAdaptor : ITcpAdaptor
     /// Random for NON-crypto use
     /// </summary>
     private static readonly Random _rnd = new();
+
     private static int RandomPacketId() => _rnd.Next(1060, 64080);
 
     /// <summary>
@@ -330,19 +333,19 @@ public class TcpAdaptor : ITcpAdaptor
     public bool EventPump()
     {
         var acted = RunDataTransfer();
-           acted |= VirtualSocket.EventPump();
+        acted |= VirtualSocket.EventPump();
 
         switch (VirtualSocket.ErrorCode)
         {
             case SocketError.Success:
             case SocketError.IsConnected:
                 return acted;
-            
+
             case SocketError.Disconnecting:
                 Log.Info($"Tcp virtual socket is closing: code={VirtualSocket.ErrorCode.ToString()}, state={VirtualSocket.State.ToString()}");
                 _transport.ReleaseConnection(_selfKey);
                 return acted;
-            
+
             case SocketError.NotConnected:
             case SocketError.Shutdown:
                 Log.Info($"Tcp virtual socket is closed: code={VirtualSocket.ErrorCode.ToString()}, state={VirtualSocket.State.ToString()}");
@@ -356,7 +359,7 @@ public class TcpAdaptor : ITcpAdaptor
                 }
 
                 return acted;
-            
+
             default:
                 Log.Error($"Tcp virtual socket is in errored state: code={VirtualSocket.ErrorCode.ToString()}, state={VirtualSocket.State.ToString()}");
                 _transport.ReleaseConnection(_selfKey);

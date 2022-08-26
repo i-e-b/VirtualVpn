@@ -20,7 +20,7 @@ public enum LogLevel
     /// <summary>
     /// Include raw data for debugging crypto
     /// </summary>
-    Crypto = 6,
+    Crypto = 100,
     
     /// <summary>
     /// Output all logs
