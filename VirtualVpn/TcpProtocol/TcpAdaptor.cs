@@ -239,7 +239,7 @@ public class TcpAdaptor : ITcpAdaptor
             Log.Trace("INCOMING:\r\n", () => Encoding.UTF8.GetString(buffer, 0, actual));
 
             // Send data to web app
-            var sent = _realSocketToWebApp?.Send(buffer, 0, actual, SocketFlags.Partial) ?? -1;
+            var sent = _realSocketToWebApp?.Send(buffer, 0, actual, SocketFlags.None) ?? -1;
             if (sent != actual)
             {
                 Log.Warn($"Unexpected send length. Tried to send {actual} bytes, but transmitted {sent} bytes.");
