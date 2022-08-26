@@ -166,14 +166,15 @@ public class TcpAdaptor : ITcpAdaptor
     }
 
 
-    long _totalVirtualRead, _totalRealSent, _totalRealRead;
+    long _totalVirtualSent, _totalVirtualRead, _totalRealSent, _totalRealRead;
     private bool RunDataTransfer()
     {
-        Log.Trace($"### Run Data Transfer ### vRead={_totalVirtualRead}, rSend={_totalRealSent}, rRead={_totalRealRead}," +
+        Log.Trace($"### Run Data Transfer ### vRead={_totalVirtualRead}, rSend={_totalRealSent}, rRead={_totalRealRead}, vSend={_totalVirtualSent}," +
                   $" vSocket={VirtualSocket.State.ToString()}, webApp connected={_realSocketToWebApp?.Connected ?? false}");
 
         // Virtual socket not up? Nothing to do.
-        if (VirtualSocket.State != TcpSocketState.Established) return false;
+        //if (VirtualSocket.State != TcpSocketState.Established) return false;
+        // TODO: flag to end the session when everything is done.
         
         
         // If we are ready to talk to web app, make sure we have a real socket
@@ -206,7 +207,7 @@ public class TcpAdaptor : ITcpAdaptor
         // Read reply back from web app
         anyData |= MoveDataFromWebAppBackToTunnel();
 
-        Log.Trace($"END Run Data Transfer anyMove={anyData}, vRead={_totalVirtualRead}, rSend={_totalRealSent}, rRead={_totalRealRead}," +
+        Log.Trace($"END Run Data Transfer anyMove={anyData}, vRead={_totalVirtualRead}, rSend={_totalRealSent}, rRead={_totalRealRead}, vSend={_totalVirtualSent}," +
                   $" vSocket={VirtualSocket.State.ToString()}, webApp connected={_realSocketToWebApp?.Connected ?? false}");
         return anyData;
     }
@@ -240,6 +241,7 @@ public class TcpAdaptor : ITcpAdaptor
 
             // Send reply back to virtual socket. The event pump will continue to send connection and state.
             VirtualSocket.SendData(outgoingBuffer);
+            _totalVirtualSent += outgoingBuffer.Length;
             Log.Debug($"Virtual socket has {VirtualSocket.BytesOfSendDataWaiting} bytes remaining to send");
 
             VirtualSocket.EventPump(); // not strictly needed, but reduces latency a bit

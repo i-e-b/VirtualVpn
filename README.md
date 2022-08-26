@@ -51,9 +51,5 @@ https://www.rfc-editor.org/rfc/rfc9293
 ### Posting a binary file with curl
 https://curl.se/docs/manpage.html#-d
 ```
-curl -X 'POST' \
-    'http://55.55.55.55:5223/WeatherForecast/checksum' \
-    -H 'accept: */*' \
-    -H 'Content-Type: application/octet-stream' \
-    -d @filename
+curl -X 'POST' 'http://55.55.55.55:5223/WeatherForecast/checksum' -H 'accept: */*' -H 'Content-Type: application/octet-stream' -d @CHANGES -v
 ```
