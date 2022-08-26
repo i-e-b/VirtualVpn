@@ -882,7 +882,7 @@ public class TcpSocket
 
         if (sequence > _sendBuffer.ReadHead)
         {
-            Log.Warn($"Misalignment? Send buffer is at {_sendBuffer.ReadHead)}, but sent requested {sequence} ({sequence - _sendBuffer.ReadHead)} bytes lost?)");
+            Log.Warn($"Misalignment? Send buffer is at {_sendBuffer.ReadHead}, but sent requested {sequence} ({sequence - _sendBuffer.ReadHead} bytes lost?)");
         }
 
         // lib/tcp/output.c:153
