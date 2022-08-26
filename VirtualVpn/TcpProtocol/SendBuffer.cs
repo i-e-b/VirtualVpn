@@ -1,6 +1,6 @@
 ﻿namespace VirtualVpn.TcpProtocol;
 
-internal class SendBuffer
+public class SendBuffer
 {
     private readonly object _lock = new();
     private readonly Dictionary<long, byte[]> _segments = new();
@@ -118,6 +118,7 @@ internal class SendBuffer
     /// </summary>
     public void ConsumeTo(long newStart)
     {
+        Log.SetLevel(LogLevel.Everything);
         lock (_lock)
         {
             if (_segments.Count < 1)
@@ -131,7 +132,7 @@ internal class SendBuffer
             foreach (var offset in offsets)
             {
                 var end = offset + _segments[offset].Length;
-                if (end < newStart) _segments.Remove(offset);
+                if (end <= newStart) _segments.Remove(offset);
             }
 
             Log.Debug($"SendBuffer:ConsumeTo - releasing from {Start} to {newStart} ({newStart-Start} bytes)");
@@ -167,7 +168,7 @@ internal class SendBuffer
 
             if (written > 0)
             {
-                End = nextSequence + written + 1;
+                End = nextSequence + written;
             }
 
             Log.Debug($"Wrote to SendBuffer. Buffer start seq={Start}, write start seq={nextSequence}, write end seq={End}");
@@ -202,6 +203,6 @@ internal class SendBuffer
     {
         if (End < 0) return 0;
         if (ReadHead < 0) return End - Start;
-        return End - ReadHead - 1;
+        return End - ReadHead;
     }
 }
