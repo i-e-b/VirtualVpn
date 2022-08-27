@@ -20,7 +20,7 @@ public static class Settings
     /// network capture files.  This is only for development
     /// and diagnostics and should normally be 'false'.
     /// </summary>
-    public const bool RunAirliftSite = true;
+    public const bool RunAirliftSite = false;
 
     /// <summary>
     /// Declared IP address of this VPN node.
@@ -34,7 +34,7 @@ public static class Settings
     /// <summary>
     /// If true, traffic will be captured into files
     /// </summary>
-    public static bool CaptureTraffic = true;
+    public static bool CaptureTraffic = false;
     
     /// <summary>
     /// Log level that will be set at startup
