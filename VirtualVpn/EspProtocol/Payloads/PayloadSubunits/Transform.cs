@@ -1,7 +1,9 @@
-﻿using VirtualVpn.Enums;
+﻿using System.Diagnostics.CodeAnalysis;
+using VirtualVpn.Enums;
 
 namespace VirtualVpn.EspProtocol.Payloads.PayloadSubunits;
 
+[SuppressMessage("ReSharper", "UnusedMember.Global")]
 public class Transform
 {
     /// <summary>
@@ -34,6 +36,11 @@ public class Transform
     /// </summary>
     public int Size => Attributes.Sum(a=>a.Size);
 
+    /// <summary>
+    /// Human readable description of this transform
+    /// </summary>
+    public string Description => ToString();
+
     public byte[] SerialiseAttributes()
     {
         var data = new byte[Size];
@@ -60,7 +67,17 @@ public class Transform
             TransformType.ESN => ((EsnId)Id).ToString(),
             _ => "???"
         };
+        
+        var subTypeName = Type switch
+        {
+            TransformType.ENCR => "EncryptionTypeId",
+            TransformType.PRF => "PrfId",
+            TransformType.INTEG => "IntegId",
+            TransformType.DH => "DhId",
+            TransformType.ESN => "EsnId",
+            _ => "???"
+        };
 
-        return $"{Type.ToString()} id={idStr} attr=[{string.Join("; ", Attributes.Select(a=>a.ToString()))}]";
+        return $"{Type.ToString()} id={subTypeName}.{idStr} attr=[{string.Join("; ", Attributes.Select(a=>a.ToString()))}]";
     }
 }

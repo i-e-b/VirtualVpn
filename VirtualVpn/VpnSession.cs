@@ -53,13 +53,14 @@ public class VpnSession
 
     //## Locked for session ##//
 
-    private readonly UdpServer _server; // note: should increment _seqOut when sending
-    private readonly VpnServer _sessionHost;
+    private readonly IUdpServer _server; // note: should increment _seqOut when sending
+    private readonly ISessionHost _sessionHost;
     private readonly ulong _peerSpi;
     private readonly ulong _localSpi;
     private readonly byte[] _localNonce;
+    private BCDiffieHellman? _keyExchange;
 
-    public VpnSession(IpV4Address gateway, UdpServer server, VpnServer sessionHost, ulong peerSpi)
+    public VpnSession(IpV4Address gateway, IUdpServer server, ISessionHost sessionHost, ulong peerSpi)
     {
         // pvpn/server.py:208
         Gateway = gateway;
@@ -78,13 +79,6 @@ public class VpnSession
     public TimeSpan AgeNow => DateTime.UtcNow - LastTouchUtc;
     public IpV4Address Gateway { get; set; }
 
-
-    /// <summary>
-    /// Do any shut-down stuff
-    /// </summary>
-    public void Close()
-    {
-    }
 
     /// <summary>
     /// Returns true if the given sequence is less-or-equal to the largest we've seen before
@@ -124,19 +118,19 @@ public class VpnSession
     // pvpn/server.py:253
     private byte[] BuildResponse(ExchangeType exchange, bool sendZeroHeader, IkeCrypto? crypto, params MessagePayload[] payloads)
     {
-        return BuildSerialResponse(exchange, sendZeroHeader, crypto, _peerSpi, _localSpi, _peerMsgId, payloads);
+        return BuildSerialMessage(exchange, MessageFlag.Response, sendZeroHeader, crypto, _peerSpi, _localSpi, _peerMsgId, payloads);
     }
     
-    public static byte[] BuildSerialResponse(ExchangeType exchange, bool sendZeroHeader, IkeCrypto? crypto,
-        ulong peerSpi, ulong localSpi, long peerMsgId, params MessagePayload[] payloads)
+    public static byte[] BuildSerialMessage(ExchangeType exchange, MessageFlag direction, bool sendZeroHeader, IkeCrypto? crypto,
+        ulong initiatorSpi, ulong responderSpi, long peerMsgId, params MessagePayload[] payloads)
     {
         // pvpn/server.py:253
         var resp = new IkeMessage
         {
             Exchange = exchange,
-            SpiI = peerSpi,
-            SpiR = localSpi,
-            MessageFlag = MessageFlag.Response,
+            SpiI = initiatorSpi,
+            SpiR = responderSpi,
+            MessageFlag = direction,
             MessageId = (uint)peerMsgId,
             Version = IkeVersion.IkeV2,
         };
@@ -474,11 +468,44 @@ public class VpnSession
     /// </summary>
     public void RequestNewSession(IPEndPoint target)
     {
-        // this is pretty much what we'll have to do to start a session.
-        Proposal defaultProposal = new Proposal(); // TODO: fill this in
-        byte[] newPublicKey = new byte[256]; // todo: generate
+        // Set up a proposal for crypto settings
+        // Normally, a VPN system would send a complete set of what they support,
+        // but here we are just sending over a minimal set we expect the other
+        // side to accept.
+        var defaultProposal = new Proposal {
+            Number = 1, // must start at 1, not 0
+            Protocol = IkeProtocolType.IKE,
+        };
+        
+        // We only support one type of encryption, so supply that
+        defaultProposal.Transforms.Add(new Transform {
+            Type = TransformType.ENCR,
+            Id = (uint)EncryptionTypeId.ENCR_AES_CBC,
+            Attributes = { new TransformAttribute(TransformAttr.KEY_LENGTH, 256) }
+        });
+        
+        // Supply the key exchange we know M-Pesa want
+        defaultProposal.Transforms.Add(new Transform {
+            Type = TransformType.DH,
+            Id = (uint)DhId.DH_14
+        });
+        
+        // Supply a hash function for checksums
+        defaultProposal.Transforms.Add(new Transform {
+            Type = TransformType.INTEG,
+            Id = (uint)IntegId.AUTH_HMAC_SHA2_256_128
+        });
+        
+        // Supply a hash function for random number generation
+        defaultProposal.Transforms.Add(new Transform {
+            Type = TransformType.PRF,
+            Id = (uint)PrfId.PRF_HMAC_SHA2_256
+        });
+        
+        _keyExchange ??= BCDiffieHellman.CreateForGroup(DhId.DH_14) ?? throw new Exception("Failed to generate key exchange when generating new session");
+        _keyExchange.get_our_public_key(out var newPublicKey);
 
-        var reKeyMessage = BuildResponse(ExchangeType.IKE_SA_INIT, false, null,
+        var reKeyMessage = BuildSerialMessage(ExchangeType.IKE_SA_INIT, MessageFlag.Initiator, false, null, _localSpi, 0, 0,
             new PayloadSa(defaultProposal),
             new PayloadNonce(_localNonce),
             new PayloadKeyExchange(DhId.DH_14, newPublicKey), // Pre-start our preferred exchange
@@ -486,7 +513,7 @@ public class VpnSession
             new PayloadNotify(IkeProtocolType.NONE, NotifyId.NAT_DETECTION_SOURCE_IP, Array.Empty<byte>(), Bit.RandomBytes(20))
         );
 
-        // todo: send the message
+        Reply(to: target, reKeyMessage);
     }
 
     private void HandleSaInit(IkeMessage request, IPEndPoint sender, bool sendZeroHeader)
@@ -536,11 +563,10 @@ public class VpnSession
         Log.Debug($"        Session: We agree on a viable proposition, and it is the default. Continue with key share for {payloadKe.DiffieHellmanGroup.ToString()}" +
                           $" Supplied length is {payloadKe.KeyData.Length} bytes");
 
-        var keyExchange = BCDiffieHellman.CreateForGroup(DhId.DH_14) ?? throw new Exception($"Failed to create key exchange for group {payloadKe.DiffieHellmanGroup.ToString()}");
-        //var gmpDh = GmpDiffieHellman.CreateForGroup(DhId.DH_14) ?? throw new Exception($"Failed to create key exchange for group {payloadKe.DiffieHellmanGroup.ToString()}");
-        keyExchange.set_their_public_key(payloadKe.KeyData);
-        keyExchange.get_our_public_key(out var publicKey);
-        keyExchange.get_shared_secret(out var secret);
+        _keyExchange ??= BCDiffieHellman.CreateForGroup(DhId.DH_14) ?? throw new Exception($"Failed to create key exchange for group {payloadKe.DiffieHellmanGroup.ToString()}");
+        _keyExchange.set_their_public_key(payloadKe.KeyData);
+        _keyExchange.get_our_public_key(out var publicKey);
+        _keyExchange.get_shared_secret(out var secret);
 
         // create keys from exchange result. If something went wrong, we will end up with a checksum failure
         CreateKeyAndCrypto(chosenProposal, secret, null);

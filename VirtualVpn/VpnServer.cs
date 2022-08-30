@@ -9,7 +9,14 @@ using VirtualVpn.InternetProtocol;
 
 namespace VirtualVpn;
 
-public class VpnServer : IDisposable
+public interface ISessionHost
+{
+    void AddChildSession(ChildSa childSa);
+    void RemoveChildSession(uint spi);
+    void RemoveSession(ulong localSpi);
+}
+
+public class VpnServer : ISessionHost, IDisposable
 {
     private const int NonEspHeader = 0; // https://docs.strongswan.org/docs/5.9/features/natTraversal.html
 
@@ -19,6 +26,7 @@ public class VpnServer : IDisposable
     private readonly Dictionary<UInt32, ChildSa> _childSessions = new();
     private volatile bool _running;
     private long _espCount;
+    private int _messageCount;
 
     public VpnServer()
     {
@@ -240,8 +248,6 @@ public class VpnServer : IDisposable
     private void IkeResponder(byte[] data, IPEndPoint sender)
     {
         // write capture to file for easy testing
-        //var name = Settings.FileBase + $"IKEv2-{_messageCount}_Port-{sender.Port}_IKE.bin";
-        //File.WriteAllBytes(name, data);
         Log.Info($"Got a 500 packet, {data.Length} bytes");
         
         IkeSessionResponder(data, sender, sendZeroHeader: false);
@@ -249,6 +255,12 @@ public class VpnServer : IDisposable
 
     private void IkeSessionResponder(byte[] data, IPEndPoint sender, bool sendZeroHeader)
     {
+        if (Settings.CaptureTraffic)
+        {
+            var name = Settings.FileBase + $"IKEv2-{_messageCount++}_Port-{sender.Port}_IKE.bin";
+            File.WriteAllBytes(name, data);
+        }
+
         // read the message to figure out session data
         var ikeMessage = IkeMessage.FromBytes(data, 0);
 
@@ -313,11 +325,11 @@ public class VpnServer : IDisposable
 
         // Check for "IKE header" (prefix of 4 zero bytes)
         var idx = 0;
-        var header = Bit.ReadInt32(data, ref idx); // not quite sure what this is about
+        var header = Bit.ReadInt32(data, ref idx); // if not zero, it's an ESP packet
 
         // If the IKE header is there, pass back to the ike handler.
         // We strip the padding off, and pass a flag to say it should be sent with a response
-        if (header == NonEspHeader) // start session?
+        if (header == NonEspHeader)
         {
             Log.Info("    SPI zero on 4500 -- sending to 500 (IKE) responder");
             var offsetData = data.Skip(4).ToArray();

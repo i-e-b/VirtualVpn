@@ -6,7 +6,7 @@ public static class Settings
     /// Prefix on capture files
     /// </summary>
     //public const string FileBase = "/root/airlift/";
-    public const string FileBase = @"C:\temp\zzz";
+    public const string FileBase = @"C:\temp\traffic\";
     
     /// <summary>
     /// Listener prefix for the web "airlift". This helps you pull logs.
@@ -15,6 +15,8 @@ public static class Settings
     public const string HttpPrefix = "://localhost:8011/"; // <-- use this if testing locally
     
     /// <summary>
+    /// INSECURE if true
+    /// <p></p>
     /// If true, VirtualVPN will listen for HTTP connections
     /// NOT on an IPSEC tunnel, and will allow access to the
     /// network capture files.  This is only for development

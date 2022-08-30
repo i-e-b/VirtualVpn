@@ -447,7 +447,7 @@ Aug  8 14:21:58 Gertrud charon: 01[IKE]   16: 85 FE DB D6 52 1D F5 B3 BC 0E E8 4
         ulong peerSpi = 123456;
         ulong localSpi = 987645;
         long msgId = 1;
-        var bytes = VpnSession.BuildSerialResponse(ExchangeType.IKE_AUTH, false, myCrypto, peerSpi, localSpi, msgId,
+        var bytes = VpnSession.BuildSerialMessage(ExchangeType.IKE_AUTH, MessageFlag.Response, false, myCrypto, peerSpi, localSpi, msgId,
             new PayloadSa(defaultProposal),
             new PayloadNonce(new byte[32]),
             new PayloadKeyExchange(DhId.DH_14, newPublicKey), // Pre-start our preferred exchange

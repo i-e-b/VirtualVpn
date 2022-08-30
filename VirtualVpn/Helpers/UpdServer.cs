@@ -3,7 +3,16 @@ using System.Net.Sockets;
 
 namespace VirtualVpn.Helpers;
 
-public class UdpServer : IDisposable
+
+public interface IUdpServer
+{
+    /// <summary>
+    /// Send bytes to a target, matching the target port if 500 or 4500
+    /// </summary>
+    void SendRaw(byte[] message, IPEndPoint to);
+}
+
+public class UdpServer : IUdpServer, IDisposable
 {
     private readonly Action<byte[], IPEndPoint>? _ikeResponder;
     private readonly Action<byte[], IPEndPoint>? _speResponder;

@@ -13,7 +13,7 @@
     </ItemGroup>
 
     <ItemGroup>
-      <Folder Include="SampleData" />
+      <Folder Include="SampleData\UpAndDown" />
     </ItemGroup>
 
     <ItemGroup>
@@ -27,6 +27,33 @@
         <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       </None>
       <None Update="SampleData\SK-raw.bin">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </None>
+      <None Update="SampleData\UpAndDown\IKEv2-0_Port-500_IKE.bin">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </None>
+      <None Update="SampleData\UpAndDown\IKEv2-1_Port-500_IKE.bin">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </None>
+      <None Update="SampleData\UpAndDown\IKEv2-2_Port-4500_IKE.bin">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </None>
+      <None Update="SampleData\UpAndDown\IKEv2-3_Port-4500_IKE.bin">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </None>
+      <None Update="SampleData\UpAndDown\IKEv2-Reply_0_Port-500_IKE.bin">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </None>
+      <None Update="SampleData\UpAndDown\IKEv2-Reply_1_Port-4500_IKE.bin">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </None>
+      <None Update="SampleData\UpAndDown\IKEv2-Reply_2_Port-4500_IKE.bin">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </None>
+      <None Update="SampleData\UpAndDown\LastSessionKeys.txt">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </None>
+      <None Update="SampleData\UpAndDown\LastSessionKeysSources.txt">
         <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       </None>
     </ItemGroup>

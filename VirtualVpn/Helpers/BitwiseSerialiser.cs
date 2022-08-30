@@ -1078,11 +1078,11 @@ public static class TypeDescriber
     public static string Describe(object? obj, int indent = 0)
     {
         var sb = new StringBuilder();
-        DescribeTypeRecursive(obj, sb, indent);
+        DescribeTypeRecursive(obj, sb, indent, "");
         return sb.ToString();
     }
 
-    private static void DescribeTypeRecursive(object? obj, StringBuilder sb, int depth)
+    private static void DescribeTypeRecursive(object? obj, StringBuilder sb, int depth, string name)
     {
         if (depth > 10)
         {
@@ -1116,9 +1116,14 @@ public static class TypeDescriber
 
         if (obj is IEnumerable list && list.GetType() != typeof(char))
         {
+            var idxItr = 0;
             foreach (var item in list)
             {
-                DescribeTypeRecursive(item, sb, depth);
+                sb.AppendLine();
+                sb.Append(Indent(depth));
+                sb.Append($"{name}[{idxItr++}] ->");
+                sb.AppendLine();
+                DescribeTypeRecursive(item, sb, depth, name);
             }
 
             return;
@@ -1144,7 +1149,7 @@ public static class TypeDescriber
                 var description = GetAttributeOfType<DescriptionAttribute>(prop);
                 if (description?.Description is not null) sb.Append(description.Description);
 
-                DescribeValue(sb, depth, value);
+                DescribeValue(sb, depth, value, prop.Name);
             }
             catch (TargetParameterCountException ex)
             {
@@ -1160,7 +1165,7 @@ public static class TypeDescriber
             var description = GetAttributeOfType<DescriptionAttribute>(field);
             if (description?.Description is not null) sb.Append(description.Description);
 
-            DescribeValue(sb, depth, value);
+            DescribeValue(sb, depth, value, field.Name);
         }
     }
 
@@ -1172,7 +1177,7 @@ public static class TypeDescriber
         return value is null;
     }
 
-    private static void DescribeValue(StringBuilder sb, int depth, object? value)
+    private static void DescribeValue(StringBuilder sb, int depth, object? value, string name)
     {
         if (value is null)
         {
@@ -1234,7 +1239,7 @@ public static class TypeDescriber
         {
             sb.Append("(" + NameForType(value.GetType()) + ")");
             sb.AppendLine();
-            DescribeTypeRecursive(value, sb, depth + 1);
+            DescribeTypeRecursive(value, sb, depth + 1, name);
         }
 
         sb.AppendLine();

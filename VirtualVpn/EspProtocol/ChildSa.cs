@@ -16,7 +16,7 @@ public class ChildSa : ITransportTunnel
     public IpV4Address Gateway { get; set; }
 
     // pvpn/server.py:18
-    public ChildSa(IpV4Address gateway, byte[] spiIn, byte[] spiOut, IkeCrypto cryptoIn, IkeCrypto cryptoOut, UdpServer? server)
+    public ChildSa(IpV4Address gateway, byte[] spiIn, byte[] spiOut, IkeCrypto cryptoIn, IkeCrypto cryptoOut, IUdpServer? server)
     {
         Gateway = gateway;
         _spiIn = spiIn;
@@ -165,7 +165,7 @@ public class ChildSa : ITransportTunnel
     private readonly byte[] _spiOut;
     private readonly IkeCrypto _cryptoIn;
     private readonly IkeCrypto _cryptoOut;
-    private readonly UdpServer? _server;
+    private readonly IUdpServer? _server;
     private long _msgIdIn;
     private long _msgIdOut;
     private long _captureNumber;
