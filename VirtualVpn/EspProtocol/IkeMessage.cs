@@ -279,11 +279,14 @@ public class IkeMessage
                 return One(new PayloadAuth(srcData, ref idx, ref nextPayload));
 
             case PayloadType.SKF:{
-                Console.WriteLine("FOUND AN SKF PAYLOAD! #################");
+                Log.Critical("FOUND AN SKF PAYLOAD! #################");
                 return Array.Empty<MessagePayload>();
             }
-            
-            case PayloadType.SK: // encrypted body. TODO: This should be pumped back around to read contents?
+
+            case PayloadType.DELETE:
+                return One(new PayloadDelete(srcData, ref idx, ref nextPayload));
+
+            case PayloadType.SK: // encrypted body. This needs to be sent back around to read contents.
             {
                 // https://www.rfc-editor.org/rfc/rfc7296#section-3
                 if (ikeCrypto is null) throw new Exception("Received an encrypted packet without agreeing on session crypto");
@@ -316,6 +319,7 @@ public class IkeMessage
             }
             default: // anything we don't have a parser for yet
             {
+                Log.Trace($"Payload type not handled: {thisType.ToString()} ({(int)thisType})");
                 var payload = new PayloadUnknown(srcData, ref idx, ref nextPayload) { Type = thisType };
                 return One(payload);
             }

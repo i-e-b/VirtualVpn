@@ -245,8 +245,11 @@ public class VpnSession
         // Check for any sessions the other side wants to remove
         var deletePayload = request.GetPayload<PayloadDelete>();
 
-        if (deletePayload?.SpiList.Any() != true)
+        if (deletePayload is null)
         {
+            Log.Debug("No delete payloads found in Informational packet. Will reply, but nothing else");
+            Log.Trace($"Found payloads: {string.Join(", ",request.Payloads.Select(p=>p.Type.ToString()))};");
+            
             // Nothing to do, but we must reply
             Reply(to: sender, message: BuildResponse(ExchangeType.INFORMATIONAL, sendZeroHeader, _myCrypto));
             return;
@@ -270,18 +273,19 @@ public class VpnSession
 
         if (deletePayload.SpiList.Count < 1)
         {
-            Log.Warn($"    Received an empty delete list");
+            Log.Warn("    Received an empty delete list");
             Reply(to: sender, message: BuildResponse(ExchangeType.INFORMATIONAL, sendZeroHeader, _myCrypto, deletePayload));
             return;
         }
 
+        Log.Debug("Received request to delete specific sessions");
         // Specific old sessions should be removed
         // pvpn/server.py:328
         var matches = new List<byte[]>(); // spi that have been removed
         foreach (var deadSpi in deletePayload.SpiList)
         {
             var removed = TryRemoveChild(deadSpi);
-            
+            Log.Debug($"Asked to remove '{deadSpi}' - {(removed ? "found" : "not found")}");
             if (removed) matches.Add(deadSpi);
         }
 
@@ -468,7 +472,6 @@ public class VpnSession
     /// <summary>
     /// Not yet implemented. Call out to an external server, try to start an IKE/SA session
     /// </summary>
-    /// <param name="target"></param>
     public void RequestNewSession(IPEndPoint target)
     {
         // this is pretty much what we'll have to do to start a session.
@@ -600,8 +603,11 @@ public class VpnSession
         _server.SendRaw(message, to);
         _seqOut++;
 
-        //var name = Settings.FileBase + $"IKEv2-Reply_{_peerMsgId}_Port-{to.Port}_IKE.bin";
-        //File.WriteAllBytes(name, message);
+        if (Settings.CaptureTraffic)
+        {
+            var name = Settings.FileBase + $"IKEv2-Reply_{_peerMsgId}_Port-{to.Port}_IKE.bin";
+            File.WriteAllBytes(name, message);
+        }
     }
 
     /// <summary>
@@ -619,7 +625,7 @@ public class VpnSession
         Log.Debug($"        Session: State correct: {State.ToString()} = {expected.ToString()}");
     }
 
-    public void NotifyIpAddresses()
+    public void NotifyIpAddresses(IpV4Address address)
     {
         // HACK - just send a notify with a fixed IP address
         if (_lastContact is null)
@@ -631,7 +637,7 @@ public class VpnSession
         // This currently kills the session? Maybe if we've got more than one?
 
         var response = BuildResponse(ExchangeType.INFORMATIONAL, true, _myCrypto,
-            new PayloadNotify(IkeProtocolType.NONE, NotifyId.ADDITIONAL_IP4_ADDRESS, null, new byte[] { 55, 55, 55, 55 })
+            new PayloadNotify(IkeProtocolType.NONE, NotifyId.ADDITIONAL_IP4_ADDRESS, null, address.Value)
         );
         
         Reply(to: _lastContact, response);

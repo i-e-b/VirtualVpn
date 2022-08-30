@@ -5,14 +5,14 @@ public static class Settings
     /// <summary>
     /// Prefix on capture files
     /// </summary>
-    public const string FileBase = "/root/airlift/";
-    //public const string FileBase = @"C:\temp\zzz";
+    //public const string FileBase = "/root/airlift/";
+    public const string FileBase = @"C:\temp\zzz";
     
     /// <summary>
     /// Listener prefix for the web "airlift". This helps you pull logs.
     /// </summary>
-    public const string HttpPrefix = "://+:8011/"; // <-- this will require root/admin access.
-    //public const string HttpPrefix = "://localhost:8011/"; // <-- use this if testing locally
+    //public const string HttpPrefix = "://+:8011/"; // <-- this will require root/admin access.
+    public const string HttpPrefix = "://localhost:8011/"; // <-- use this if testing locally
     
     /// <summary>
     /// If true, VirtualVPN will listen for HTTP connections
@@ -28,8 +28,8 @@ public static class Settings
     /// <p></p>
     /// This does NOT need to be a real machine's address.
     /// </summary>
-    public static readonly byte[] LocalIpAddress = { 192, 168, 0, 2 }; // Hans
-    //public static readonly byte[] LocalIpAddress = { 185, 81, 252, 44 }; // Behind NAT
+    //public static readonly byte[] LocalIpAddress = { 192, 168, 0, 2 }; // Hans
+    public static readonly byte[] LocalIpAddress = { 185, 81, 252, 44 }; // Behind NAT
     
     /// <summary>
     /// If true, traffic will be captured into files

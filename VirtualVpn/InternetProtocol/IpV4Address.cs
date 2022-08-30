@@ -107,4 +107,8 @@ public class IpV4Address: IEquatable<IpV4Address>
     public static bool operator ==(IpV4Address left, IpV4Address right) => left.Equals(right);
 
     public static bool operator !=(IpV4Address left, IpV4Address right) => !(left == right);
+
+    public IPEndPoint MakeEndpoint(int port) => new(ToIpAddress(), port);
+
+    public IPAddress ToIpAddress() => new(Value);
 }

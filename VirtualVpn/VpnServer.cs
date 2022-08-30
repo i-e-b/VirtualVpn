@@ -32,13 +32,6 @@ public class VpnServer : IDisposable
         Json.DefaultParameters.EnableAnonymousTypes = true;
         Console.CancelKeyPress += StopRunning;
 
-// Use Gerty for testing. Run "JustListen" to check your connection is working.
-// You may need to do lots of firewall poking and NAT rules.
-// Switch on ipsec on Gerty (`ipsec restart`), make sure there is a ruleset for the test PC.
-
-//var target = new IPEndPoint(new IPAddress(new byte[]{197,250,65,132}), 500); // M-P
-//var target = new IPEndPoint(new IPAddress(new byte[] { 159, 69, 13, 126 }), 500); // Gerty
-
         _running = true;
         
         _server.Start();
@@ -49,55 +42,100 @@ public class VpnServer : IDisposable
         {
             // wait for local commands
             var cmd = Console.ReadLine();
-            var prefix = Min2(cmd?.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
-            Console.WriteLine($"CMD: `{prefix[0]}` ({prefix[1]})\r\n");
 
-            switch (prefix[0])
+            try
             {
-                case "trace":
-                {
-                    Log.SetLevel(LogLevel.Trace);
-                    break;
-                }
-                case "loud":
-                {
-                    Log.SetLevel(LogLevel.Debug);
-                    break;
-                }
-                case "less":
-                {
-                    Log.SetLevel(LogLevel.Info);
-                    break;
-                }
-                
-                case "kill":
-                    Log.Error("Not implemented yet");
-                    break;
-                case "list":
-                {
-                    ListGateways();
-                    break;
-                }
-                case "start":
-                {
-                    try
-                    {
-                        StartVpnConnection(prefix[1]);
-                    }
-                    catch (Exception ex)
-                    {
-                        Log.Error("Could not start VPN connection: ", ex);
-                    }
-                    break;
-                }
-                default:
-                    Console.WriteLine("Known commands:");
-                    Console.WriteLine("    Logging:");
-                    Console.WriteLine("        trace, loud, less");
-                    Console.WriteLine("    Connection:");
-                    Console.WriteLine("        list, start [gateway], kill [gateway]");
-                    break;
+                var prefix = Min2(cmd?.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+                Console.WriteLine($"CMD: `{prefix[0]}` ({prefix[1]})\r\n");
+
+                HandleCommands(prefix);
             }
+            catch (Exception ex)
+            {
+                Log.Error("Failure in interactive command 'cmd'", ex);
+            }
+        }
+    }
+
+    private void HandleCommands(string[] prefix)
+    {
+        switch (prefix[0])
+        {
+            case "trace": // very detailed logging
+            {
+                Log.SetLevel(LogLevel.Trace);
+                return;
+            }
+            case "loud": // detailed logging
+            {
+                Log.SetLevel(LogLevel.Debug);
+                return;
+            }
+            case "less": // informational logging
+            {
+                Log.SetLevel(LogLevel.Info);
+                return;
+            }
+
+            case "quit": // exit VirtualVPN session
+            {
+                _running = false;
+                return;
+            }
+
+            case "kill": // stop an association
+            {
+                Log.Error("Not implemented yet");
+                return;
+            }
+            case "list": // list open SAs
+            {
+                ListGateways();
+                return;
+            }
+            case "start": // connect to a gateway and open a new SA
+            {
+                try
+                {
+                    TryStartVpnIfNotAlreadyConnected(prefix[1]);
+                }
+                catch (Exception ex)
+                {
+                    Log.Error("Could not start VPN connection: ", ex);
+                }
+
+                return;
+            }
+            case "capture":
+            {
+                Settings.CaptureTraffic = !Settings.CaptureTraffic;
+                Console.WriteLine($"Traffic capture now {(Settings.CaptureTraffic ? "on" : "off")}. Capture location '{Settings.FileBase}'");
+                break;
+            }
+            case "notify":
+            {
+                var bits = Min2(prefix[1].Split(",", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries));
+                var gateway = IpV4Address.FromString(bits[0]);
+                var session = _sessions.Values.SingleOrDefault(cs => cs.Gateway == gateway);
+                if (session is null)
+                {
+                    Console.WriteLine("Could not find an established session to that gateway");
+                    return;
+                }
+
+                var networkLoc = IpV4Address.FromString(bits[1]);
+                session.NotifyIpAddresses(networkLoc);
+                break;
+            }
+            default:
+                Console.WriteLine("Known commands:");
+                Console.WriteLine("    Logging:");
+                Console.WriteLine("        trace, loud, less");
+                Console.WriteLine("    Connection:");
+                Console.WriteLine("        list, start [gateway], kill [sa-id], notify [gateway-ip, network-location-ip]");
+                Console.WriteLine("    General:");
+                Console.WriteLine("        quit, capture");
+                return;
         }
     }
 
@@ -110,10 +148,10 @@ public class VpnServer : IDisposable
         }
     }
 
-    private void StartVpnConnection(string gatewayAddress)
+    private void TryStartVpnIfNotAlreadyConnected(string gatewayAddress)
     {
         // Assume gateway address is IPv4 decimals for now.
-        Log.Info($"Requested connection to [{gatewayAddress}], searching for existing connections");
+        Console.WriteLine($"Requested connection to [{gatewayAddress}], searching for existing connections");
         
         var requestedGateway = IpV4Address.FromString(gatewayAddress);
         
@@ -137,7 +175,24 @@ public class VpnServer : IDisposable
             }
         }
         
-        Log.Critical($"Should start connection to [{gatewayAddress}]");
+        Console.WriteLine("Starting contact with gateway");
+        StartVpnSession(requestedGateway);
+    }
+
+    /// <summary>
+    /// Start a new session with a remote gateway.
+    /// </summary>
+    private void StartVpnSession(IpV4Address gateway)
+    {
+        // Start a new IKEv2 session, with an ID of our choosing.
+        // Add that to the ongoing sessions (we might need to map
+        // both sides of SPI on session lookup?)
+        
+        var spi = Bit.RandomSpi();
+        var newSession = new VpnSession(gateway, _server, this, spi);
+        _sessions.Add(spi, newSession);
+        
+        newSession.RequestNewSession(gateway.MakeEndpoint(port:500));
     }
 
     /// <summary>
