@@ -32,6 +32,8 @@ public enum LogLevel
 public static class Log
 {
     private static LogLevel _level = LogLevel.Warning;
+    public static bool IncludeCrypto => _level >= LogLevel.Crypto;
+
     public static void SetLevel(LogLevel level)
     {
         Console.WriteLine($"Log level set to {(int)level} ({level.ToString()})");

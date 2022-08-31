@@ -527,9 +527,10 @@ public enum SessionState
     DELETED = 4,
     KE_SENT = 5,
     HASH_SENT = 6,
-    AUTH_SET = 7,
-    CONF_SENT = 8,
-    CHILD_SA_SENT = 9
+    AUTH_SENT = 7,
+    AUTH_SET = 8,
+    CONF_SENT = 9,
+    CHILD_SA_SENT = 10,
 }
 
 public enum EapCode

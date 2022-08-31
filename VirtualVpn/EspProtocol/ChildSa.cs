@@ -115,7 +115,7 @@ public class ChildSa : ITransportTunnel
         };
         
         var message = ByteSerialiser.ToBytes(wrapper);
-        _cryptoOut.AddChecksum(message);
+        _cryptoOut.AddChecksum(message, Array.Empty<byte>());
         return message;
     }
 

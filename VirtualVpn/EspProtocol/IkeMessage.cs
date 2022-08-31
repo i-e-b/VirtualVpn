@@ -80,20 +80,23 @@ public class IkeMessage
     /// <summary>
     /// Serialise the message to a byte string
     /// </summary>
+    /// <param name="useAlternateChecksum">Use experimental checksum</param>
     /// <param name="sendZeroHeader">If true, 4 bytes of zero will be prepended to the data</param>
     /// <param name="ikeCrypto"></param>
-    public byte[] ToBytes(bool sendZeroHeader = false, IkeCrypto? ikeCrypto = null)
+    public byte[] ToBytes(bool useAlternateChecksum, bool sendZeroHeader = false, IkeCrypto? ikeCrypto = null)
     {
         var idx = 0;
 
         FirstPayload = Payloads.Count > 0 ? Payloads[0].Type : PayloadType.NONE;
         
         var payloadData = EncodePayloads();
+        byte[]? rawEncrypted = null;
 
         if (ikeCrypto is not null)
         {
             // pvpn/message.py:555
-            var sk = new PayloadSecured(ikeCrypto.Encrypt(payloadData))
+            rawEncrypted = ikeCrypto.Encrypt(payloadData);
+            var sk = new PayloadSecured(rawEncrypted)
             {
                 NextPayload = FirstPayload
             };
@@ -111,9 +114,40 @@ public class IkeMessage
         if (ikeCrypto?.Integrity is not null)
         {
             // pvpn/message.py:571
-            var asl = 0;
-            var assoc = Bit.Subset(32, bytes, ref asl);
-            ikeCrypto.AddChecksum(bytes);
+            if (useAlternateChecksum)
+            {
+                Log.Trace("Using alternate checksum");
+                //     https://en.wikipedia.org/wiki/Authenticated_encryption
+                // See https://en.wikipedia.org/wiki/Authenticated_encryption#/media/File:Authenticated_Encryption_EtM.png
+                //
+                // Encryption is with skE, Authentication (hash-check) is with skA
+                //
+                // Got to match with src/libstrongswan/crypto/aead.c:88
+                //                   src/libstrongswan/crypto/signers/mac_signer.c:79
+                //                   src/libstrongswan/plugins/hmac/hmac.c:60 ??? ----> H(K XOR opad, H(K XOR ipad, text))
+                
+                if (rawEncrypted is null) throw new Exception("Logic error in IkeMessage. Did not calculate encryption data.");
+                
+                var asl = 0;
+                var assoc = Bit.Subset(32, bytes, ref asl);
+                var startOfBlank = bytes.Length - ikeCrypto.Integrity.HashSize;
+                
+                Log.Crypto(Bit.Describe("assoc", assoc));
+                
+                var xSum = ikeCrypto.CalculateChecksum(ikeCrypto.SkA, payloadData);
+
+                for (int i = 0; i < xSum.Length; i++)
+                {
+                    bytes[i+startOfBlank] = xSum[i];
+                }
+                
+                Log.Crypto(Bit.Describe("Payload data under checksum", payloadData));
+            }
+            else
+            {
+                Log.Trace("Using standard checksum");
+                ikeCrypto.AddChecksum(bytes, Array.Empty<byte>());
+            }
         }
 
         if (idx != ExpectedLength) throw new Exception($"Unexpected write length. Expected {ExpectedLength}, but got {idx}");
@@ -156,6 +190,7 @@ public class IkeMessage
 
     public static IkeMessage FromBytes(byte[] rawData, int offset)
     {
+        if ((rawData.Length-offset) < 28) throw new Exception($"Invalid data length. Expected at least 28 bytes, got {rawData.Length} with offset {offset}");
         var result = new IkeMessage
         {
             RawData = rawData,

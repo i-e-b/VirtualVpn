@@ -69,6 +69,11 @@ public class VpnServer : ISessionHost, IDisposable
     {
         switch (prefix[0])
         {
+            case "crypto": // very detailed logging, plus crypto details (INSECURE)
+            {
+                Log.SetLevel(LogLevel.Crypto);
+                return;
+            }
             case "trace": // very detailed logging
             {
                 Log.SetLevel(LogLevel.Trace);
@@ -143,7 +148,7 @@ public class VpnServer : ISessionHost, IDisposable
             default:
                 Console.WriteLine("Known commands:");
                 Console.WriteLine("    Logging:");
-                Console.WriteLine("        trace, loud, less");
+                Console.WriteLine("        trace, loud, less ... crypto (INSECURE)");
                 Console.WriteLine("    Connection:");
                 Console.WriteLine("        list, start [gateway], kill [sa-id],");
                 Console.WriteLine("        notify [gateway-ip, network-location-ip]");
@@ -256,7 +261,13 @@ public class VpnServer : ISessionHost, IDisposable
     {
         // write capture to file for easy testing
         Log.Info($"Got a 500 packet, {data.Length} bytes");
-        
+
+        if (data.Length == 1)
+        {
+            Log.Warn("Received a keep-alive packet during IKE process. This probably means there is a network problem, or a fault in the handshake process.");
+            return;
+        }
+
         IkeSessionResponder(data, sender, sendZeroHeader: false);
     }
 
@@ -272,6 +283,7 @@ public class VpnServer : ISessionHost, IDisposable
         var ikeMessage = IkeMessage.FromBytes(data, 0);
 
         Log.Info($"Got a 500 packet, {data.Length} bytes, ex={ikeMessage.Exchange}");
+        Log.Debug($"IKE flags {ikeMessage.MessageFlag.ToString()}, message id={ikeMessage.MessageId}, first payload={ikeMessage.FirstPayload.ToString()}");
 
         if (ikeMessage.Exchange == ExchangeType.IDENTITY_1) // start of an IkeV1 session
         {
@@ -393,7 +405,7 @@ public class VpnServer : ISessionHost, IDisposable
             try
             {
                 var goFaster = false;
-                Log.Trace("Triggering event pump");
+                //Log.Trace("Triggering event pump");
 
                 foreach (var session in _sessions.Values)
                 {

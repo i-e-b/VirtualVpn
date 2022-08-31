@@ -139,24 +139,32 @@ public class IkeCrypto
         myCrypto = new IkeCrypto(cipher, integ, prf, skEr, skAr, skPr, null);
         theirCrypto = new IkeCrypto(cipher, integ, prf, skEi, skAi, skPi, null);
 
+        LogCryptoKeys(theirNonce, myNonce, sharedSecret, skD, skAi, skAr, skEi, skEr, skPi, skPr, keySource, seed, sKeySeed);
+    }
+
+    private static void LogCryptoKeys(byte[] theirNonce, byte[] myNonce, byte[] sharedSecret, byte[] skD, byte[] skAi, byte[] skAr, byte[] skEi, byte[] skEr, byte[] skPi, byte[] skPr, byte[] keySource, byte[] seed, byte[] sKeySeed)
+    {
+        if (!Settings.CaptureTraffic && !Log.IncludeCrypto) return;
+        
+        var description = Bit.Describe("peer nonce", theirNonce) +
+                          Bit.Describe("local nonce", myNonce) +
+                          Bit.Describe("SK d", skD) +
+                          Bit.Describe("skAi", skAi) +
+                          Bit.Describe("skAr", skAr) +
+                          Bit.Describe("skEi", skEi) +
+                          Bit.Describe("skEr", skEr) +
+                          Bit.Describe("skPi", skPi) +
+                          Bit.Describe("skPr", skPr) +
+                          Bit.Describe("keySource", keySource) +
+                          Bit.Describe("seed", seed) +
+                          Bit.Describe("secret", sharedSecret) +
+                          Bit.Describe("sKeySeed", sKeySeed);
+        
         if (Settings.CaptureTraffic)
         {
-            File.WriteAllText(Settings.FileBase + "LastSessionKeys.txt",
-                Bit.Describe("peer nonce", theirNonce) +
-                Bit.Describe("local nonce", myNonce) +
-                Bit.Describe("SK d", skD) +
-                Bit.Describe("skAi", skAi) +
-                Bit.Describe("skAr", skAr) +
-                Bit.Describe("skEi", skEi) +
-                Bit.Describe("skEr", skEr) +
-                Bit.Describe("skPi", skPi) +
-                Bit.Describe("skPr", skPr) +
-                Bit.Describe("keySource", keySource) +
-                Bit.Describe("seed", seed) +
-                Bit.Describe("secret", sharedSecret) +
-                Bit.Describe("sKeySeed", sKeySeed)
-            );
+            File.WriteAllText(Settings.FileBase + "LastSessionKeys.txt", description);
         }
+        Log.Crypto(description);
     }
 
     /// <summary>
@@ -214,13 +222,17 @@ public class IkeCrypto
     }
 
     /// <summary>
-    /// Encrypt plain data, adding padding for a checksum
+    /// Encrypt plain data, adding padding for a checksum. Used for IKE SK payloads
     /// </summary>
     public byte[] Encrypt(byte[] plain)
     {
         var blockSize = _cipher.BlockSize;
         var iv = _cipher.GenerateIv();
         var padLength = blockSize - ((plain.Length) % blockSize) - 1;
+        
+        Log.Crypto("-----------[ Encrypt ]---------");
+        Log.Crypto(Bit.Describe("IV", iv));
+        Log.Crypto(Bit.Describe("Data to Encrypt", plain));
 
         var pad = new byte[padLength];
         var tail = new[] { (byte)padLength };
@@ -230,6 +242,8 @@ public class IkeCrypto
         var encrypted = _cipher.Encrypt(_skE, iv, payload);
 
         var packet = iv.Concat(encrypted).Concat(checksumPad).ToArray();
+        
+        Log.Crypto(Bit.Describe("Encrypted data", packet));
 
         return packet;
     }
@@ -273,7 +287,7 @@ public class IkeCrypto
     /// Calculate and inject a checksum into an encrypted message.
     /// "assoc" comes from the header of the IkeMessage, not including encrypted data or SPE zero padding
     /// </summary>
-    public void AddChecksum(byte[] encrypted)
+    public void AddChecksum(byte[] encrypted, byte[] assoc)
     { 
 /* prepare data to authenticate-decrypt:
  * | IV | plain | padding | ICV |
@@ -282,7 +296,8 @@ public class IkeCrypto
  *              v          /
  *     assoc -> + ------->/
  *
- * "assoc" looks like
+ * "assoc" comes from the header of the IkeMessage, not including encrypted data or SPE zero padding.
+ * It is 32 bytes long, and looks like:
  *    0: A1 33 E4 06 B4 C3 17 10 33 52 09 94 0F 58 36 87
  *   16: 2E 20 23 20 00 00 00 01 00 00 00 B0 21 00 00 94
  */
@@ -292,10 +307,17 @@ public class IkeCrypto
 
         // read just the main body
         var payloadLength = encrypted.Length - _integrity.HashSize;
+        //var mainPayload = encrypted.Take(payloadLength).Concat(assoc).ToArray();
         var mainPayload = encrypted.Take(payloadLength).ToArray();
 
         // compute
         var sum = _integrity.Compute(_skA, mainPayload);
+
+        Log.Crypto("-----------[ Checksum ]---------");
+        Log.Crypto(Bit.Describe("Data to checksum", mainPayload));
+        Log.Crypto(Bit.Describe("ICV", sum));
+        Log.Crypto(Bit.Describe("Assoc", assoc));
+        Log.Crypto(Bit.Describe("skA", _skA));
 
         // copy
         for (int i = 0; i < sum.Length; i++)
@@ -305,9 +327,10 @@ public class IkeCrypto
     }
 
     /// <summary>
-    /// Calculate a checksum, return checksum bytes without changing incoming data
+    /// Calculate a checksum, return checksum bytes without changing incoming data.
+    /// Key should normally be skA
     /// </summary>
-    public byte[] CalculateChecksum(byte[] message)
+    public byte[] CalculateChecksum(byte[] key, byte[] message)
     {
         if (_integrity is null) return Array.Empty<byte>();
         if (_skA is null) throw new Exception($"Checksum is present, but no checksum key was given ({nameof(_skA)})");
@@ -316,8 +339,10 @@ public class IkeCrypto
         var payloadLength = message.Length - _integrity.HashSize;
         var mainPayload = message.Take(payloadLength).ToArray();
 
+        Log.Crypto(Bit.Describe("calculating hash on", mainPayload));
+        
         // compute
-        return _integrity.Compute(_skA, mainPayload);
+        return _integrity.Compute(key, mainPayload);
     }
 
     /// <summary>

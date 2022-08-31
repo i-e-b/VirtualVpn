@@ -46,7 +46,7 @@ public static class Settings
     /// If true, the output of `Bit.Describe` generates C# code.
     /// Otherwise it looks like StrongSwan log format.
     /// </summary>
-    public static bool CodeModeForDescription = true;
+    public static bool CodeModeForDescription = false;
     
     /// <summary>
     /// Median time to pause between event pump runs.
