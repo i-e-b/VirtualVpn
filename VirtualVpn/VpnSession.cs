@@ -18,13 +18,12 @@ namespace VirtualVpn;
 /// </summary>
 public class VpnSession
 {
-    private const string PreSharedKeyString = "ThisIsForTestOnlyDontUse";
     //## State machine vars ##//
-
     public SessionState State
     {
         get => _state;
-        private set { 
+        private set
+        {
             Log.Info($"    Session entered state {value.ToString()}");
             _state = value;
         }
@@ -38,11 +37,12 @@ public class VpnSession
 
     private long _peerMsgId;
     private byte[]? _lastSentMessageBytes;
+    private byte[]? _previousRequestRawData;
+    
     private byte[]? _peerNonce;
     private byte[]? _skD;
-    
+
     private readonly Dictionary<uint, ChildSa> _thisSessionChildren = new();
-    private byte[]? _previousRequestRawData;
     private SessionState _state;
     private IPEndPoint? _lastContact;
 
@@ -53,19 +53,31 @@ public class VpnSession
 
     //## Locked for session ##//
 
+    private ulong _peerSpi;
+    
     private readonly IUdpServer _server; // note: should increment _seqOut when sending
     private readonly ISessionHost _sessionHost;
-    private readonly ulong _peerSpi;
+    private readonly bool _weAreInitiator;
     private readonly ulong _localSpi;
     private readonly byte[] _localNonce;
     private BCDiffieHellman? _keyExchange;
 
-    public VpnSession(IpV4Address gateway, IUdpServer server, ISessionHost sessionHost, ulong peerSpi)
+    /// <summary>
+    /// Start a new session object
+    /// </summary>
+    /// <param name="gateway">Address of remote peer</param>
+    /// <param name="server">Local send/receive socket</param>
+    /// <param name="sessionHost">Host that manages multiple sessions</param>
+    /// <param name="weAreInitiator">True if local is going to start the connection,
+    /// false if this session is started in response to an outside request.</param>
+    /// <param name="peerSpi">SPI value of remote peer, or zero if we are the initiator.</param>
+    public VpnSession(IpV4Address gateway, IUdpServer server, ISessionHost sessionHost, bool weAreInitiator, ulong peerSpi)
     {
         // pvpn/server.py:208
         Gateway = gateway;
         _server = server;
         _sessionHost = sessionHost;
+        _weAreInitiator = weAreInitiator;
         _peerSpi = peerSpi;
         LastTouchUtc = DateTime.UtcNow;
         _localSpi = Bit.RandomSpi();
@@ -78,6 +90,8 @@ public class VpnSession
     public DateTime LastTouchUtc { get; set; }
     public TimeSpan AgeNow => DateTime.UtcNow - LastTouchUtc;
     public IpV4Address Gateway { get; set; }
+    public ulong LocalSpi => _localSpi;
+    public bool WeStarted => _weAreInitiator;
 
 
     /// <summary>
@@ -105,8 +119,8 @@ public class VpnSession
         else if (seq == _maxSeq) _maxSeq++;
         else _maxSeq = seq; // this isn't exactly right, see pvpn/server.py:421
     }
-    
-    
+
+
     /// <summary>
     /// This method should be called periodically
     /// </summary>
@@ -118,9 +132,11 @@ public class VpnSession
     // pvpn/server.py:253
     private byte[] BuildResponse(ExchangeType exchange, bool sendZeroHeader, IkeCrypto? crypto, params MessagePayload[] payloads)
     {
-        return BuildSerialMessage(exchange, MessageFlag.Response, sendZeroHeader, crypto, _peerSpi, _localSpi, _peerMsgId, payloads);
+        return _weAreInitiator
+            ? BuildSerialMessage(exchange, MessageFlag.Initiator | MessageFlag.Response, sendZeroHeader, crypto, _localSpi, _peerSpi, _peerMsgId, payloads)
+            : BuildSerialMessage(exchange, MessageFlag.Response, sendZeroHeader, crypto, _peerSpi, _localSpi, _peerMsgId, payloads);
     }
-    
+
     public static byte[] BuildSerialMessage(ExchangeType exchange, MessageFlag direction, bool sendZeroHeader, IkeCrypto? crypto,
         ulong initiatorSpi, ulong responderSpi, long peerMsgId, params MessagePayload[] payloads)
     {
@@ -135,7 +151,7 @@ public class VpnSession
             Version = IkeVersion.IkeV2,
         };
         resp.Payloads.AddRange(payloads);
-        
+
         Log.Debug("        payloads outgoing:", () => resp.DescribeAllPayloads());
 
         return resp.ToBytes(sendZeroHeader, crypto); // should wrap payloads in PayloadSK if we have crypto
@@ -164,13 +180,16 @@ public class VpnSession
         // pvpn/server.py:260
         LastTouchUtc = DateTime.UtcNow;
 
+        // Update our records if the remote has provided an SPI
+        if (_weAreInitiator && _peerSpi == 0 && request.SpiR != 0) { _peerSpi = request.SpiR; }
+
         // Check for peer requesting a repeat of last message
         if (request.MessageId == _peerMsgId - 1)
         {
             if (_lastSentMessageBytes is null)
             {
                 Log.Warn("    Asked to repeat a message we didn't send? This session has faulted");
-                // TODO: kill the session? respond with a failure message?
+                ReplyNotAcceptable(sender, sendZeroHeader);
                 return;
             }
 
@@ -200,9 +219,21 @@ public class VpnSession
         switch (request.Exchange)
         {
             case ExchangeType.IKE_SA_INIT: // pvpn/server.py:268
-                AssertState(SessionState.INITIAL, request);
-                Log.Info("IKE_SA_INIT received");
-                HandleSaInit(request, sender, sendZeroHeader);
+                switch (State)
+                {
+                    case SessionState.INITIAL:
+                        Log.Info("IKE_SA_INIT received, we are responder");
+                        HandleSaInit(request, sender, sendZeroHeader);
+                        break;
+                    case SessionState.IKE_INIT_SENT:
+                        Log.Info("IKE_SA_INIT received, we are initiator");
+                        Log.Warn("We should now check the message is acceptable; and if so, send the first IKE_AUTH message");
+                        HandleSaConfirm(request, sender, sendZeroHeader);
+                        break;
+                    default:
+                        throw new Exception($"Received {nameof(ExchangeType.IKE_SA_INIT)}, so expected to be in state {nameof(SessionState.INITIAL)} or {nameof(SessionState.SA_SENT)}, but was in {State.ToString()}");
+                }
+
                 _peerMsgId++;
                 break;
 
@@ -232,20 +263,35 @@ public class VpnSession
         }
     }
 
+    /// <summary>
+    /// Send a message to peer with DELETE payload.
+    /// This <i>should</i> cause the session to close in a faulted state.
+    /// </summary>
+    private void ReplyNotAcceptable(IPEndPoint sender, bool sendZeroHeader)
+    {
+        var reKeyMessage = BuildSerialMessage(ExchangeType.IKE_SA_INIT, MessageFlag.Initiator, sendZeroHeader, null, _localSpi, _peerSpi, _peerMsgId,
+            new PayloadDelete(IkeProtocolType.IKE, Array.Empty<byte[]>())
+        );
+
+        State = SessionState.DELETED;
+        Send(to: sender, reKeyMessage);
+    }
+
+
     private void HandleInformational(IkeMessage request, IPEndPoint sender, bool sendZeroHeader)
     {
         // pvpn/server.py:315
-        
+
         // Check for any sessions the other side wants to remove
         var deletePayload = request.GetPayload<PayloadDelete>();
 
         if (deletePayload is null)
         {
             Log.Debug("No delete payloads found in Informational packet. Will reply, but nothing else");
-            Log.Trace($"Found payloads: {string.Join(", ",request.Payloads.Select(p=>p.Type.ToString()))};");
-            
+            Log.Trace($"Found payloads: {string.Join(", ", request.Payloads.Select(p => p.Type.ToString()))};");
+
             // Nothing to do, but we must reply
-            Reply(to: sender, message: BuildResponse(ExchangeType.INFORMATIONAL, sendZeroHeader, _myCrypto));
+            Send(to: sender, message: BuildResponse(ExchangeType.INFORMATIONAL, sendZeroHeader, _myCrypto));
             return;
         }
 
@@ -260,15 +306,16 @@ public class VpnSession
             {
                 _sessionHost.RemoveChildSession(childSa.Value.SpiIn);
             }
+
             _thisSessionChildren.Clear();
-            Reply(to: sender, message: BuildResponse(ExchangeType.INFORMATIONAL, sendZeroHeader, _myCrypto, deletePayload));
+            Send(to: sender, message: BuildResponse(ExchangeType.INFORMATIONAL, sendZeroHeader, _myCrypto, deletePayload));
             return;
         }
 
         if (deletePayload.SpiList.Count < 1)
         {
             Log.Warn("    Received an empty delete list");
-            Reply(to: sender, message: BuildResponse(ExchangeType.INFORMATIONAL, sendZeroHeader, _myCrypto, deletePayload));
+            Send(to: sender, message: BuildResponse(ExchangeType.INFORMATIONAL, sendZeroHeader, _myCrypto, deletePayload));
             return;
         }
 
@@ -284,21 +331,21 @@ public class VpnSession
         }
 
         Log.Info($"    Removing SPIs: {string.Join(", ", matches.Select(Bit.HexString))}");
-        
-        Reply(to: sender, message: BuildResponse(ExchangeType.INFORMATIONAL, sendZeroHeader, _myCrypto, 
+
+        Send(to: sender, message: BuildResponse(ExchangeType.INFORMATIONAL, sendZeroHeader, _myCrypto,
             new PayloadDelete(deletePayload.ProtocolType, matches)));
     }
 
     private bool TryRemoveChild(byte[] deadSpi)
     {
         if (deadSpi.Length != 4) return false;
-        
+
         var spi = Bit.BytesToUInt32(deadSpi);
         var removed = _thisSessionChildren.Remove(spi);
-        
+
         if (removed) _sessionHost.RemoveChildSession(spi);
         else Log.Warn($"    Failed to remove session {Bit.HexString(deadSpi)}");
-        
+
         return removed;
     }
 
@@ -320,7 +367,7 @@ public class VpnSession
         var auth = request.GetPayload<PayloadAuth>();
         if (auth is null) throw new Exception("Peer requested EAP, which we don't support");
 
-        var pskAuth = GeneratePskAuth(_previousRequestRawData, _localNonce, idi, peerSkp);
+        var pskAuth = GeneratePskAuth(_previousRequestRawData, _localNonce, idi, peerSkp, _peerCrypto?.Prf);
         if (Bit.AreDifferent(pskAuth, auth.AuthData))
         {
             throw new Exception("PSK auth failed: initiator's hash did not match our expectations.\r\n\t" +
@@ -335,7 +382,7 @@ public class VpnSession
         {
             Log.Warn("    FATAL: could not find a compatible Child SA");
             // Try to reject by sending back an empty proposal. Not sure about this
-            Reply(to: sender, BuildResponse(ExchangeType.IKE_AUTH, sendZeroHeader, _myCrypto, new PayloadSa(new Proposal())));
+            Send(to: sender, BuildResponse(ExchangeType.IKE_AUTH, sendZeroHeader, _myCrypto, new PayloadSa(new Proposal())));
             return;
         }
 
@@ -350,9 +397,9 @@ public class VpnSession
         var responsePayloadIdr = new PayloadIDr(IdType.ID_IPV4_ADDR, Settings.LocalIpAddress, 0, 0); // must be same as ipsec.conf, otherwise auth will fail
         var mySkp = _myCrypto?.SkP;
         if (mySkp is null) throw new Exception("Local SK-p not established before IKE_AUTH received");
-        var authData = GeneratePskAuth(_lastSentMessageBytes, _peerNonce, responsePayloadIdr, mySkp); // I think this is based on the last thing we sent
+        var authData = GeneratePskAuth(_lastSentMessageBytes, _peerNonce, responsePayloadIdr, mySkp, _peerCrypto?.Prf); // I think this is based on the last thing we sent
         Log.Debug($"    Auth data ({authData.Length} bytes) = {Bit.HexString(authData)}");
-        
+
         Log.Debug($"    Chosen proposal: {Json.Freeze(chosenChildProposal)}");
 
         // pvpn/server.py:309
@@ -372,7 +419,7 @@ public class VpnSession
         // Send reply.
         Log.Info($"    Sending IKE_AUTH response to peer {sender.Address} : {sender.Port}");
 
-        Reply(to: sender, response);
+        Send(to: sender, response);
 
         Log.Debug("    Setting state to established");
         State = SessionState.ESTABLISHED; // Should now have a full Child SA
@@ -385,12 +432,12 @@ public class VpnSession
     /// See src/libcharon/sa/ikev2/keymat_v2.c:659
     /// </summary>
     // ReSharper restore CommentTypo
-    private byte[] GeneratePskAuth(byte[] messageData, byte[] nonce, PayloadIDx payload, byte[] skP)
+    private byte[] GeneratePskAuth(byte[] messageData, byte[] nonce, PayloadIDx payload, byte[] skP, Prf? prf)
     {
-        var prf = _peerCrypto?.Prf;
+        //var prf = _peerCrypto?.Prf;
         if (prf is null) throw new Exception("Tried to generate PSK auth before key exchange completed");
 
-        Log.Debug("PSK message:", ()=>One(payload.Describe()));
+        Log.Debug("PSK message:", () => One(payload.Describe()));
 
         var prefix = new byte[] { (byte)payload.IdType, 0, 0, 0 };
         var peerId = payload.IdData;
@@ -404,7 +451,7 @@ public class VpnSession
         Log.Crypto($"#### {Bit.Describe("prf(Sk_px, IDx')", octetPad)}");
         Log.Crypto($"#### {Bit.Describe("octets =  message + nonce + prf(Sk_px, IDx') ", messageData)}"); // expect ~ 1192 bytes
 
-        var psk = Encoding.ASCII.GetBytes(PreSharedKeyString);
+        var psk = Encoding.ASCII.GetBytes(Settings.PreSharedKeyString);
         var pad = Encoding.ASCII.GetBytes(Prf.IKEv2_KeyPad);
         var prfPskPad = prf.Hash(psk, pad);
 
@@ -472,36 +519,41 @@ public class VpnSession
         // Normally, a VPN system would send a complete set of what they support,
         // but here we are just sending over a minimal set we expect the other
         // side to accept.
-        var defaultProposal = new Proposal {
+        var defaultProposal = new Proposal
+        {
             Number = 1, // must start at 1, not 0
             Protocol = IkeProtocolType.IKE,
         };
-        
+
         // We only support one type of encryption, so supply that
-        defaultProposal.Transforms.Add(new Transform {
+        defaultProposal.Transforms.Add(new Transform
+        {
             Type = TransformType.ENCR,
             Id = (uint)EncryptionTypeId.ENCR_AES_CBC,
             Attributes = { new TransformAttribute(TransformAttr.KEY_LENGTH, 256) }
         });
-        
+
         // Supply the key exchange we know M-Pesa want
-        defaultProposal.Transforms.Add(new Transform {
+        defaultProposal.Transforms.Add(new Transform
+        {
             Type = TransformType.DH,
             Id = (uint)DhId.DH_14
         });
-        
+
         // Supply a hash function for checksums
-        defaultProposal.Transforms.Add(new Transform {
+        defaultProposal.Transforms.Add(new Transform
+        {
             Type = TransformType.INTEG,
             Id = (uint)IntegId.AUTH_HMAC_SHA2_256_128
         });
-        
+
         // Supply a hash function for random number generation
-        defaultProposal.Transforms.Add(new Transform {
+        defaultProposal.Transforms.Add(new Transform
+        {
             Type = TransformType.PRF,
             Id = (uint)PrfId.PRF_HMAC_SHA2_256
         });
-        
+
         _keyExchange ??= BCDiffieHellman.CreateForGroup(DhId.DH_14) ?? throw new Exception("Failed to generate key exchange when generating new session");
         _keyExchange.get_our_public_key(out var newPublicKey);
 
@@ -513,12 +565,145 @@ public class VpnSession
             new PayloadNotify(IkeProtocolType.NONE, NotifyId.NAT_DETECTION_SOURCE_IP, Array.Empty<byte>(), Bit.RandomBytes(20))
         );
 
-        Reply(to: target, reKeyMessage);
+        State = SessionState.IKE_INIT_SENT;
+        Send(to: target, reKeyMessage);
     }
 
+    /// <summary>
+    /// We are the initiator, and we got an IKE_SA_INIT message.
+    /// We should now check the message is acceptable; and if so, send the first IKE_AUTH message
+    /// <p></p>
+    /// This is closely related to <see cref="HandleSaInit"/>
+    /// </summary>
+    private void HandleSaConfirm(IkeMessage request, IPEndPoint sender, bool sendZeroHeader)
+    {
+        Log.Debug("        Session: IKE_SA_INIT received (as initiator)");
+        Log.Debug("        HandleSaInit():: payloads:", request.DescribeAllPayloads);
+        
+        _peerNonce ??= request.GetPayload<PayloadNonce>()?.Data;
+        
+        // Check to see if exactly one SA was chosen
+        var saPayload = request.GetPayload<PayloadSa>();
+
+        if (saPayload is null || saPayload.Proposals.Count != 1)
+        {
+            Log.Warn($"        Session: Peer did not agree with our proposition. Sending rejection to {sender.Address}:{sender.Port}");
+            Send(to: sender, message: BuildResponse(ExchangeType.IKE_SA_INIT, sendZeroHeader, null,
+                new PayloadNotify(IkeProtocolType.IKE, NotifyId.INVALID_KE_PAYLOAD, null, null)
+            ));
+            return;
+        }
+        
+        // Check to see it's the one we offered (would need to implement negotiation if not)
+        var chosenProposal = saPayload.GetProposalFor(EncryptionTypeId.ENCR_AES_CBC); // we only support AES CBC mode at the moment, and M-Pesa only does DH-14
+        var preferredDiffieHellman = chosenProposal?.GetTransform(TransformType.DH)?.Id;
+        var payloadKe = request.GetPayload<PayloadKeyExchange>();
+
+        if (chosenProposal is null || preferredDiffieHellman != (uint)DhId.DH_14 || payloadKe is null)
+        {
+            Log.Warn($"        Session: Peer is trying to negotiate a different crypto setting. This is not currently supported. Sending rejection to {sender.Address}:{sender.Port}");
+            Send(to: sender, message: BuildResponse(ExchangeType.IKE_SA_INIT, sendZeroHeader, null,
+                new PayloadNotify(IkeProtocolType.IKE, NotifyId.INVALID_KE_PAYLOAD, null, null)
+            ));
+            return;
+        }
+        
+        // Should be able to finish key exchange now.
+        if (_keyExchange is null) throw new Exception($"Key exchange object was null in {nameof(HandleSaConfirm)}. This should have been setup in {nameof(RequestNewSession)}");
+        _keyExchange.set_their_public_key(payloadKe.KeyData);
+        _keyExchange.get_shared_secret(out var secret);
+        
+        // create keys from exchange result. If something went wrong, we will end up with a checksum failure
+        CreateKeyAndCrypto(chosenProposal, secret, null);
+        
+        var mainIDi = new PayloadIDi(IdType.ID_IPV4_ADDR, Settings.LocalIpAddress, 0, IpProtocol.ANY);
+        var peerIDi = new PayloadIDi(IdType.ID_IPV4_ADDR, Gateway.Value, 0, IpProtocol.ANY);
+        var mySkP = _myCrypto?.SkP;
+        var peerSkp = _peerCrypto?.SkP;
+        if (_peerNonce is null) throw new Exception("Peer n-Once not established before IKE_AUTH construction");
+        if (mySkP is null) throw new Exception("SK-p not established before IKE_AUTH construction");
+        if (peerSkp is null) throw new Exception("Peer SK-p not established before IKE_AUTH construction");
+        if (_lastSentMessageBytes is null) throw new Exception("No previous message recorded before IKE_AUTH construction, auth cannot continue.");
+        
+        // VARS: Nonce, IDi, SkP, bytes, prf (32 sets)
+        
+        // MY prf
+        // bytes A
+        //var authData = GeneratePskAuth(_lastSentMessageBytes, _peerNonce, peerIDi, mySkP, _myCrypto?.Prf); // Fails
+        //var authData = GeneratePskAuth(_lastSentMessageBytes, _localNonce, peerIDi, mySkP, _myCrypto?.Prf); // Fails
+        //var authData = GeneratePskAuth(_lastSentMessageBytes, _peerNonce, mainIDi, mySkP, _myCrypto?.Prf); // Fails
+        //var authData = GeneratePskAuth(_lastSentMessageBytes, _localNonce, mainIDi, mySkP, _myCrypto?.Prf); // Fails
+        
+        //var authData = GeneratePskAuth(_lastSentMessageBytes, _peerNonce, peerIDi, peerSkp, _myCrypto?.Prf); // Fails
+        //var authData = GeneratePskAuth(_lastSentMessageBytes, _localNonce, peerIDi, peerSkp, _myCrypto?.Prf); // Fails
+        //var authData = GeneratePskAuth(_lastSentMessageBytes, _peerNonce, mainIDi, peerSkp, _myCrypto?.Prf); // Fails
+        //var authData = GeneratePskAuth(_lastSentMessageBytes, _localNonce, mainIDi, peerSkp, _myCrypto?.Prf); // Fails
+        
+        // bytes B
+        //var authData = GeneratePskAuth(request.RawData, _peerNonce, peerIDi, mySkP, _myCrypto?.Prf); // Fails
+        //var authData = GeneratePskAuth(request.RawData, _localNonce, peerIDi, mySkP, _myCrypto?.Prf); // Fails
+        //var authData = GeneratePskAuth(request.RawData, _peerNonce, mainIDi, mySkP, _myCrypto?.Prf); // Fails
+        //var authData = GeneratePskAuth(request.RawData, _localNonce, mainIDi, mySkP, _myCrypto?.Prf); // Fails
+        
+        //var authData = GeneratePskAuth(request.RawData, _peerNonce, peerIDi, peerSkp, _myCrypto?.Prf); // Fails
+        //var authData = GeneratePskAuth(request.RawData, _localNonce, peerIDi, peerSkp, _myCrypto?.Prf);// Fails
+        //var authData = GeneratePskAuth(request.RawData, _peerNonce, mainIDi, peerSkp, _myCrypto?.Prf); // ####  ??? Fails ???
+        //var authData = GeneratePskAuth(request.RawData, _localNonce, mainIDi, peerSkp, _myCrypto?.Prf); // Fails
+        
+        // THEIR prf
+        // bytes A
+        //var authData = GeneratePskAuth(_lastSentMessageBytes, _peerNonce, peerIDi, mySkP, _peerCrypto?.Prf); // Fails
+        //var authData = GeneratePskAuth(_lastSentMessageBytes, _localNonce, peerIDi, mySkP, _peerCrypto?.Prf); // Fails
+        //var authData = GeneratePskAuth(_lastSentMessageBytes, _peerNonce, mainIDi, mySkP, _peerCrypto?.Prf); // Fails
+        //var authData = GeneratePskAuth(_lastSentMessageBytes, _localNonce, mainIDi, mySkP, _peerCrypto?.Prf);// Fails
+        
+        //var authData = GeneratePskAuth(_lastSentMessageBytes, _peerNonce, peerIDi, peerSkp, _peerCrypto?.Prf);// Fails
+        //var authData = GeneratePskAuth(_lastSentMessageBytes, _localNonce, peerIDi, peerSkp, _peerCrypto?.Prf); // Fails
+        //var authData = GeneratePskAuth(_lastSentMessageBytes, _peerNonce, mainIDi, peerSkp, _peerCrypto?.Prf); // Fails
+        //var authData = GeneratePskAuth(_lastSentMessageBytes, _localNonce, mainIDi, peerSkp, _peerCrypto?.Prf); // Fails
+        
+        // bytes B
+        //var authData = GeneratePskAuth(request.RawData, _peerNonce, peerIDi, mySkP, _peerCrypto?.Prf); // Fails
+        //var authData = GeneratePskAuth(request.RawData, _localNonce, peerIDi, mySkP, _peerCrypto?.Prf); // Fails
+        //var authData = GeneratePskAuth(request.RawData, _peerNonce, mainIDi, mySkP, _peerCrypto?.Prf); // Fails
+        //var authData = GeneratePskAuth(request.RawData, _localNonce, mainIDi, mySkP, _peerCrypto?.Prf);// Fails
+        
+        //var authData = GeneratePskAuth(request.RawData, _peerNonce, peerIDi, peerSkp, _peerCrypto?.Prf); // Fails
+        //var authData = GeneratePskAuth(request.RawData, _localNonce, peerIDi, peerSkp, _peerCrypto?.Prf); // Fails
+        //var authData = GeneratePskAuth(request.RawData, _peerNonce, mainIDi, peerSkp, _peerCrypto?.Prf); // Fails
+        //var authData = GeneratePskAuth(request.RawData, _localNonce, mainIDi, peerSkp, _peerCrypto?.Prf); // Fails
+        
+        // IEB: doing something wrong here
+        
+        
+        var msgBytes = BuildSerialMessage(ExchangeType.IKE_AUTH, MessageFlag.Initiator, sendZeroHeader, _myCrypto,
+            _localSpi, _peerSpi, _peerMsgId, 
+            
+            mainIDi,
+            new PayloadNotify(IkeProtocolType.NONE, NotifyId.INITIAL_CONTACT, null, null),
+            peerIDi, // IEB: Not sure about this. It's in what StrongSwan sends.
+            new PayloadAuth(AuthMethod.PSK, authData),
+            new PayloadSa(new Proposal()), // Not sure what goes here. Need to inspect
+            new PayloadTsi(Settings.LocalTrafficSelector), // our address ranges,
+            new PayloadTsr(Settings.RemoteTrafficSelector), // expected ranges on their side
+            new PayloadNotify(IkeProtocolType.NONE, NotifyId.MOBIKE_SUPPORTED, null, null)
+            // Notifications for extra IP addresses could go here, but we don't support them yet.
+            );
+        
+        Send(to: sender, message: msgBytes);
+        // IEB: Continue from here
+    }
+    
+    /// <summary>
+    /// We are the responder, and we got an IKE_SA_INIT message.
+    /// We should try to find an acceptable set of crypto proposals;
+    /// and if so, send another IKE_SA_INIT message in reply.
+    /// <p></p>
+    /// This is closely related to <see cref="HandleSaConfirm"/>
+    /// </summary>
     private void HandleSaInit(IkeMessage request, IPEndPoint sender, bool sendZeroHeader)
     {
-        Log.Debug("        Session: IKE_SA_INIT received");
+        Log.Debug("        Session: IKE_SA_INIT received (as responder)");
         Log.Debug("        HandleSaInit():: payloads:", request.DescribeAllPayloads);
 
         _peerNonce = request.GetPayload<PayloadNonce>()?.Data;
@@ -537,7 +722,7 @@ public class VpnSession
         {
             // pvpn/server.py:274
             Log.Warn($"        Session: Could not find an agreeable proposition. Sending rejection to {sender.Address}:{sender.Port}");
-            Reply(to: sender, message: BuildResponse(ExchangeType.IKE_SA_INIT, sendZeroHeader, null,
+            Send(to: sender, message: BuildResponse(ExchangeType.IKE_SA_INIT, sendZeroHeader, null,
                 new PayloadNotify(IkeProtocolType.IKE, NotifyId.INVALID_KE_PAYLOAD, null, null)
             ));
             return;
@@ -554,14 +739,14 @@ public class VpnSession
                 new PayloadNotify(IkeProtocolType.IKE, NotifyId.INVALID_KE_PAYLOAD, Bit.UInt64ToBytes(request.SpiI), Bit.UInt16ToBytes((ushort)DhId.DH_14))
             );
 
-            Reply(to: sender, message: reKeyMessage);
+            Send(to: sender, message: reKeyMessage);
             _peerMsgId--; // this is not going to count as a sequenced message
             return;
         }
 
         // build key
         Log.Debug($"        Session: We agree on a viable proposition, and it is the default. Continue with key share for {payloadKe.DiffieHellmanGroup.ToString()}" +
-                          $" Supplied length is {payloadKe.KeyData.Length} bytes");
+                  $" Supplied length is {payloadKe.KeyData.Length} bytes");
 
         _keyExchange ??= BCDiffieHellman.CreateForGroup(DhId.DH_14) ?? throw new Exception($"Failed to create key exchange for group {payloadKe.DiffieHellmanGroup.ToString()}");
         _keyExchange.set_their_public_key(payloadKe.KeyData);
@@ -580,7 +765,7 @@ public class VpnSession
         );
 
         Log.Debug($"        Session: Sending IKE_SA_INIT reply to {sender.Address}:{sender.Port}");
-        Reply(to: sender, message: saMessage);
+        Send(to: sender, message: saMessage);
         State = SessionState.SA_SENT;
 
         Log.Debug("        Session: Completed IKE_SA_INIT, transition to state=SA_SENT");
@@ -622,7 +807,7 @@ public class VpnSession
         return info.Attributes.FirstOrDefault(a => a.Type == TransformAttr.KEY_LENGTH)?.Value;
     }
 
-    private void Reply(IPEndPoint to, byte[] message)
+    private void Send(IPEndPoint to, byte[] message)
     {
         _lastContact = to;
         _lastSentMessageBytes = message;
@@ -659,13 +844,13 @@ public class VpnSession
             Log.Error("Can't send IP addresses -- I don't have a last contact address");
             return;
         }
-        
+
         // This currently kills the session? Maybe if we've got more than one?
 
         var response = BuildResponse(ExchangeType.INFORMATIONAL, true, _myCrypto,
             new PayloadNotify(IkeProtocolType.NONE, NotifyId.ADDITIONAL_IP4_ADDRESS, null, address.Value)
         );
-        
-        Reply(to: _lastContact, response);
+
+        Send(to: _lastContact, response);
     }
 }

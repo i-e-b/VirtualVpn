@@ -62,7 +62,7 @@ public class IkeV2Tests
         
         var gateway = IpV4Address.Localhost;
         var testUdpServer = new TestUdpServer();
-        var newSession = new VpnSession(gateway, testUdpServer, new TestSessionHost(), 0);
+        var newSession = new VpnSession(gateway, testUdpServer, new TestSessionHost(), weAreInitiator:true, 0);
         newSession.RequestNewSession(gateway.MakeEndpoint(port:500));
         
         Assert.That(testUdpServer.SentMessages.Count, Is.EqualTo(1), "Message count");

@@ -1,4 +1,7 @@
-﻿namespace VirtualVpn;
+﻿using VirtualVpn.Enums;
+using VirtualVpn.EspProtocol.Payloads.PayloadSubunits;
+
+namespace VirtualVpn;
 
 public static class Settings
 {
@@ -23,15 +26,11 @@ public static class Settings
     /// and diagnostics and should normally be 'false'.
     /// </summary>
     public const bool RunAirliftSite = false;
-
+    
     /// <summary>
-    /// Declared IP address of this VPN node.
-    /// It must match what is in ipsec.conf, otherwise auth will fail.
-    /// <p></p>
-    /// This does NOT need to be a real machine's address.
+    /// PSK for session establishment
     /// </summary>
-    //public static readonly byte[] LocalIpAddress = { 192, 168, 0, 2 }; // Hans
-    public static readonly byte[] LocalIpAddress = { 185, 81, 252, 44 }; // Behind NAT
+    public static string PreSharedKeyString = "ThisIsForTestOnlyDontUse";
     
     /// <summary>
     /// If true, traffic will be captured into files
@@ -61,6 +60,41 @@ public static class Settings
     /// </summary>
     public static TimeSpan TcpTimeout => TimeSpan.FromSeconds(60);
 
+    /// <summary>
+    /// A description of the network on our side of the VPN tunnel.
+    /// This must match the expectations of the other side, or the connection will fail.
+    /// </summary>
+    public static TrafficSelector LocalTrafficSelector => new() {
+        Type = TrafficSelectType.TS_IPV4_ADDR_RANGE,
+        Protocol = IpProtocol.ANY,
+        StartPort = 0,
+        EndPort = 65535,
+        StartAddress = new byte[] { 55, 55, 0, 0 },
+        EndAddress = new byte[] { 55, 55, 255, 255 }
+    };
+
+    /// <summary>
+    /// A description of the network on the far side of the VPN tunnel.
+    /// This must match the expectations of the other side, or the connection will fail.
+    /// </summary>
+    public static TrafficSelector RemoteTrafficSelector => new() {
+        Type = TrafficSelectType.TS_IPV4_ADDR_RANGE,
+        Protocol = IpProtocol.ANY,
+        StartPort = 0,
+        EndPort = 65535,
+        StartAddress = new byte[] { 192,168,0,0 },
+        EndAddress = new byte[] { 192,168,0,40 }
+    };
+
+    /// <summary>
+    /// Declared IP address of this VPN node.
+    /// It must match what is in ipsec.conf, otherwise auth will fail.
+    /// <p></p>
+    /// This does NOT need to be a real machine's address.
+    /// </summary>
+    //public static readonly byte[] LocalIpAddress = { 192, 168, 0, 2 }; // Hans
+    public static readonly byte[] LocalIpAddress = { 185, 81, 252, 44 }; // Behind NAT
+    
     /// <summary>
     /// TCP port of the app we're tunnelling
     /// </summary>

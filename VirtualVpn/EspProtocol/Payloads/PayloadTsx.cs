@@ -14,6 +14,7 @@ public class PayloadTsx : MessagePayload
     public int SelectorCount { get; set; }
     public readonly List<TrafficSelector> Selectors = new();
 
+    protected PayloadTsx() { }
     protected PayloadTsx(byte[] data, ref int idx, ref PayloadType nextPayload)
     {
         ReadData(data, ref idx, ref nextPayload);
@@ -64,10 +65,20 @@ public class PayloadTsr : PayloadTsx
     // pvpn/message.py:450
     public override PayloadType Type { get => PayloadType.TSr; set { } }
     public PayloadTsr(byte[] data, ref int idx, ref PayloadType nextPayload):base(data,ref idx, ref nextPayload) { }
+    
+    public PayloadTsr(TrafficSelector selector)
+    {
+        Selectors.Add(selector);
+    }
 }
 public class PayloadTsi : PayloadTsx
 {
     // pvpn/message.py:435
     public override PayloadType Type { get => PayloadType.TSi; set { } }
     public PayloadTsi(byte[] data, ref int idx, ref PayloadType nextPayload):base(data,ref idx, ref nextPayload) { }
+
+    public PayloadTsi(TrafficSelector selector)
+    {
+        Selectors.Add(selector);
+    }
 }

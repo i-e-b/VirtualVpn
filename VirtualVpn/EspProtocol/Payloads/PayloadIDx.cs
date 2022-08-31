@@ -12,6 +12,15 @@ public class PayloadIDi : PayloadIDx
     public override PayloadType Type => PayloadType.IDi;
     
     public PayloadIDi(byte[] data, ref int idx, ref PayloadType nextPayload) : base(data, ref idx, ref nextPayload) { }
+    
+    public PayloadIDi(IdType type, byte[] idData, int port, IpProtocol protocol)
+    {
+        // like pvpn/message.py:118
+        IdType=type;
+        IdData=idData;
+        Port = (ushort)port;
+        Protocol = protocol;
+    }
 }
 
 /// <summary>

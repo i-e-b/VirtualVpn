@@ -4,6 +4,7 @@
 // ReSharper disable UnusedType.Global
 
 using System.Diagnostics.CodeAnalysis;
+// ReSharper disable CommentTypo
 
 namespace VirtualVpn.Enums;
 
@@ -494,6 +495,7 @@ public enum CpAttrType
 
 public enum TrafficSelectType
 {
+    INVALID = 0,
     TS_IPV4_ADDR_RANGE = 7,
     TS_IPV6_ADDR_RANGE = 8,
     TS_FC_ADDR_RANGE = 9
@@ -519,14 +521,15 @@ public enum IpProtocol : byte
 public enum SessionState
 {
     INITIAL = 0,
-    SA_SENT = 1,
-    ESTABLISHED = 2,
-    DELETED = 3,
-    KE_SENT = 4,
-    HASH_SENT = 5,
-    AUTH_SET = 6,
-    CONF_SENT = 7,
-    CHILD_SA_SENT = 8
+    IKE_INIT_SENT = 1,
+    SA_SENT = 2,
+    ESTABLISHED = 3,
+    DELETED = 4,
+    KE_SENT = 5,
+    HASH_SENT = 6,
+    AUTH_SET = 7,
+    CONF_SENT = 8,
+    CHILD_SA_SENT = 9
 }
 
 public enum EapCode

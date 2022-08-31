@@ -135,12 +135,19 @@ public class VpnServer : ISessionHost, IDisposable
                 session.NotifyIpAddresses(networkLoc);
                 break;
             }
+            case "psk":
+            {
+                Settings.PreSharedKeyString = prefix[1]; // TODO: this should be on a per-gateway basis
+                break;
+            }
             default:
                 Console.WriteLine("Known commands:");
                 Console.WriteLine("    Logging:");
                 Console.WriteLine("        trace, loud, less");
                 Console.WriteLine("    Connection:");
-                Console.WriteLine("        list, start [gateway], kill [sa-id], notify [gateway-ip, network-location-ip]");
+                Console.WriteLine("        list, start [gateway], kill [sa-id],");
+                Console.WriteLine("        notify [gateway-ip, network-location-ip]");
+                Console.WriteLine("        psk [psk-string]");
                 Console.WriteLine("    General:");
                 Console.WriteLine("        quit, capture");
                 return;
@@ -196,9 +203,9 @@ public class VpnServer : ISessionHost, IDisposable
         // Add that to the ongoing sessions (we might need to map
         // both sides of SPI on session lookup?)
         
-        var spi = Bit.RandomSpi();
-        var newSession = new VpnSession(gateway, _server, this, spi);
-        _sessions.Add(spi, newSession);
+        var newSession = new VpnSession(gateway, _server, this, weAreInitiator:true, 0);
+        Log.Debug($"Starting new session with SPI {newSession.LocalSpi:x16}");
+        _sessions.Add(newSession.LocalSpi, newSession);
         
         newSession.RequestNewSession(gateway.MakeEndpoint(port:500));
     }
@@ -274,26 +281,25 @@ public class VpnServer : ISessionHost, IDisposable
 
         if (_sessions.ContainsKey(ikeMessage.SpiI))
         {
-            Log.Info($"    it's for an existing session started by the peer {ikeMessage.SpiI:x16} => {ikeMessage.SpiR:x16}");
-            
-            // Pass message to existing session
-            _sessions[ikeMessage.SpiI].HandleIke(ikeMessage, sender, sendZeroHeader);
-            return;
-        }
+            var session = _sessions[ikeMessage.SpiI];
+            if (session.WeStarted)
+            {
+                Log.Info($"    it's for an existing session we started {ikeMessage.SpiI:x16} (us) => {ikeMessage.SpiR:x16} (them)");
+            }
+            else
+            {
+                Log.Info($"    it's for an existing session started by the peer {ikeMessage.SpiI:x16} (them) => {ikeMessage.SpiR:x16} (us)");
+            }
 
-        if (_sessions.ContainsKey(ikeMessage.SpiR))
-        {
-            Log.Info($"    it's for an existing session we started {ikeMessage.SpiI:x16} => {ikeMessage.SpiR:x16}");
-            
             // Pass message to existing session
-            _sessions[ikeMessage.SpiR].HandleIke(ikeMessage, sender, sendZeroHeader);
+            session.HandleIke(ikeMessage, sender, sendZeroHeader);
             return;
         }
 
         Log.Info($"    it's for a new session  {ikeMessage.SpiI:x16} => {ikeMessage.SpiR:x16}");
             
         // Start a new session and store it, keyed by the initiator id
-        var newSession = new VpnSession(IpV4Address.FromEndpoint(sender), _server, this, ikeMessage.SpiI);
+        var newSession = new VpnSession(IpV4Address.FromEndpoint(sender), _server, this, weAreInitiator:false, ikeMessage.SpiI);
         _sessions.Add(ikeMessage.SpiI, newSession);
             
         // Pass message to new session
