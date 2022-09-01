@@ -1,5 +1,4 @@
-﻿using System.Security.Cryptography;
-using System.Text;
+﻿using System.Text;
 using NUnit.Framework;
 using SkinnyJson;
 using VirtualVpn;
@@ -345,7 +344,7 @@ Aug  8 14:21:58 Gertrud charon: 01[IKE]   16: 85 FE DB D6 52 1D F5 B3 BC 0E E8 4
         var pad = Encoding.ASCII.GetBytes(Prf.IKEv2_KeyPad);
         var psk = Encoding.ASCII.GetBytes("ThisIsForTestOnlyDontUse");
 
-        IkeCrypto.CreateKeysAndCryptoInstances(
+        IkeCrypto.CreateKeysAndCryptoInstances(false,
             theirNonce, myNonce, sharedSecret, theirSpi, mySpi,
             PrfId.PRF_HMAC_SHA2_256, IntegId.AUTH_HMAC_SHA2_256_128, EncryptionTypeId.ENCR_AES_CBC, keyLength: 128,
             null, out _, out var myCrypto, out var theirCrypto
@@ -391,7 +390,7 @@ Aug  8 14:21:58 Gertrud charon: 01[IKE]   16: 85 FE DB D6 52 1D F5 B3 BC 0E E8 4
         var pad = Encoding.ASCII.GetBytes(Prf.IKEv2_KeyPad);
         var psk = Encoding.ASCII.GetBytes("ThisIsForTestOnlyDontUse");
 
-        IkeCrypto.CreateKeysAndCryptoInstances(
+        IkeCrypto.CreateKeysAndCryptoInstances(false,
             theirNonce, myNonce, sharedSecret, theirSpi, mySpi,
             PrfId.PRF_HMAC_SHA2_256, IntegId.AUTH_HMAC_SHA2_256_128, EncryptionTypeId.ENCR_AES_CBC, keyLength: 128,
             null, out _, out _, out var theirCrypto
@@ -439,7 +438,7 @@ Aug  8 14:21:58 Gertrud charon: 01[IKE]   16: 85 FE DB D6 52 1D F5 B3 BC 0E E8 4
         var theirSpi = new byte[] { 0xAE, 0xB8, 0x98, 0x45, 0x5D, 0xBF, 0xB7, 0xBE };
         var mySpi = new byte[] { 0x43, 0x51, 0x2C, 0xB0, 0x70, 0x5D, 0x9B, 0xA6 };
 
-        IkeCrypto.CreateKeysAndCryptoInstances(
+        IkeCrypto.CreateKeysAndCryptoInstances(false,
             theirNonce, myNonce, sharedSecret, theirSpi, mySpi,
             PrfId.PRF_HMAC_SHA2_256, IntegId.AUTH_HMAC_SHA2_256_128, EncryptionTypeId.ENCR_AES_CBC, keyLength: 128,
             null, out _, out var myCrypto, out _
@@ -467,82 +466,6 @@ Aug  8 14:21:58 Gertrud charon: 01[IKE]   16: 85 FE DB D6 52 1D F5 B3 BC 0E E8 4
         var result = IkeMessage.ReadSinglePayload(bytes, myCrypto, ref idx, ref nextPayload);
 
         Console.WriteLine(Json.Freeze(result));
-    }
-
-    [Test]
-    public void sa_auth_expectation()
-    {
-        var subject = new Integrity(IntegId.AUTH_HMAC_SHA2_256_128);
-
-        var test = new byte[]
-        {
-            // ASSOC:
-              0x54, 0x21, 0x1E, 0xC0, 0x23, 0x28, 0x3B, 0x16, 0xD0, 0x17, 0xEA, 0x94, 0x39, 0x9E, 0xF3, 0x44
-            , 0x2E, 0x20, 0x23, 0x08, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0xF0, 0x23, 0x00, 0x00, 0xD4
-
-             // IV
-            , 0x9D, 0x2E, 0x17, 0x84, 0x78, 0x5C, 0xFD, 0x1F, 0xDD, 0xF2, 0x4A, 0x5A, 0x1A, 0x37, 0xE0, 0xF2
-
-             // 176 bytes of data
-            , 0x95, 0x34, 0x3D, 0xE4, 0xC4, 0xC0, 0x6F, 0xB3, 0xA5, 0x75, 0xB0, 0x98, 0x3A, 0xDC, 0x85, 0xF7
-            , 0xA1, 0xBD, 0xAB, 0x5C, 0x74, 0x10, 0x83, 0x17, 0x6E, 0xE0, 0x4F, 0x94, 0x64, 0x12, 0x25, 0xFC
-            , 0xBD, 0xA3, 0x93, 0x84, 0xB5, 0xA2, 0x36, 0xC3, 0xE9, 0x31, 0x8F, 0xC4, 0x22, 0x7D, 0xCC, 0x31
-            , 0xC4, 0x2A, 0x1E, 0xD3, 0xF4, 0xCA, 0x2F, 0x68, 0xA4, 0x67, 0x24, 0xD6, 0x74, 0x9B, 0xFE, 0xEF
-            , 0x94, 0xAF, 0x0A, 0x3B, 0x54, 0x9D, 0xDA, 0x94, 0x55, 0xD3, 0xFF, 0xDE, 0xC1, 0x92, 0x1C, 0xAA
-            , 0xBC, 0xDB, 0xFF, 0x01, 0x38, 0x2D, 0x5E, 0x12, 0x8D, 0xFB, 0x20, 0xAF, 0x7B, 0x4F, 0xE5, 0xFE
-            , 0x3A, 0x77, 0x51, 0x18, 0x6F, 0xCF, 0x1D, 0x19, 0xB3, 0xCB, 0x2C, 0x12, 0xFB, 0xC0, 0xF4, 0xA5
-            , 0x47, 0x01, 0x25, 0xEE, 0x51, 0x49, 0x42, 0x58, 0xED, 0x47, 0x2B, 0xDE, 0xDF, 0x5E, 0x07, 0x9B
-            , 0xEE, 0x6A, 0xB2, 0x72, 0x6A, 0x9E, 0x6A, 0xDF, 0x5A, 0x4A, 0xD0, 0x41, 0x99, 0xDB, 0xD0, 0x2B
-            , 0x27, 0x84, 0xDD, 0x69, 0xCD, 0xDC, 0xE1, 0x8A, 0x86, 0xC2, 0x39, 0xB9, 0x94, 0x44, 0xEB, 0x7C
-            , 0xA8, 0x34, 0xB1, 0x55, 0x4E, 0xB6, 0xB4, 0x37, 0x5D, 0xBE, 0xA7, 0xA8, 0xB6, 0x1F, 0x11, 0x82
-        };
-
-        var skAi = new byte[]
-        {
-            0xB8, 0xD8, 0xFF, 0x2B, 0x44, 0xAC, 0x83, 0xD1, 0xE1, 0x2E, 0xD7, 0x83, 0x50, 0xCB, 0x12, 0xEC, 0xEB, 0xDA, 0xDC, 0x6F, 0x9C, 0x38, 0x7C, 0x8A, 0x9C, 0x3F, 0xA3, 0x1D, 0x2A, 0xB1, 0xB8, 0xD6
-        };
-
-        // 4C FE DE EB 57 76 64 7A 06 E6 C4 19 02 F7 62 53
-        /*
-         
-         Feed log?
- 0E CC A3 71 93 AD A7 5E 9C 20 62 5B F1 A5 AC 5B 
- 2E 20 23 08 00 00 00 01 00 00 00 F0 23 00 00 D4 
- 
- 4F 5D D5 89 34 2B CF D7 4C C0 AB 06 02 F6 4E 4D
- 
- 36 24 75 3C B4 A1 49 86 D8 2B 84 25 41 FB C7 12
-06 14 20 EE 54 94 25 B5 A7 40 48 45 23 D0 AA E6
-E1 9A D5 D5 B3 FF D1 E1 D9 E9 C2 DE CB E5 94 B1
-BE A0 39 AB D8 5D F6 F3 64 80 7B 8F C8 33 D9 8C
-D9 1A 9F E5 36 0E 39 8E E3 35 F0 14 36 46 70 29
-52 3E BD 4B 3D C2 7A 81 30 52 35 FC 11 BA AA 7E
-03 5B 3E 32 23 8D E1 F1 66 2E 56 34 1C CA A2 10
-A4 34 77 AE 82 72 63 FD F8 87 5E 03 21 4A 35 B4
-20 74 35 78 72 0D 7C DE 04 7D C4 0C F9 CB CA C0
-05 A4 FA 2C A7 FD D4 30 90 CE 9D 5E A7 5C 93 A1
-41 EA 20 D0 19 74 D3 64 62 B9 88 B9 42 69 52 54
-
-
-hash result (buffer) =  37 0a f6 10 f4 b3 fb 1b d6 7c 96 08 a5 95 8b 66 f3 f7 45 2f 98 68 18 20 6f 71 5f 28 86 75 9c d6
-         */
-        
-        
-        var check = subject.ComputeRaw(skAi, test);
-        Console.WriteLine("Expecting    e7 42 db ff cb ed a5 79 a4 9b 2c 6b 7c ef 4b cd 0d ac f8 67 2f 92 bb 49 68 de 3f d7 58 65 5f ca");
-        Console.WriteLine("OR           e7 42 db ff cb ed a5 79 a4 9b 2c 6b 7c ef 4b cd");
-        Console.WriteLine(Bit.Describe("check", check));
-
-        /*using var x = HMAC.Create("HMACSHA256");
-        x.Initialize();
-        var result = x.ComputeHash(test); // StrongSwan gives "fc e7 7b 28 c6 a8 69 93 5a 33 da 4a b8 de ad da"
-        Console.WriteLine(Bit.Describe("test", result));
-        */
-        //var input = iv.Concat(encrypted).ToArray();
-        /*var check = subject.Compute(skAr, encrypted);
-        Console.WriteLine(Bit.Describe("result", check)+Bit.Describe("expected",expected));
-        Assert.That(check, Is.EqualTo(expected).AsCollection);
-        */
     }
 
     private static byte[] RndKey32Byte()

@@ -16,6 +16,7 @@ public class ChildSaTests
     [SuppressMessage("ReSharper", "EqualExpressionComparison")]
     public void ipv4_addresses_compare()
     {
+        #pragma warning disable CS1718
         var a = new IpV4Address(new byte[]{192,168,5,4});
         var b = new IpV4Address(new byte[]{170,30,0,1});
         var c = IpV4Address.FromString("192.168.5.4");
@@ -28,6 +29,7 @@ public class ChildSaTests
         Assert.False(a != a);
         Assert.False(a == b);
         Assert.False(b == c);
+        #pragma warning restore CS1718
     }
 
     [Test]

@@ -239,10 +239,23 @@ public class VpnSession
                 break;
 
             case ExchangeType.IKE_AUTH: // pvpn/server.py:287
-                AssertState(SessionState.SA_SENT, request);
-                Log.Info("IKE_AUTH received");
-                HandleAuth(request, sender, sendZeroHeader);
-                _peerMsgId++;
+                switch (State)
+                {
+                    case SessionState.SA_SENT:
+                    {
+                        Log.Info("IKE_AUTH received, we are responder");
+                        HandleAuth(request, sender, sendZeroHeader);
+                        _peerMsgId++;
+                        break;
+                    }
+                    case SessionState.AUTH_SENT:
+                    {
+                        Log.Critical("Got to next step!");
+                        break;
+                    }
+                    default:
+                        throw new Exception($"Received {nameof(ExchangeType.IKE_AUTH)}, so expected to be in state {nameof(SessionState.SA_SENT)} or {nameof(SessionState.AUTH_SENT)}, but was in {State.ToString()}");
+                }
                 break;
 
             case ExchangeType.INFORMATIONAL: // pvpn/server.py:315
@@ -659,7 +672,7 @@ public class VpnSession
         
         // IKE flags Initiator, message id=1, first payload=SK
         Log.Trace("Building AUTH/SA confirmation message");
-        var msgBytes = BuildSerialMessage(ExchangeType.IKE_AUTH, MessageFlag.Initiator, useAlternateChecksum: true, sendZeroHeader:true, _myCrypto,
+        var msgBytes = BuildSerialMessage(ExchangeType.IKE_AUTH, MessageFlag.Initiator, useAlternateChecksum: false, sendZeroHeader:true, _myCrypto,
             _localSpi, _peerSpi, msgId: 1, 
             
             mainIDi,
@@ -673,17 +686,12 @@ public class VpnSession
             // Notifications for extra IP addresses could go here, but we don't support them yet.
             );
         
-        // IEB: Continue from here
-        // BUG: I am sending the expected stuff that works elsewhere,
-        // BUG: but StrongSwan is rejecting my checksums.
-        // TODO: Go through the KEY GENERATION bits carefully, and make sure we agree on ALL KEYS.
-        
         // The message should be something that VirtualVpn.Crypto.IkeCrypto.VerifyChecksumInternal would give the OK to
         var ok = _myCrypto!.VerifyChecksum(msgBytes);
         if (!ok) Log.Warn("Message did not pass our own checksum. Likely to be rejected by peer.");
         
-        //Send(to: sender, message: msgBytes);
-        Send(to: new IPEndPoint(sender.Address, 4500), message: msgBytes); // redirect to 4500?
+        Send(to: sender, message: msgBytes);
+        //Send(to: new IPEndPoint(sender.Address, 4500), message: msgBytes); // redirect to 4500?
         State = SessionState.AUTH_SENT;
     }
     
@@ -783,6 +791,7 @@ public class VpnSession
         if (keyLength is null) throw new Exception("Chosen proposal ENCR section has no KEY_LENGTH attribute");
         
         IkeCrypto.CreateKeysAndCryptoInstances(
+            _weAreInitiator,
             _peerNonce, _localNonce, sharedSecret,
             Bit.UInt64ToBytes(_peerSpi), Bit.UInt64ToBytes(_localSpi),
             (PrfId)prfId, (IntegId)integId, (EncryptionTypeId)cipherInfo.Id, keyLength.Value, oldSkD,

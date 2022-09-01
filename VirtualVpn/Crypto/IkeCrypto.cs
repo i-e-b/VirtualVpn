@@ -81,6 +81,7 @@ public class IkeCrypto
     /// Generate a set of crypto classes given the required data from an IKEv2 session
     /// </summary>
     public static void CreateKeysAndCryptoInstances(
+        bool weAreInitiator,
         byte[] theirNonce, byte[] myNonce, byte[] sharedSecret,
         byte[] theirSpi, byte[] mySpi,
         PrfId prfId, IntegId integId, EncryptionTypeId cipherId, int keyLength, byte[]? oldSkD,
@@ -89,39 +90,33 @@ public class IkeCrypto
         ){
         // pvpn/server.py:223
 
-
-        if (Settings.CaptureTraffic)
-        {
-            File.WriteAllText(Settings.FileBase + "LastSessionKeysSources.txt",
-                $"prfId={prfId}, integId={integId}, cipherId={cipherId}, keyLength={keyLength}\r\n" +
-                Bit.Describe("theirNonce", theirNonce) +
-                Bit.Describe("myNonce", myNonce) +
-                Bit.Describe("sharedSecret", sharedSecret) +
-                Bit.Describe("theirSpi", theirSpi) +
-                Bit.Describe("mySpi", mySpi) +
-                Bit.Describe("oldSkD", oldSkD)
-            );
-        }
+        LogCryptoSources(weAreInitiator, theirNonce, myNonce, sharedSecret, theirSpi, mySpi, prfId, integId, cipherId, keyLength, oldSkD);
 
         // Build protocols
         var prf = new Prf(prfId);
         var integ = new Integrity(integId);
         var cipher = new Cipher(cipherId, keyLength);
         
+        var nonceI = weAreInitiator ? myNonce : theirNonce;
+        var nonceR = weAreInitiator ? theirNonce : myNonce;
+        
+        var spiI = weAreInitiator ? mySpi : theirSpi;
+        var spiR = weAreInitiator ? theirSpi : mySpi;
+        
         byte[] sKeySeed;
         if (oldSkD is null)
         {
-            sKeySeed = prf.Hash(theirNonce.Concat(myNonce).ToArray(), sharedSecret);
+            sKeySeed = prf.Hash(nonceI.Concat(nonceR).ToArray(), sharedSecret);
         }
         else
         {
-            sKeySeed = prf.Hash(oldSkD, sharedSecret.Concat(theirNonce).Concat(myNonce).ToArray());
+            sKeySeed = prf.Hash(oldSkD, sharedSecret.Concat(nonceI).Concat(nonceR).ToArray());
         }
         
         // Generate crypto bases
         
         var totalSize = 3*prf.KeySize + 2*integ.KeySize + 2*cipher.KeySize;
-        var seed = theirNonce.Concat(myNonce).Concat(theirSpi).Concat(mySpi).ToArray();
+        var seed = nonceI.Concat(nonceR).Concat(spiI).Concat(spiR).ToArray();
         var keySource = prf.PrfPlus(sKeySeed, seed, totalSize);
         
         var idx = 0;
@@ -136,10 +131,37 @@ public class IkeCrypto
         if (idx != keySource.Length) throw new Exception($"Unexpected key set length. Expected {keySource.Length} but got {idx}");
         
         // build crypto for both sides
-        myCrypto = new IkeCrypto(cipher, integ, prf, skEr, skAr, skPr, null);
-        theirCrypto = new IkeCrypto(cipher, integ, prf, skEi, skAi, skPi, null);
+        if (weAreInitiator)
+        {
+            theirCrypto = new IkeCrypto(cipher, integ, prf, skEr, skAr, skPr, null);
+            myCrypto = new IkeCrypto(cipher, integ, prf, skEi, skAi, skPi, null);
+        }
+        else
+        {
+            myCrypto = new IkeCrypto(cipher, integ, prf, skEr, skAr, skPr, null);
+            theirCrypto = new IkeCrypto(cipher, integ, prf, skEi, skAi, skPi, null);
+        }
 
         LogCryptoKeys(theirNonce, myNonce, sharedSecret, skD, skAi, skAr, skEi, skEr, skPi, skPr, keySource, seed, sKeySeed);
+    }
+
+    private static void LogCryptoSources(bool weAreInit, byte[] theirNonce, byte[] myNonce, byte[] sharedSecret, byte[] theirSpi, byte[] mySpi,
+        PrfId prfId, IntegId integId, EncryptionTypeId cipherId, int keyLength, byte[]? oldSkD)
+    {
+        if (!Settings.CaptureTraffic && !Log.IncludeCrypto) return;
+
+        var description = $"us={(weAreInit?"I":"R")}, them={(weAreInit?"R":"I")}, prfId={prfId}, integId={integId}, cipherId={cipherId}, keyLength={keyLength}\r\n" +
+                          Bit.Describe("theirNonce", theirNonce) +
+                          Bit.Describe("myNonce", myNonce) +
+                          Bit.Describe("sharedSecret", sharedSecret) +
+                          Bit.Describe("theirSpi", theirSpi) +
+                          Bit.Describe("mySpi", mySpi) +
+                          Bit.Describe("oldSkD", oldSkD);
+        if (Settings.CaptureTraffic)
+        {
+            File.WriteAllText(Settings.FileBase + "LastSessionKeysSources.txt", description);
+        }
+        Log.Crypto(description);
     }
 
     private static void LogCryptoKeys(byte[] theirNonce, byte[] myNonce, byte[] sharedSecret, byte[] skD, byte[] skAi, byte[] skAr, byte[] skEi, byte[] skEr, byte[] skPi, byte[] skPr, byte[] keySource, byte[] seed, byte[] sKeySeed)

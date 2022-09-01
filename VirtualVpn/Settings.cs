@@ -25,7 +25,7 @@ public static class Settings
     /// network capture files.  This is only for development
     /// and diagnostics and should normally be 'false'.
     /// </summary>
-    public const bool RunAirliftSite = false;
+    public static bool RunAirliftSite = false;
     
     /// <summary>
     /// PSK for session establishment

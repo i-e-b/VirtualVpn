@@ -125,6 +125,12 @@ public class VpnServer : ISessionHost, IDisposable
                 Console.WriteLine($"Traffic capture now {(Settings.CaptureTraffic ? "on" : "off")}. Capture location '{Settings.FileBase}'");
                 break;
             }
+            case "airlift":
+            {
+                Settings.RunAirliftSite = true;
+                // TODO: start the airlift loop
+                break;
+            }
             case "notify":
             {
                 var bits = Min2(prefix[1].Split(",", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries));
