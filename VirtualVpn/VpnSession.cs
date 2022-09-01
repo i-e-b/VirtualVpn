@@ -567,6 +567,9 @@ public class VpnSession
         
         // Could now send INFORMATIONAL messages, possibly with some `IKE_DELETE` payloads to tell the peer about expired sessions.
         
+        _ourMsgId = 0; // ???
+        _peerMsgId = 0; // ???
+        
         // IKE flags Initiator, message id=1, first payload=SK
         Log.Trace("Building AUTH/SA confirmation message, switching to port 4500");
         var msgBytes = BuildSerialMessage(ExchangeType.INFORMATIONAL, MessageFlag.Initiator, sendZeroHeader,
