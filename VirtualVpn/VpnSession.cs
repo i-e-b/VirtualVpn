@@ -840,7 +840,7 @@ public class VpnSession
         Log.Trace("Building HandleSaConfirm confirmation message");
         var msgBytes = BuildSerialMessage(ExchangeType.CREATE_CHILD_SA, MessageFlag.Initiator,
             sendZeroHeader,//:true, // 'true' if we are switching to 4500
-            _myCrypto, _localSpi, _peerSpi, msgId: _myMsgId++,
+            _myCrypto, _localSpi, _peerSpi, msgId: 0,
             
             mainIDi,
             new PayloadNotify(IkeProtocolType.NONE, NotifyId.INITIAL_CONTACT, null, null),
