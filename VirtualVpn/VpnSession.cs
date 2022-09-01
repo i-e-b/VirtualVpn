@@ -30,8 +30,6 @@ public class VpnSession
         }
     }
 
-    private long _peerMsgId;
-    private long _ourMsgId;
     private byte[]? _initMessage;
     private byte[]? _lastSentMessageBytes;
     private byte[]? _previousRequestRawData;
@@ -59,6 +57,7 @@ public class VpnSession
     private readonly byte[] _localNonce;
     private BCDiffieHellman? _keyExchange;
     private Proposal? _lastSaProposal;
+    private int _peerMsgId;
 
     /// <summary>
     /// Start a new session object
@@ -80,8 +79,7 @@ public class VpnSession
         _localSpi = Bit.RandomSpi();
         _localNonce = Bit.RandomNonce();
         State = SessionState.INITIAL;
-        _peerMsgId = 0;
-        _ourMsgId = 0;
+        _peerMsgId = -1;
         
         LastTouchTimer = new Stopwatch();
         LastTouchTimer.Start();
@@ -128,11 +126,11 @@ public class VpnSession
     }
 
     // pvpn/server.py:253
-    private byte[] BuildResponse(ExchangeType exchange, bool sendZeroHeader, IkeCrypto? crypto, params MessagePayload[] payloads)
+    private byte[] BuildResponse(ExchangeType exchange, int msgId, bool sendZeroHeader, IkeCrypto? crypto, params MessagePayload[] payloads)
     {
         return _weAreInitiator
-            ? BuildSerialMessage(exchange, MessageFlag.Initiator | MessageFlag.Response, sendZeroHeader, crypto, _localSpi, _peerSpi, _peerMsgId, payloads)
-            : BuildSerialMessage(exchange, MessageFlag.Response, sendZeroHeader, crypto, _peerSpi, _localSpi, _peerMsgId, payloads);
+            ? BuildSerialMessage(exchange, MessageFlag.Initiator | MessageFlag.Response, sendZeroHeader, crypto, _localSpi, _peerSpi, msgId, payloads)
+            : BuildSerialMessage(exchange, MessageFlag.Response, sendZeroHeader, crypto, _peerSpi, _localSpi, msgId, payloads);
     }
 
     public static byte[] BuildSerialMessage(ExchangeType exchange, MessageFlag flags, bool sendZeroHeader, IkeCrypto? crypto,
@@ -166,7 +164,6 @@ public class VpnSession
             HandleIkeInternal(request, sender, sendZeroHeader);
 
             _previousRequestRawData = request.RawData; // needed to do PSK auth
-            _peerMsgId++;
         }
         catch (Exception ex)
         {
@@ -205,8 +202,8 @@ public class VpnSession
         {
             if (request.MessageId > _peerMsgId)
             {
-                Log.Warn($"Request is ahead of our sequence. Expected {_peerMsgId}, but got {request.MessageId}. Will advance and continue");
-                _peerMsgId = request.MessageId;
+                Log.Trace($"Advancing peer message ID from {_peerMsgId} to {request.MessageId}");
+                _peerMsgId = (int)request.MessageId;
             }
             else
             {
@@ -215,6 +212,7 @@ public class VpnSession
                 
                 //return;
                 Log.Debug("Actually just allowing it through for testing...");
+                _peerMsgId = (int)request.MessageId;
             }
         }
 
@@ -347,7 +345,7 @@ public class VpnSession
 
         if (deletePayload is null)
         {
-            Log.Debug("No delete payloads found in Informational packet. Will reply, but nothing else");
+            Log.Debug("No delete payloads found in Informational packet. Might reply, but nothing else");
             Log.Trace($"Found payloads: {string.Join(", ", request.Payloads.Select(p => p.Type.ToString()))};");
             
             var mobIkeFlag = request.GetPayload<PayloadNotify>(pl => pl.NotificationType == NotifyId.UPDATE_SA_ADDRESSES);
@@ -359,7 +357,15 @@ public class VpnSession
             }
 
             // Nothing to do, but we must reply
-            Send(to: sender, message: BuildResponse(ExchangeType.INFORMATIONAL, sendZeroHeader, _myCrypto));
+            if (_weAreInitiator)
+            {
+                Log.Debug("Ignoring empty information, because we are the initiator");
+            }
+            else
+            {
+                Send(to: sender, message: BuildResponse(ExchangeType.INFORMATIONAL, _peerMsgId+1, sendZeroHeader, _myCrypto));
+            }
+
             return;
         }
 
@@ -376,14 +382,14 @@ public class VpnSession
             }
 
             _thisSessionChildren.Clear();
-            Send(to: sender, message: BuildResponse(ExchangeType.INFORMATIONAL, sendZeroHeader, _myCrypto, deletePayload));
+            Send(to: sender, message: BuildResponse(ExchangeType.INFORMATIONAL, _peerMsgId+1, sendZeroHeader, _myCrypto, deletePayload));
             return;
         }
 
         if (deletePayload.SpiList.Count < 1)
         {
             Log.Warn("    Received an empty delete list");
-            Send(to: sender, message: BuildResponse(ExchangeType.INFORMATIONAL, sendZeroHeader, _myCrypto, deletePayload));
+            Send(to: sender, message: BuildResponse(ExchangeType.INFORMATIONAL, _peerMsgId+1, sendZeroHeader, _myCrypto, deletePayload));
             return;
         }
 
@@ -400,7 +406,7 @@ public class VpnSession
 
         Log.Info($"    Removing SPIs: {string.Join(", ", matches.Select(Bit.HexString))}");
 
-        Send(to: sender, message: BuildResponse(ExchangeType.INFORMATIONAL, sendZeroHeader, _myCrypto,
+        Send(to: sender, message: BuildResponse(ExchangeType.INFORMATIONAL, _peerMsgId+1, sendZeroHeader, _myCrypto,
             new PayloadDelete(deletePayload.ProtocolType, matches)));
     }
 
@@ -458,7 +464,7 @@ public class VpnSession
         {
             Log.Warn("    FATAL: could not find a compatible Child SA");
             // Try to reject by sending back an empty proposal. Not sure about this
-            Send(to: sender, BuildResponse(ExchangeType.IKE_AUTH, sendZeroHeader, _myCrypto, new PayloadSa(new Proposal())));
+            Send(to: sender, BuildResponse(ExchangeType.IKE_AUTH, _peerMsgId+1, sendZeroHeader, _myCrypto, new PayloadSa(new Proposal())));
             return;
         }
 
@@ -480,7 +486,7 @@ public class VpnSession
 
         // pvpn/server.py:309
         // Send our IKE_AUTH message back
-        var response = BuildResponse(ExchangeType.IKE_AUTH, sendZeroHeader, _myCrypto,
+        var response = BuildResponse(ExchangeType.IKE_AUTH, _peerMsgId+1, sendZeroHeader, _myCrypto,
             new PayloadSa(chosenChildProposal),
             tsi, tsr, // just accept whatever traffic selectors. We're virtual.
             responsePayloadIdr,
@@ -576,7 +582,7 @@ public class VpnSession
         Log.Trace("Building AUTH/SA confirmation message, switching to port 4500");
         var msgBytes = BuildSerialMessage(ExchangeType.INFORMATIONAL, MessageFlag.Initiator,
             sendZeroHeader: true, // required when switching to 4500
-            _myCrypto, _localSpi, _peerSpi, msgId: _ourMsgId++
+            _myCrypto, _localSpi, _peerSpi, msgId: _peerMsgId+1
         );
         
         // The message should be something that VirtualVpn.Crypto.IkeCrypto.VerifyChecksumInternal would give the OK to
@@ -723,7 +729,7 @@ public class VpnSession
         _keyExchange ??= BCDiffieHellman.CreateForGroup(DhId.DH_14) ?? throw new Exception("Failed to generate key exchange when generating new session");
         _keyExchange.get_our_public_key(out var newPublicKey);
 
-        _initMessage = BuildSerialMessage(ExchangeType.IKE_SA_INIT, MessageFlag.Initiator, false, null, _localSpi, 0, _ourMsgId++,
+        _initMessage = BuildSerialMessage(ExchangeType.IKE_SA_INIT, MessageFlag.Initiator, false, null, _localSpi, 0, _peerMsgId+1,
             new PayloadSa(defaultProposal),
             new PayloadNonce(_localNonce),
             new PayloadKeyExchange(DhId.DH_14, newPublicKey), // Pre-start our preferred exchange
@@ -754,7 +760,7 @@ public class VpnSession
         if (saPayload is null || saPayload.Proposals.Count != 1)
         {
             Log.Warn($"        Session: Peer did not agree with our proposition. Sending rejection to {sender.Address}:{sender.Port}");
-            Send(to: sender, message: BuildResponse(ExchangeType.IKE_SA_INIT, sendZeroHeader, null,
+            Send(to: sender, message: BuildResponse(ExchangeType.IKE_SA_INIT, _peerMsgId+1, sendZeroHeader, null,
                 new PayloadNotify(IkeProtocolType.IKE, NotifyId.INVALID_KE_PAYLOAD, null, null)
             ));
             return;
@@ -768,7 +774,7 @@ public class VpnSession
         if (chosenProposal is null || preferredDiffieHellman != (uint)DhId.DH_14 || payloadKe is null)
         {
             Log.Warn($"        Session: Peer is trying to negotiate a different crypto setting. This is not currently supported. Sending rejection to {sender.Address}:{sender.Port}");
-            Send(to: sender, message: BuildResponse(ExchangeType.IKE_SA_INIT, sendZeroHeader, null,
+            Send(to: sender, message: BuildResponse(ExchangeType.IKE_SA_INIT, _peerMsgId+1, sendZeroHeader, null,
                 new PayloadNotify(IkeProtocolType.IKE, NotifyId.INVALID_KE_PAYLOAD, null, null)
             ));
             return;
@@ -827,10 +833,10 @@ public class VpnSession
         _lastSaProposal = espProposal;
         
         // IKE flags Initiator, message id=1, first payload=SK
-        //Log.Trace("Building AUTH/SA confirmation message, switching to port 4500");
+        Log.Trace("Building AUTH/SA confirmation message, switching to port 4500");
         var msgBytes = BuildSerialMessage(ExchangeType.IKE_AUTH, MessageFlag.Initiator,
-            sendZeroHeader,//:true, // because we are switching to 4500
-            _myCrypto, _localSpi, _peerSpi, msgId: _ourMsgId++,
+            sendZeroHeader:true, // because we are switching to 4500
+            _myCrypto, _localSpi, _peerSpi, msgId: _peerMsgId+1,
             
             mainIDi,
             new PayloadNotify(IkeProtocolType.NONE, NotifyId.INITIAL_CONTACT, null, null),
@@ -852,8 +858,8 @@ public class VpnSession
         
         // Switch to 4500 port now. The protocol works without it, but VirtualVPN assumes the switch will happen.
         // See https://docs.strongswan.org/docs/5.9/features/mobike.html
-        //Send(to: new IPEndPoint(sender.Address, port:4500), message: msgBytes);
-        Send(to: sender, message: msgBytes); // this would stay on 500, which I think is allowed. But it's not normal
+        Send(to: new IPEndPoint(sender.Address, port:4500), message: msgBytes);
+        //Send(to: sender, message: msgBytes); // this would stay on 500, which I think is allowed. But it's not normal
         State = SessionState.AUTH_SENT;
     }
     
@@ -885,7 +891,7 @@ public class VpnSession
         {
             // pvpn/server.py:274
             Log.Warn($"        Session: Could not find an agreeable proposition. Sending rejection to {sender.Address}:{sender.Port}");
-            Send(to: sender, message: BuildResponse(ExchangeType.IKE_SA_INIT, sendZeroHeader, null,
+            Send(to: sender, message: BuildResponse(ExchangeType.IKE_SA_INIT, _peerMsgId+1, sendZeroHeader, null,
                 new PayloadNotify(IkeProtocolType.IKE, NotifyId.INVALID_KE_PAYLOAD, null, null)
             ));
             return;
@@ -897,7 +903,7 @@ public class VpnSession
         {
             Log.Info("        Session: We agree on a viable proposition, but it was not the default. Requesting switch.");
 
-            var reKeyMessage = BuildResponse(ExchangeType.IKE_SA_INIT, sendZeroHeader, null,
+            var reKeyMessage = BuildResponse(ExchangeType.IKE_SA_INIT, _peerMsgId+1, sendZeroHeader, null,
                 new PayloadSa(chosenProposal),
                 new PayloadNotify(IkeProtocolType.IKE, NotifyId.INVALID_KE_PAYLOAD, Bit.UInt64ToBytes(request.SpiI), Bit.UInt16ToBytes((ushort)DhId.DH_14))
             );
@@ -919,7 +925,7 @@ public class VpnSession
         // create keys from exchange result. If something went wrong, we will end up with a checksum failure
         CreateKeyAndCrypto(chosenProposal, secret, null);
 
-        var saMessage = BuildResponse(ExchangeType.IKE_SA_INIT, sendZeroHeader, null,
+        var saMessage = BuildResponse(ExchangeType.IKE_SA_INIT, _peerMsgId+1, sendZeroHeader, null,
             new PayloadSa(chosenProposal),
             new PayloadNonce(_localNonce),
             new PayloadKeyExchange(payloadKe.DiffieHellmanGroup, publicKey),
@@ -1010,7 +1016,7 @@ public class VpnSession
 
         // This currently kills the session? Maybe if we've got more than one?
 
-        var response = BuildResponse(ExchangeType.INFORMATIONAL, true, _myCrypto,
+        var response = BuildResponse(ExchangeType.INFORMATIONAL, _peerMsgId+1, sendZeroHeader: true, _myCrypto,
             new PayloadNotify(IkeProtocolType.NONE, NotifyId.ADDITIONAL_IP4_ADDRESS, null, address.Value)
         );
 
