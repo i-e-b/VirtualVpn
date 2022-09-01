@@ -149,9 +149,25 @@ public class ChildSa : ITransportTunnel
         if (espPacket.Spi != SpiIn) throw new Exception($"Mismatch SPI. Expected {SpiIn:x8}, got {espPacket.Spi:x8}");
         if (espPacket.Sequence < _msgIdIn) throw new Exception($"Mismatch Sequence. Expected {_msgIdIn}, got {espPacket.Sequence}");
         
+        /*
+         System.Exception: ESP Checksum failed
+   at VirtualVpn.EspProtocol.ChildSa.ReadSpe(Byte[] encrypted, EspPacket& espPacket) in /root/VirtualVpn/VirtualVpn/EspProtocol/ChildSa.cs:line 154
+   at VirtualVpn.EspProtocol.ChildSa.HandleSpe(Byte[] data, IPEndPoint sender) in /root/VirtualVpn/VirtualVpn/EspProtocol/ChildSa.cs:line 219
+   at VirtualVpn.VpnServer.SpeResponder(Byte[] data, IPEndPoint sender) in /root/VirtualVpn/VirtualVpn/VpnServer.cs:line 405
+   
+   IEB: Might need to flip the crypto or checksum settings if we are initiator?
+         */
         // checksum
         var checkOk = _cryptoIn.VerifyChecksum(encrypted);
-        if (!checkOk) throw new Exception("ESP Checksum failed");
+        if (!checkOk)
+        {
+            if (_cryptoOut.VerifyChecksum(encrypted))
+            {
+                Log.Critical("Crypto settings are back to front!!!");
+            }
+
+            throw new Exception("ESP Checksum failed");
+        }
 
         // decode
         var plain = _cryptoIn.DecryptEsp(espPacket.Payload, out var declaredProtocol);
