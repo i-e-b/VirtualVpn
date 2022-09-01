@@ -575,15 +575,12 @@ public class VpnSession
         Log.Debug("    Setting state to established");
         State = SessionState.ESTABLISHED; // Should now have a full Child SA
         
-        // Could now send INFORMATIONAL messages, possibly with some `IKE_DELETE` payloads to tell the peer about expired sessions.
+        // https://www.rfc-editor.org/rfc/rfc7296#section-1.3.1
+        // Send a create child sa message?
         
-        //_ourMsgId = 0; // ???
-        _peerMsgId = 0; // ???
-        
-        // IKE flags Initiator, message id=1, first payload=SK
-        Log.Trace("Building HandleAuthConfirm confirmation message, switching to port 4500");
-        var msgBytes = BuildSerialMessage(ExchangeType.INFORMATIONAL, MessageFlag.Initiator,
-            sendZeroHeader: true, // required when switching to 4500
+        Log.Trace("Building HandleAuthConfirm confirmation message - CREATE_CHILD_SA, switching to port 4500");
+        var msgBytes = BuildSerialMessage(ExchangeType.CREATE_CHILD_SA, MessageFlag.Initiator,
+            sendZeroHeader,//: true, // 'true' required when *switching* to 4500
             _myCrypto, _localSpi, _peerSpi, msgId: _myMsgId++
         );
         
@@ -593,7 +590,8 @@ public class VpnSession
         
         // Switch to 4500 port now. The protocol works without it, but VirtualVPN assumes the switch will happen.
         // See https://docs.strongswan.org/docs/5.9/features/mobike.html
-        Send(to: new IPEndPoint(sender.Address, port:4500), message: msgBytes);
+        //Send(to: new IPEndPoint(sender.Address, port:4500), message: msgBytes);
+        Send(to: sender, message: msgBytes);
     }
 
     // ReSharper disable CommentTypo
@@ -838,9 +836,9 @@ public class VpnSession
         // IKE flags Initiator, message id=1, first payload=SK
         //Log.Trace("Building HandleSaConfirm confirmation message, switching to port 4500");
         Log.Trace("Building HandleSaConfirm confirmation message");
-        var msgBytes = BuildSerialMessage(ExchangeType.CREATE_CHILD_SA, MessageFlag.Initiator,
+        var msgBytes = BuildSerialMessage(ExchangeType.IKE_AUTH, MessageFlag.Initiator,
             sendZeroHeader,//:true, // 'true' if we are switching to 4500
-            _myCrypto, _localSpi, _peerSpi, msgId: 0,
+            _myCrypto, _localSpi, _peerSpi, msgId: _myMsgId++,
             
             mainIDi,
             new PayloadNotify(IkeProtocolType.NONE, NotifyId.INITIAL_CONTACT, null, null),
