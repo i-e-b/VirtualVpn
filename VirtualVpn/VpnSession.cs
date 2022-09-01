@@ -808,7 +808,7 @@ public class VpnSession
         Log.Trace("Building AUTH/SA confirmation message, switching to port 4500");
         var msgBytes = BuildSerialMessage(ExchangeType.IKE_AUTH, MessageFlag.Initiator, useAlternateChecksum: false,
             sendZeroHeader:true, // because we are switching to 4500
-            _myCrypto, _localSpi, _peerSpi, msgId: 1, 
+            _myCrypto, _localSpi, _peerSpi, msgId: 1,
             
             mainIDi,
             new PayloadNotify(IkeProtocolType.NONE, NotifyId.INITIAL_CONTACT, null, null),
@@ -817,6 +817,9 @@ public class VpnSession
             new PayloadSa(espProposal),
             new PayloadTsi(Settings.LocalTrafficSelector), // our address ranges,
             new PayloadTsr(Settings.RemoteTrafficSelector), // expected ranges on their side
+            
+            new PayloadNotify(IkeProtocolType.NONE, NotifyId.ADDITIONAL_IP4_ADDRESS, null, Settings.LocalTrafficSelector.StartAddress), // ??? test
+            
             new PayloadNotify(IkeProtocolType.NONE, NotifyId.MOBIKE_SUPPORTED, null, null) // Enable mobility extensions
             // Notifications for extra IP addresses could go here, but we don't support them yet.
         );
