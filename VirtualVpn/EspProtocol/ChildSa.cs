@@ -14,6 +14,7 @@ public class ChildSa : ITransportTunnel
     public UInt32 SpiIn { get; }
     public UInt32 SpiOut { get; }
     public IpV4Address Gateway { get; set; }
+    public bool WeAreInitiator => _parent?.WeStarted ?? false;
 
     // pvpn/server.py:18
     public ChildSa(IpV4Address gateway, byte[] spiIn, byte[] spiOut, IkeCrypto cryptoIn, IkeCrypto cryptoOut, IUdpServer? server, VpnSession? parent)

@@ -31,6 +31,7 @@ public class VpnSession
     }
 
     private long _peerMsgId;
+    private long _ourMsgId;
     private byte[]? _initMessage;
     private byte[]? _lastSentMessageBytes;
     private byte[]? _previousRequestRawData;
@@ -80,6 +81,7 @@ public class VpnSession
         _localNonce = Bit.RandomNonce();
         State = SessionState.INITIAL;
         _peerMsgId = 0;
+        _ourMsgId = 0;
         
         LastTouchTimer = new Stopwatch();
         LastTouchTimer.Start();
@@ -555,7 +557,7 @@ public class VpnSession
             return;
         }
 
-        // IEB: Continue here. Need to check we generate the child SA with keys the right way around.
+        // IEB: Need to check we generate the child SA with keys the right way around.
         var childKey = CreateChildKey(sender, chosenChildProposal, _peerNonce, _localNonce);
         Log.Debug($"    New ESP SPI = {childKey.SpiIn:x8}; spi_out={childKey.SpiOut:x8}");
         chosenChildProposal.SpiData = Bit.UInt32ToBytes(childKey.SpiIn); // Used to refer to the child SA in ESP messages?
@@ -565,6 +567,22 @@ public class VpnSession
         State = SessionState.ESTABLISHED; // Should now have a full Child SA
         
         // Could now send INFORMATIONAL messages, possibly with some `IKE_DELETE` payloads to tell the peer about expired sessions.
+        
+        // IKE flags Initiator, message id=1, first payload=SK
+        Log.Trace("Building AUTH/SA confirmation message, switching to port 4500");
+        var msgBytes = BuildSerialMessage(ExchangeType.INFORMATIONAL, MessageFlag.Initiator, useAlternateChecksum: false, sendZeroHeader,
+            _myCrypto, _localSpi, _peerSpi, msgId: _ourMsgId++,
+            
+            new PayloadNotify(IkeProtocolType.NONE, NotifyId.MOBIKE_SUPPORTED, null, null)
+        );
+        
+        // The message should be something that VirtualVpn.Crypto.IkeCrypto.VerifyChecksumInternal would give the OK to
+        var ok = _myCrypto!.VerifyChecksum(msgBytes.Skip(4).ToArray());
+        if (!ok) Log.Warn("Message did not pass our own checksum. Likely to be rejected by peer.");
+        
+        // Switch to 4500 port now. The protocol works without it, but VirtualVPN assumes the switch will happen.
+        // See https://docs.strongswan.org/docs/5.9/features/mobike.html
+        Send(to: new IPEndPoint(sender.Address, port:4500), message: msgBytes);
     }
 
     // ReSharper disable CommentTypo
@@ -702,7 +720,7 @@ public class VpnSession
         _keyExchange ??= BCDiffieHellman.CreateForGroup(DhId.DH_14) ?? throw new Exception("Failed to generate key exchange when generating new session");
         _keyExchange.get_our_public_key(out var newPublicKey);
 
-        _initMessage = BuildSerialMessage(ExchangeType.IKE_SA_INIT, MessageFlag.Initiator, false, false, null, _localSpi, 0, 0,
+        _initMessage = BuildSerialMessage(ExchangeType.IKE_SA_INIT, MessageFlag.Initiator, false, false, null, _localSpi, 0, _ourMsgId++,
             new PayloadSa(defaultProposal),
             new PayloadNonce(_localNonce),
             new PayloadKeyExchange(DhId.DH_14, newPublicKey), // Pre-start our preferred exchange
@@ -777,13 +795,7 @@ public class VpnSession
         
         var spiOut = new byte[4];
         RandomNumberGenerator.Fill(spiOut);
-        // 2022-09-01T14:41 (utc)     Chosen proposal: {"Number":1,"Protocol":"ESP","SpiSize":4,"SpiData":"E05erw==",
-        // "TransformCount":3,"Transforms":[
-        // {"Length":12,"Type":"ENCR","Id":12,"Attributes":[{"Size":4,"ValueBytes":"","Value":128,"Type":"KEY_LENGTH"}],"Size":4,"Description":"ENCR id=EncryptionTypeId.ENCR_AES_CBC attr=[KEY_LENGTH: 128]"},
-        // {"Length":8,"Type":"INTEG","Id":12,"Attributes":[],"Size":0,"Description":"INTEG id=IntegId.AUTH_HMAC_SHA2_256_128 attr=[]"},
-        // {"Length":8,"Type":"ESN","Id":0,"Attributes":[],"Size":0,"Description":"ESN id=EsnId.NO_ESN attr=[]"}],
-        // "Size":36}
-
+        
         var espProposal = new Proposal
         {
             Number = 1,
@@ -815,7 +827,7 @@ public class VpnSession
         Log.Trace("Building AUTH/SA confirmation message, switching to port 4500");
         var msgBytes = BuildSerialMessage(ExchangeType.IKE_AUTH, MessageFlag.Initiator, useAlternateChecksum: false,
             sendZeroHeader:true, // because we are switching to 4500
-            _myCrypto, _localSpi, _peerSpi, msgId: 1,
+            _myCrypto, _localSpi, _peerSpi, msgId: _ourMsgId++,
             
             mainIDi,
             new PayloadNotify(IkeProtocolType.NONE, NotifyId.INITIAL_CONTACT, null, null),
