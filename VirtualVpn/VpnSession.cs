@@ -591,7 +591,7 @@ public class VpnSession
         // Switch to 4500 port now. The protocol works without it, but VirtualVPN assumes the switch will happen.
         // See https://docs.strongswan.org/docs/5.9/features/mobike.html
         //Send(to: new IPEndPoint(sender.Address, port:4500), message: msgBytes);
-        Send(to: sender, message: msgBytes);
+        //Send(to: sender, message: msgBytes);
     }
 
     // ReSharper disable CommentTypo
