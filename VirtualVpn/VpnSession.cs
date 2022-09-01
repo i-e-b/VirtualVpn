@@ -212,7 +212,9 @@ public class VpnSession
             {
                 Log.Warn($"Request is out of sequence. Expected {_peerMsgId}, but got {request.MessageId}. Not responding");
                 Log.Debug($"Out of sequence request: exchange type={request.Exchange.ToString()}, flags={request.MessageFlag.ToString()}, payloads:", request.DescribeAllPayloads);
-                return;
+                
+                //return;
+                Log.Debug("Actually just allowing it through for testing...");
             }
         }
 
@@ -567,7 +569,7 @@ public class VpnSession
         
         // Could now send INFORMATIONAL messages, possibly with some `IKE_DELETE` payloads to tell the peer about expired sessions.
         
-        _ourMsgId = 0; // ???
+        //_ourMsgId = 0; // ???
         _peerMsgId = 0; // ???
         
         // IKE flags Initiator, message id=1, first payload=SK
