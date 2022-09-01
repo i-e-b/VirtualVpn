@@ -131,11 +131,11 @@ public class VpnSession
     private byte[] BuildResponse(ExchangeType exchange, bool sendZeroHeader, IkeCrypto? crypto, params MessagePayload[] payloads)
     {
         return _weAreInitiator
-            ? BuildSerialMessage(exchange, MessageFlag.Initiator | MessageFlag.Response, false, sendZeroHeader, crypto, _localSpi, _peerSpi, _peerMsgId, payloads)
-            : BuildSerialMessage(exchange, MessageFlag.Response, false, sendZeroHeader, crypto, _peerSpi, _localSpi, _peerMsgId, payloads);
+            ? BuildSerialMessage(exchange, MessageFlag.Initiator | MessageFlag.Response, sendZeroHeader, crypto, _localSpi, _peerSpi, _peerMsgId, payloads)
+            : BuildSerialMessage(exchange, MessageFlag.Response, sendZeroHeader, crypto, _peerSpi, _localSpi, _peerMsgId, payloads);
     }
 
-    public static byte[] BuildSerialMessage(ExchangeType exchange, MessageFlag flags, bool useAlternateChecksum, bool sendZeroHeader, IkeCrypto? crypto,
+    public static byte[] BuildSerialMessage(ExchangeType exchange, MessageFlag flags, bool sendZeroHeader, IkeCrypto? crypto,
         ulong initiatorSpi, ulong responderSpi, long msgId, params MessagePayload[] payloads)
     {
         // pvpn/server.py:253
@@ -152,7 +152,7 @@ public class VpnSession
 
         Log.Debug("        payloads outgoing:", () => resp.DescribeAllPayloads());
 
-        return resp.ToBytes(useAlternateChecksum, sendZeroHeader, crypto); // will wrap payloads in PayloadSK if we have crypto
+        return resp.ToBytes(sendZeroHeader, crypto); // will wrap payloads in PayloadSK if we have crypto
     }
 
     /// <summary>
@@ -166,6 +166,7 @@ public class VpnSession
             HandleIkeInternal(request, sender, sendZeroHeader);
 
             _previousRequestRawData = request.RawData; // needed to do PSK auth
+            _peerMsgId++;
         }
         catch (Exception ex)
         {
@@ -238,7 +239,6 @@ public class VpnSession
                         throw new Exception($"Received {nameof(ExchangeType.IKE_SA_INIT)}, so expected to be in state {nameof(SessionState.INITIAL)} or {nameof(SessionState.SA_SENT)}, but was in {State.ToString()}");
                 }
 
-                _peerMsgId++;
                 break;
 
             case ExchangeType.IKE_AUTH: // pvpn/server.py:287
@@ -248,7 +248,6 @@ public class VpnSession
                     {
                         Log.Info("IKE_AUTH received, we are responder");
                         HandleAuth(request, sender, sendZeroHeader);
-                        _peerMsgId++;
                         break;
                     }
                     case SessionState.AUTH_SENT:
@@ -273,7 +272,6 @@ public class VpnSession
                 AssertState(SessionState.ESTABLISHED, request);
                 Log.Info("INFORMATIONAL received");
                 HandleInformational(request, sender, sendZeroHeader);
-                _peerMsgId++;
                 break;
 
             case ExchangeType.CREATE_CHILD_SA: // pvpn/server.py:340
@@ -328,7 +326,7 @@ public class VpnSession
     /// </summary>
     private void ReplyNotAcceptable(IPEndPoint sender, bool sendZeroHeader)
     {
-        var reKeyMessage = BuildSerialMessage(ExchangeType.IKE_SA_INIT, MessageFlag.Initiator, false, sendZeroHeader, null, _localSpi, _peerSpi, _peerMsgId,
+        var reKeyMessage = BuildSerialMessage(ExchangeType.IKE_SA_INIT, MessageFlag.Initiator, sendZeroHeader, null, _localSpi, _peerSpi, _peerMsgId,
             new PayloadDelete(IkeProtocolType.IKE, Array.Empty<byte[]>())
         );
 
@@ -571,10 +569,8 @@ public class VpnSession
         
         // IKE flags Initiator, message id=1, first payload=SK
         Log.Trace("Building AUTH/SA confirmation message, switching to port 4500");
-        var msgBytes = BuildSerialMessage(ExchangeType.INFORMATIONAL, MessageFlag.Initiator, useAlternateChecksum: false, sendZeroHeader,
-            _myCrypto, _localSpi, _peerSpi, msgId: _ourMsgId++,
-            
-            new PayloadNotify(IkeProtocolType.NONE, NotifyId.MOBIKE_SUPPORTED, null, null)
+        var msgBytes = BuildSerialMessage(ExchangeType.INFORMATIONAL, MessageFlag.Initiator, sendZeroHeader,
+            _myCrypto, _localSpi, _peerSpi, msgId: _ourMsgId++
         );
         
         // The message should be something that VirtualVpn.Crypto.IkeCrypto.VerifyChecksumInternal would give the OK to
@@ -721,7 +717,7 @@ public class VpnSession
         _keyExchange ??= BCDiffieHellman.CreateForGroup(DhId.DH_14) ?? throw new Exception("Failed to generate key exchange when generating new session");
         _keyExchange.get_our_public_key(out var newPublicKey);
 
-        _initMessage = BuildSerialMessage(ExchangeType.IKE_SA_INIT, MessageFlag.Initiator, false, false, null, _localSpi, 0, _ourMsgId++,
+        _initMessage = BuildSerialMessage(ExchangeType.IKE_SA_INIT, MessageFlag.Initiator, false, null, _localSpi, 0, _ourMsgId++,
             new PayloadSa(defaultProposal),
             new PayloadNonce(_localNonce),
             new PayloadKeyExchange(DhId.DH_14, newPublicKey), // Pre-start our preferred exchange
@@ -826,7 +822,7 @@ public class VpnSession
         
         // IKE flags Initiator, message id=1, first payload=SK
         Log.Trace("Building AUTH/SA confirmation message, switching to port 4500");
-        var msgBytes = BuildSerialMessage(ExchangeType.IKE_AUTH, MessageFlag.Initiator, useAlternateChecksum: false,
+        var msgBytes = BuildSerialMessage(ExchangeType.IKE_AUTH, MessageFlag.Initiator,
             sendZeroHeader:true, // because we are switching to 4500
             _myCrypto, _localSpi, _peerSpi, msgId: _ourMsgId++,
             
