@@ -58,6 +58,7 @@ public class VpnSession
     private BCDiffieHellman? _keyExchange;
     private Proposal? _lastSaProposal;
     private int _peerMsgId;
+    private int _myMsgId;
 
     /// <summary>
     /// Start a new session object
@@ -80,6 +81,7 @@ public class VpnSession
         _localNonce = Bit.RandomNonce();
         State = SessionState.INITIAL;
         _peerMsgId = 0;
+        _myMsgId = 0;
         
         LastTouchTimer = new Stopwatch();
         LastTouchTimer.Start();
@@ -579,10 +581,10 @@ public class VpnSession
         _peerMsgId = 0; // ???
         
         // IKE flags Initiator, message id=1, first payload=SK
-        Log.Trace("Building AUTH/SA confirmation message, switching to port 4500");
+        Log.Trace("Building HandleAuthConfirm confirmation message, switching to port 4500");
         var msgBytes = BuildSerialMessage(ExchangeType.INFORMATIONAL, MessageFlag.Initiator,
             sendZeroHeader: true, // required when switching to 4500
-            _myCrypto, _localSpi, _peerSpi, msgId: _peerMsgId
+            _myCrypto, _localSpi, _peerSpi, msgId: _myMsgId++
         );
         
         // The message should be something that VirtualVpn.Crypto.IkeCrypto.VerifyChecksumInternal would give the OK to
@@ -833,10 +835,10 @@ public class VpnSession
         _lastSaProposal = espProposal;
         
         // IKE flags Initiator, message id=1, first payload=SK
-        Log.Trace("Building AUTH/SA confirmation message, switching to port 4500");
+        Log.Trace("Building HandleSaConfirm confirmation message, switching to port 4500");
         var msgBytes = BuildSerialMessage(ExchangeType.IKE_AUTH, MessageFlag.Initiator,
             sendZeroHeader:true, // because we are switching to 4500
-            _myCrypto, _localSpi, _peerSpi, msgId: _peerMsgId,
+            _myCrypto, _localSpi, _peerSpi, msgId: _myMsgId++,
             
             mainIDi,
             new PayloadNotify(IkeProtocolType.NONE, NotifyId.INITIAL_CONTACT, null, null),
