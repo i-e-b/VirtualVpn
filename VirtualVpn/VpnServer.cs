@@ -398,7 +398,8 @@ public class VpnServer : ISessionHost, IDisposable
         if (!_childSessions.ContainsKey(spi))
         {
             // TODO: check for a child session with reversed key?
-            Log.Warn($"    Unknown session: 0x{spi:x16} -- not replying");
+            Log.Warn($"    Unknown session: 0x{spi:x8} -- not replying");
+            Log.Debug("    Expected sessions=", ListKnownSpis);
             return;
         }
 
@@ -414,6 +415,19 @@ public class VpnServer : ISessionHost, IDisposable
         {
             Log.Warn($"Failed to handle SPE message from {sender.Address}: {ex.Message}");
             Log.Debug(ex.ToString());
+        }
+    }
+
+    private IEnumerable<string> ListKnownSpis()
+    {
+        foreach (var key in _sessions.Keys)
+        {
+            yield return $"IKE {key:x16}; ";
+        }
+
+        foreach (var child in _childSessions)
+        {
+            yield return $"ESP {child.Key:x8} (in={child.Value.SpiIn:x8}, out={child.Value.SpiOut:x8}); ";
         }
     }
 

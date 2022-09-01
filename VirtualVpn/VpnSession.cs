@@ -207,6 +207,7 @@ public class VpnSession
             else
             {
                 Log.Warn($"Request is out of sequence. Expected {_peerMsgId}, but got {request.MessageId}. Not responding");
+                Log.Debug($"Out of sequence request: exchange type={request.Exchange.ToString()}, flags={request.MessageFlag.ToString()}, payloads:", request.DescribeAllPayloads);
                 return;
             }
         }
