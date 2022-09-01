@@ -398,6 +398,15 @@ public class VpnServer : ISessionHost, IDisposable
         }
     }
 
+    /// <summary>
+    /// This calls the "EventPump" method on all VpnSession
+    /// and ChildSA objects that are currently active.
+    ///
+    /// This is our co-operative multi-tasking setup that
+    /// doesn't require us to juggle threads.
+    /// This is done with the expectation that we will
+    /// usually have 1 connected gateway at a time.
+    /// </summary>
     private void EventPumpLoop()
     {
         while (!_running)

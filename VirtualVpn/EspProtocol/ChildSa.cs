@@ -40,12 +40,15 @@ public class ChildSa : ITransportTunnel
     }
 
     /// <summary>
-    /// Drive timed events. This method should be called periodically
+    /// Drive timed events. This method should be called periodically, usually by <see cref="VpnServer.EventPumpLoop"/>
     /// <p></p>
     /// Returns true if any action was taken.
     /// </summary>
     public bool EventPump()
     {
+        // TODO: if we are the initiator, we should send periodic keep-alive pings to the peer.
+        
+        
         // Check TCP sessions, close them if they are timed out.
         var acted = false;
         var allSessions = _tcpSessions.Keys.ToList();

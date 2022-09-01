@@ -42,6 +42,15 @@ public class PayloadIDr: PayloadIDx
         Port = (ushort)port;
         Protocol = (IpProtocol)protocol;
     }
+    
+    public PayloadIDr(IdType type, byte[] idData, int port, IpProtocol protocol)
+    {
+        // like pvpn/message.py:118
+        IdType=type;
+        IdData=idData;
+        Port = (ushort)port;
+        Protocol = protocol;
+    }
 }
 
 // pvpn/message.py:117
@@ -87,10 +96,10 @@ public class PayloadIDx : MessagePayload
         switch (IdType)
         {
             case IdType.ID_IPV4_ADDR:
-                return $"Payload=IDi; Type={IdType.ToString()}; Protocol={Protocol.ToString()}; Port={Port}; Address={IdData[0]}.{IdData[1]}.{IdData[2]}.{IdData[3]}";
+                return $"Payload=IDx ({GetType().Name}); Type={IdType.ToString()}; Protocol={Protocol.ToString()}; Port={Port}; Address={IdData[0]}.{IdData[1]}.{IdData[2]}.{IdData[3]}";
                 
             case IdType.ID_FQDN:
-                return $"Payload=IDi; Type={IdType.ToString()}; Protocol={Protocol.ToString()}; Port={Port}; Address={Encoding.ASCII.GetString(IdData)}";
+                return $"Payload=IDx ({GetType().Name}); Type={IdType.ToString()}; Protocol={Protocol.ToString()}; Port={Port}; Address={Encoding.ASCII.GetString(IdData)}";
                 
             case IdType.ID_RFC822_ADDR:
             case IdType.ID_IPV4_ADDR_SUBNET:
@@ -102,10 +111,10 @@ public class PayloadIDx : MessagePayload
             case IdType.ID_DER_ASN1_GN:
             case IdType.ID_KEY_ID:
             case IdType.ID_FC_NAME:
-                return $"Payload=IDi; Type={IdType.ToString()}; Protocol={Protocol.ToString()}; Port={Port}; Data={Bit.HexString(IdData)}";
+                return $"Payload=IDx ({GetType().Name}); Type={IdType.ToString()}; Protocol={Protocol.ToString()}; Port={Port}; Data={Bit.HexString(IdData)}";
                 
             case IdType.ID_NULL:
-                return $"Payload=IDi; Type={IdType.ToString()}; Protocol={Protocol.ToString()}; Port={Port}; (null?) Data={Bit.HexString(IdData)}";
+                return $"Payload=IDx ({GetType().Name}); Type={IdType.ToString()}; Protocol={Protocol.ToString()}; Port={Port}; (null?) Data={Bit.HexString(IdData)}";
                 
             default:
                 throw new ArgumentOutOfRangeException();

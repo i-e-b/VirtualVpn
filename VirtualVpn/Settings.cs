@@ -59,6 +59,16 @@ public static class Settings
     /// How long a TCP session is allowed to go without any traffic before being closed.
     /// </summary>
     public static TimeSpan TcpTimeout => TimeSpan.FromSeconds(60);
+    
+    /// <summary>
+    /// How long an *established* ESP session is allowed to go without any traffic before being closed.
+    /// </summary>
+    public static TimeSpan EspTimeout => TimeSpan.FromSeconds(300);
+    
+    /// <summary>
+    /// How long an IKE session under negotiation is allowed to go without any traffic before being closed.
+    /// </summary>
+    public static TimeSpan IkeTimeout => TimeSpan.FromSeconds(30);
 
     /// <summary>
     /// A description of the network on our side of the VPN tunnel.

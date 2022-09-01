@@ -1,4 +1,5 @@
-﻿using System.Net;
+﻿using System.Diagnostics;
+using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using SkinnyJson;
@@ -29,12 +30,6 @@ public class VpnSession
         }
     }
 
-    /// <summary>sequence number for receiving</summary>
-    private long _maxSeq = -1;
-
-    /// <summary>sequence number for sending</summary>
-    private long _seqOut;
-
     private long _peerMsgId;
     private byte[]? _initMessage;
     private byte[]? _lastSentMessageBytes;
@@ -62,6 +57,7 @@ public class VpnSession
     private readonly ulong _localSpi;
     private readonly byte[] _localNonce;
     private BCDiffieHellman? _keyExchange;
+    private Proposal? _lastSaProposal;
 
     /// <summary>
     /// Start a new session object
@@ -80,54 +76,53 @@ public class VpnSession
         _sessionHost = sessionHost;
         _weAreInitiator = weAreInitiator;
         _peerSpi = peerSpi;
-        LastTouchUtc = DateTime.UtcNow;
         _localSpi = Bit.RandomSpi();
         _localNonce = Bit.RandomNonce();
         State = SessionState.INITIAL;
-        _seqOut = 0;
         _peerMsgId = 0;
+        
+        LastTouchTimer = new Stopwatch();
+        LastTouchTimer.Start();
     }
 
-    public DateTime LastTouchUtc { get; set; }
-    public TimeSpan AgeNow => DateTime.UtcNow - LastTouchUtc;
+    public Stopwatch LastTouchTimer { get; private set; }
     public IpV4Address Gateway { get; set; }
     public ulong LocalSpi => _localSpi;
     public bool WeStarted => _weAreInitiator;
 
-
     /// <summary>
-    /// Returns true if the given sequence is less-or-equal to the largest we've seen before
-    /// </summary>
-    public bool OutOfSequence(uint seq) => seq <= _maxSeq;
-
-    /// <summary>
-    /// Needs crypto, and some corrections. See pvpn/server.py:411
-    /// </summary>
-    public bool VerifyMessage(byte[] data)
-    {
-        // the session should have a cryptography method selected
-        if (_peerCrypto is null) throw new Exception("No incoming crypto method agreed");
-
-        return _peerCrypto.VerifyChecksum(data);
-    }
-
-    /// <summary>
-    /// See pvpn/server.py:416
-    /// </summary>
-    public void IncrementSequence(uint seq)
-    {
-        if (seq > (_maxSeq + 65536)) _maxSeq++;
-        else if (seq == _maxSeq) _maxSeq++;
-        else _maxSeq = seq; // this isn't exactly right, see pvpn/server.py:421
-    }
-
-
-    /// <summary>
-    /// This method should be called periodically
+    /// Drive timed events
+    /// <p></p>
+    /// This method should be called periodically, usually by <see cref="VpnServer.EventPumpLoop"/>
     /// </summary>
     public void EventPump()
     {
-        // TODO: send keep-alive messages for any active sessions where we are the initiator
+        // We don't send keep-alive messages for any active but not established sessions where we are the initiator
+        // If a session takes too long to establish, we let it die.
+        // The EventPump() on each child is responsible for sending keep-alive messages if it is the initiator.
+        // The VpnServer instance fires child session event pump separately from this one.
+
+        if (State == SessionState.ESTABLISHED)
+        {
+            if (LastTouchTimer.Elapsed < Settings.EspTimeout) return;
+            // TODO: fire a DELETE message, but don't wait for reply
+            
+            Log.Critical("Session timed-out after establishment. Are keep-alive messages not arriving?");
+            foreach (var child in _thisSessionChildren)
+            {
+                _sessionHost.RemoveChildSession(child.Key);
+            }
+
+            _sessionHost.RemoveSession(_localSpi);
+        }
+        else
+        {
+            if (LastTouchTimer.Elapsed < Settings.IkeTimeout) return;
+            // TODO: fire a DELETE message, but don't wait for reply
+            
+            Log.Critical("Session timed-out during negotiation. The session will be abandoned.");
+            _sessionHost.RemoveSession(_localSpi);
+        }
     }
 
     // pvpn/server.py:253
@@ -179,7 +174,7 @@ public class VpnSession
     private void HandleIkeInternal(IkeMessage request, IPEndPoint sender, bool sendZeroHeader)
     {
         // pvpn/server.py:260
-        LastTouchUtc = DateTime.UtcNow;
+        LastTouchTimer.Restart();
 
         // Update our records if the remote has provided an SPI
         if (_weAreInitiator && _peerSpi == 0 && request.SpiR != 0) { _peerSpi = request.SpiR; }
@@ -250,7 +245,8 @@ public class VpnSession
                     }
                     case SessionState.AUTH_SENT:
                     {
-                        Log.Critical("Got to next step!");
+                        Log.Info("IKE_AUTH received, we are initiator");
+                        HandleAuthConfirm(request, sender, sendZeroHeader);
                         break;
                     }
                     default:
@@ -295,6 +291,7 @@ public class VpnSession
     private void HandleInformational(IkeMessage request, IPEndPoint sender, bool sendZeroHeader)
     {
         // pvpn/server.py:315
+        Log.Debug("        HandleInformational():: payloads incoming:", request.DescribeAllPayloads);
 
         // Check for any sessions the other side wants to remove
         var deletePayload = request.GetPayload<PayloadDelete>();
@@ -363,6 +360,14 @@ public class VpnSession
         return removed;
     }
 
+    /// <summary>
+    /// Send a final response to AUTH message, when we are responder.
+    /// We are Established once that message is sent, and the
+    /// remote gateway will consider the session established when
+    /// it gets our reply.
+    /// <p></p>
+    /// This is related to <see cref="HandleAuthConfirm"/>
+    /// </summary>
     private void HandleAuth(IkeMessage request, IPEndPoint sender, bool sendZeroHeader)
     {
         Log.Debug("        HandleAuth():: payloads incoming:", request.DescribeAllPayloads);
@@ -439,6 +444,65 @@ public class VpnSession
         State = SessionState.ESTABLISHED; // Should now have a full Child SA
         // Should now get INFORMATIONAL messages, possibly with some `IKE_DELETE` payloads to tell me about expired sessions.
     }
+    
+    /// <summary>
+    /// Handle the reply to AUTH message, when we are the initiator.
+    /// The remote gateway should already consider us as Established.
+    /// <p></p>
+    /// This is related to <see cref="HandleAuth"/>
+    /// </summary>
+    private void HandleAuthConfirm(IkeMessage request, IPEndPoint sender, bool sendZeroHeader)
+    {
+        Log.Debug("        HandleAuthConfirm():: payloads incoming:", request.DescribeAllPayloads);
+        
+        
+        // The incoming message should have an Auth payload, which we use to confirm the PSK.
+        // It should have TSi and TSr, which we would normally check to authorise, but we just accept as we're virtual.
+        // It should have IDr for the peer gateway, which we would normally confirm, but we can ignore.
+        // We should also get an SA payload with a SINGLE child session selected by the remote peer.
+        // The SA will be used to confirm the ChildSA spi used for session keying.
+        //
+        // We MUST add a ChildSA session correctly if we exit without error.
+
+        var peerSkp = _peerCrypto?.SkP;
+        if (peerSkp is null) throw new Exception("Peer SK-p not established before IKE_AUTH received");
+        if (_peerNonce is null) throw new Exception("Peer N-once was not established before IKE_AUTH received");
+        if (_previousRequestRawData is null) throw new Exception("Peer's previous raw request not stored during IKE_INIT_SA to use in IKE_AUTH");
+
+        var idr = request.GetPayload<PayloadIDr>() ?? throw new Exception("IKE_AUTH did not have an IDi payload");
+        var auth = request.GetPayload<PayloadAuth>();
+        if (auth is null) throw new Exception("Peer requested EAP, which we don't support");
+
+        var pskAuth = GeneratePskAuth(_previousRequestRawData, _localNonce, idr, peerSkp, _peerCrypto?.Prf);
+        if (Bit.AreDifferent(pskAuth, auth.AuthData))
+        {
+            throw new Exception("PSK auth failed: initiator's hash did not match our expectations.\r\n\t" +
+                                $"Expected {Bit.HexString(pskAuth)},\r\n\tbut got {Bit.HexString(auth.AuthData)}");
+        }
+
+        Log.Debug("    PSK auth agreed from this side");
+
+        var sa = request.GetPayload<PayloadSa>();
+        var chosenChildProposal = sa?.GetProposalFor(EncryptionTypeId.ENCR_AES_CBC) ?? _lastSaProposal;
+        if (chosenChildProposal is null)
+        {
+            Log.Warn("    FATAL: could not find a compatible Child SA");
+            // Try to reject. Not sure about this
+            ReplyNotAcceptable(sender, sendZeroHeader);
+            return;
+        }
+
+        // IEB: Continue here. Need to check we generate the child SA with keys the right way around.
+        var childKey = CreateChildKey(sender, chosenChildProposal, _peerNonce, _localNonce);
+        Log.Debug($"    New ESP SPI = {childKey.SpiIn:x8}; spi_out={childKey.SpiOut:x8}");
+        chosenChildProposal.SpiData = Bit.UInt32ToBytes(childKey.SpiIn); // Used to refer to the child SA in ESP messages?
+        chosenChildProposal.SpiSize = 4;
+
+        Log.Debug("    Setting state to established");
+        State = SessionState.ESTABLISHED; // Should now have a full Child SA
+        
+        // Could now send INFORMATIONAL messages, possibly with some `IKE_DELETE` payloads to tell the peer about expired sessions.
+    }
 
     // ReSharper disable CommentTypo
     /// <summary>
@@ -472,11 +536,16 @@ public class VpnSession
         return prf.Hash(prfPskPad, bulk);
     }
 
-    private static IEnumerable<string> One(string msg)
-    {
-        yield return msg;
-    }
+    /// <summary>
+    /// Converts a single item into an enumeration
+    /// </summary>
+    private static IEnumerable<T> One<T>(T thing) { yield return thing; }
 
+    /// <summary>
+    /// This sets up the crypto keys for a <see cref="ChildSa"/>,
+    /// adds that child the the child list, and
+    /// registers the child with the session host 
+    /// </summary>
     private ChildSa CreateChildKey(IPEndPoint gateway, Proposal childProposal, byte[] peerNonce, byte[] localNonce)
     {
         // pvpn/server.py:237
@@ -632,7 +701,7 @@ public class VpnSession
         var mainIDi = new PayloadIDi(IdType.ID_IPV4_ADDR, Settings.LocalIpAddress, 0, IpProtocol.ANY);
         mainIDi.ToBytes();// just to trigger the serialisation
         
-        var peerIDi = new PayloadIDi(IdType.ID_IPV4_ADDR, Gateway.Value, 0, IpProtocol.ANY);
+        var peerIDr = new PayloadIDr(IdType.ID_IPV4_ADDR, Gateway.Value, 0, IpProtocol.ANY);
         var mySkP = _myCrypto?.SkP;
         var peerSkp = _peerCrypto?.SkP;
         if (_peerNonce is null) throw new Exception("Peer n-Once not established before IKE_AUTH construction");
@@ -670,28 +739,32 @@ public class VpnSession
             }
         };
         
+        _lastSaProposal = espProposal;
+        
         // IKE flags Initiator, message id=1, first payload=SK
-        Log.Trace("Building AUTH/SA confirmation message");
-        var msgBytes = BuildSerialMessage(ExchangeType.IKE_AUTH, MessageFlag.Initiator, useAlternateChecksum: false, sendZeroHeader:true, _myCrypto,
-            _localSpi, _peerSpi, msgId: 1, 
+        Log.Trace("Building AUTH/SA confirmation message, switching to port 4500");
+        var msgBytes = BuildSerialMessage(ExchangeType.IKE_AUTH, MessageFlag.Initiator, useAlternateChecksum: false,
+            sendZeroHeader:true, // because we are switching to 4500
+            _myCrypto, _localSpi, _peerSpi, msgId: 1, 
             
             mainIDi,
             new PayloadNotify(IkeProtocolType.NONE, NotifyId.INITIAL_CONTACT, null, null),
-            peerIDi, // IEB: Not sure about this. It's in what StrongSwan sends, but not ike.py
+            peerIDr,
             new PayloadAuth(AuthMethod.PSK, pskAuth),
             new PayloadSa(espProposal),
             new PayloadTsi(Settings.LocalTrafficSelector), // our address ranges,
             new PayloadTsr(Settings.RemoteTrafficSelector), // expected ranges on their side
             new PayloadNotify(IkeProtocolType.NONE, NotifyId.MOBIKE_SUPPORTED, null, null)
             // Notifications for extra IP addresses could go here, but we don't support them yet.
-            );
+        );
         
         // The message should be something that VirtualVpn.Crypto.IkeCrypto.VerifyChecksumInternal would give the OK to
-        var ok = _myCrypto!.VerifyChecksum(msgBytes);
+        var ok = _myCrypto!.VerifyChecksum(msgBytes.Skip(4).ToArray());
         if (!ok) Log.Warn("Message did not pass our own checksum. Likely to be rejected by peer.");
         
-        Send(to: sender, message: msgBytes);
-        //Send(to: new IPEndPoint(sender.Address, 4500), message: msgBytes); // redirect to 4500?
+        // Switch to 4500 port now. The protocol works without it, but VirtualVPN assumes the switch will happen.
+        Send(to: new IPEndPoint(sender.Address, port:4500), message: msgBytes);
+        //Send(to: sender, message: msgBytes); // this would stay on 500, which I think is allowed. But it's not normal
         State = SessionState.AUTH_SENT;
     }
     
@@ -814,7 +887,6 @@ public class VpnSession
         _lastContact = to;
         _lastSentMessageBytes = message;
         _server.SendRaw(message, to);
-        _seqOut++;
 
         if (Settings.CaptureTraffic)
         {
