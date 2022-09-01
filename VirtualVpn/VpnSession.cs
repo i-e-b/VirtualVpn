@@ -195,14 +195,17 @@ public class VpnSession
             _server.SendRaw(_lastSentMessageBytes, sender); // don't add zero pad again?
             return;
         }
+        
+        // We should have crypto now, as long as we're out of IKE_SA_INIT phase
+        request.ReadPayloadChain(_peerCrypto); // pvpn/server.py:266
 
         // make sure we're in sequence
         if (request.MessageId != _peerMsgId)
         {
             if (request.MessageId > _peerMsgId)
             {
-                _peerMsgId = request.MessageId;
                 Log.Warn($"Request is ahead of our sequence. Expected {_peerMsgId}, but got {request.MessageId}. Will advance and continue");
+                _peerMsgId = request.MessageId;
             }
             else
             {
@@ -211,9 +214,6 @@ public class VpnSession
                 return;
             }
         }
-
-        // We should have crypto now, as long as we're out of IKE_SA_INIT phase
-        request.ReadPayloadChain(_peerCrypto); // pvpn/server.py:266
 
         RouteMessageBasedOnTypeAndState(request, sender, sendZeroHeader);
     }
