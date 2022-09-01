@@ -120,7 +120,7 @@ public class VpnSession
             if (LastTouchTimer.Elapsed < Settings.IkeTimeout) return;
             // TODO: fire a DELETE message, but don't wait for reply
             
-            Log.Critical("Session timed-out during negotiation. The session will be abandoned.");
+            Log.Critical($"Session timed-out during negotiation (state={State.ToString()}). The session will be abandoned.");
             _sessionHost.RemoveSession(_localSpi);
         }
     }
@@ -777,6 +777,13 @@ public class VpnSession
         
         var spiOut = new byte[4];
         RandomNumberGenerator.Fill(spiOut);
+        // 2022-09-01T14:41 (utc)     Chosen proposal: {"Number":1,"Protocol":"ESP","SpiSize":4,"SpiData":"E05erw==",
+        // "TransformCount":3,"Transforms":[
+        // {"Length":12,"Type":"ENCR","Id":12,"Attributes":[{"Size":4,"ValueBytes":"","Value":128,"Type":"KEY_LENGTH"}],"Size":4,"Description":"ENCR id=EncryptionTypeId.ENCR_AES_CBC attr=[KEY_LENGTH: 128]"},
+        // {"Length":8,"Type":"INTEG","Id":12,"Attributes":[],"Size":0,"Description":"INTEG id=IntegId.AUTH_HMAC_SHA2_256_128 attr=[]"},
+        // {"Length":8,"Type":"ESN","Id":0,"Attributes":[],"Size":0,"Description":"ESN id=EsnId.NO_ESN attr=[]"}],
+        // "Size":36}
+
         var espProposal = new Proposal
         {
             Number = 1,
@@ -787,7 +794,7 @@ public class VpnSession
                 {
                     Type = TransformType.ENCR,
                     Id = (uint)EncryptionTypeId.ENCR_AES_CBC,
-                    Attributes = { new TransformAttribute(TransformAttr.KEY_LENGTH, 256) }
+                    Attributes = { new TransformAttribute(TransformAttr.KEY_LENGTH, 128) }
                 },
                 new Transform
                 {
@@ -797,7 +804,7 @@ public class VpnSession
                 new Transform
                 {
                     Type = TransformType.ESN,
-                    Id = (uint)EsnId.ESN
+                    Id = (uint)EsnId.NO_ESN
                 }
             }
         };
