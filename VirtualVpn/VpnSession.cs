@@ -54,6 +54,7 @@ public class VpnSession
     private readonly ISessionHost _sessionHost;
     private readonly bool _weAreInitiator;
     private readonly ulong _localSpi;
+    private byte[]? _localSpiOut; // for spawned child SA
     private readonly byte[] _localNonce;
     private BCDiffieHellman? _keyExchange;
     private Proposal? _lastSaProposal;
@@ -668,11 +669,14 @@ public class VpnSession
         var cryptoOut = new IkeCrypto(cipher, check, null, skEr, skAr, null, null);
 
 
-        var randomSpi = new byte[4];
-        RandomNumberGenerator.Fill(randomSpi);
+        if (_localSpiOut is null)
+        {
+            _localSpiOut = new byte[4];
+            RandomNumberGenerator.Fill(_localSpiOut);
+        }
+        var spiOut = Bit.BytesToUInt32(_localSpiOut);
 
-        var spiOut = Bit.BytesToUInt32(randomSpi);
-        var childSa = new ChildSa(IpV4Address.FromEndpoint(gateway), randomSpi, childProposal.SpiData, cryptoIn, cryptoOut, _server, this);
+        var childSa = new ChildSa(IpV4Address.FromEndpoint(gateway), _localSpiOut, childProposal.SpiData, cryptoIn, cryptoOut, _server, this);
 
         // '_thisSessionChildren' using spiOut, '_sessionHost' using spiIn.
         // Note: we may need to fiddle these around (or use both) if sessions don't look like they're working
@@ -803,14 +807,15 @@ public class VpnSession
         var pskAuth = GeneratePskAuth(_initMessage, _peerNonce, mainIDi, mySkP, _myCrypto?.Prf);
         Log.Debug($"Sending PSK auth:\r\n{Bit.HexString(pskAuth)}");
         
-        var spiOut = new byte[4];
-        RandomNumberGenerator.Fill(spiOut);
+        _localSpiOut = new byte[4];
+        RandomNumberGenerator.Fill(_localSpiOut);
+        Log.Debug($"Supplying ESP SPI as {Bit.BytesToUInt32(_localSpiOut):x8}");
         
         var espProposal = new Proposal
         {
             Number = 1,
             Protocol = IkeProtocolType.ESP,
-            SpiData = spiOut,
+            SpiData = _localSpiOut,
             Transforms = {
                 new Transform
                 {
@@ -863,7 +868,7 @@ public class VpnSession
         Send(to: new IPEndPoint(sender.Address, port:4500), message: msgBytes);
         //Send(to: sender, message: msgBytes); // this would stay on 500, which I think is allowed. But it's not normal
         State = SessionState.AUTH_SENT;
-        // Next are exchanges in the ChildSA
+        // Next is HandleAuthConfirm()
     }
     
     /// <summary>
