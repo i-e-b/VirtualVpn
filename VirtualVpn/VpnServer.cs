@@ -1,4 +1,5 @@
 ﻿using System.Net;
+using System.Net.Sockets;
 using SkinnyJson;
 using VirtualVpn.Enums;
 using VirtualVpn.EspProtocol;
@@ -30,8 +31,18 @@ public class VpnServer : ISessionHost, IDisposable
 
     public VpnServer()
     {
-        _server = new UdpServer(IkeResponder, SpeResponder);
-        _eventPumpThread = new Thread(EventPumpLoop){IsBackground = true};
+        try
+        {
+            _server = new UdpServer(IkeResponder, SpeResponder);
+        }
+        catch (SocketException ex)
+        {
+            Log.Critical("Could not start VirtualVPN UDP server. Do you have other VPN software running? Try 'ipsec stop'");
+            Log.Error("Failed to start core network interface", ex);
+            throw;
+        }
+
+        _eventPumpThread = new Thread(EventPumpLoop) { IsBackground = true };
     }
 
     public void Run()
@@ -379,6 +390,7 @@ public class VpnServer : ISessionHost, IDisposable
         // reject unknown sessions
         if (!_childSessions.ContainsKey(spi))
         {
+            // TODO: check for a child session with reversed key?
             Log.Warn($"    Unknown session: 0x{spi:x16} -- not replying");
             return;
         }

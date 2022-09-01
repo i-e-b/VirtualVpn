@@ -170,8 +170,8 @@ public class ChildSaTests
             skEi, skAi, null, null
         );
 
-        var sender = new ChildSa(IpV4Address.Localhost, spiIn, spiOut, cryptoIn, cryptoOut, null);
-        var receiver = new ChildSa(IpV4Address.Localhost,spiOut, spiIn, cryptoOut, cryptoIn, null);
+        var sender = new ChildSa(IpV4Address.Localhost, spiIn, spiOut, cryptoIn, cryptoOut, null, null);
+        var receiver = new ChildSa(IpV4Address.Localhost,spiOut, spiIn, cryptoOut, cryptoIn, null, null);
 
         var original = new IpV4Packet
         {
@@ -277,7 +277,7 @@ public class ChildSaTests
             skEi, skAi, null, null
         );
 
-        var subject = new ChildSa(IpV4Address.Localhost, spiIn, spiOut, cryptoIn, cryptoOut, null);
+        var subject = new ChildSa(IpV4Address.Localhost, spiIn, spiOut, cryptoIn, cryptoOut, null, null);
 
         var packet = subject.ReadSpe(esp0, out var espPkt);
 

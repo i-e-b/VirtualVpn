@@ -16,7 +16,7 @@ public class ChildSa : ITransportTunnel
     public IpV4Address Gateway { get; set; }
 
     // pvpn/server.py:18
-    public ChildSa(IpV4Address gateway, byte[] spiIn, byte[] spiOut, IkeCrypto cryptoIn, IkeCrypto cryptoOut, IUdpServer? server)
+    public ChildSa(IpV4Address gateway, byte[] spiIn, byte[] spiOut, IkeCrypto cryptoIn, IkeCrypto cryptoOut, IUdpServer? server, VpnSession? parent)
     {
         Gateway = gateway;
         _spiIn = spiIn;
@@ -24,6 +24,9 @@ public class ChildSa : ITransportTunnel
         _cryptoIn = cryptoIn;
         _cryptoOut = cryptoOut;
         _server = server;
+        _parent = parent;
+        
+        _keepAliveTrigger = new EspTimedEvent(KeepAliveEvent, Settings.KeepAliveTimeout);
 
         _msgIdIn = 1;
         _msgIdOut = 1;
@@ -32,6 +35,13 @@ public class ChildSa : ITransportTunnel
         SpiIn = Bit.ReadUInt32(spiIn, ref idx);
         idx = 0;
         SpiOut = Bit.ReadUInt32(spiOut, ref idx);
+    }
+
+    private void KeepAliveEvent(EspTimedEvent obj)
+    {
+        Log.Debug($"Sending keep-alive to {Gateway.AsString}:{4500}");
+        _keepAliveTrigger.Reset();
+        _server?.SendRaw(new byte[]{ 0xff }, Gateway.MakeEndpoint(4500));
     }
 
     public void IncrementMessageId(uint espPacketSequence)
@@ -46,9 +56,13 @@ public class ChildSa : ITransportTunnel
     /// </summary>
     public bool EventPump()
     {
-        // TODO: if we are the initiator, we should send periodic keep-alive pings to the peer.
-        
-        
+        // if we are the initiator, we should send periodic keep-alive pings to the peer.
+        if (_parent?.WeStarted == true)
+        {
+            _keepAliveTrigger.TriggerIfExpired();
+        }
+
+
         // Check TCP sessions, close them if they are timed out.
         var acted = false;
         var allSessions = _tcpSessions.Keys.ToList();
@@ -169,13 +183,15 @@ public class ChildSa : ITransportTunnel
     private readonly IkeCrypto _cryptoIn;
     private readonly IkeCrypto _cryptoOut;
     private readonly IUdpServer? _server;
+    private readonly VpnSession? _parent;
     private long _msgIdIn;
     private long _msgIdOut;
     private long _captureNumber;
     
     private readonly ThreadSafeMap<SenderPort, TcpAdaptor> _tcpSessions = new();
     private readonly ThreadSafeMap<SenderPort, TcpAdaptor> _parkedSessions = new();
-    
+    private readonly EspTimedEvent _keepAliveTrigger;
+
     /// <summary>
     /// Immediately remove the connection from sessions and stop event pump
     /// </summary>
@@ -198,6 +214,7 @@ public class ChildSa : ITransportTunnel
     {
         Log.Info($"HandleSpe: data={data.Length} bytes, sender={sender}");
         
+        _parent?.UpdateTrafficTimeout();
         var incomingIpv4Message = ReadSpe(data, out var espPkt);
 
 

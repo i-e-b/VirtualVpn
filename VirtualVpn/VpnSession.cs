@@ -212,6 +212,11 @@ public class VpnSession
         // We should have crypto now, as long as we're out of IKE_SA_INIT phase
         request.ReadPayloadChain(_peerCrypto); // pvpn/server.py:266
 
+        RouteMessageBasedOnTypeAndState(request, sender, sendZeroHeader);
+    }
+
+    private void RouteMessageBasedOnTypeAndState(IkeMessage request, IPEndPoint sender, bool sendZeroHeader)
+    {
         switch (request.Exchange)
         {
             case ExchangeType.IKE_SA_INIT: // pvpn/server.py:268
@@ -249,9 +254,16 @@ public class VpnSession
                         HandleAuthConfirm(request, sender, sendZeroHeader);
                         break;
                     }
+                    case SessionState.ESTABLISHED:
+                    {
+                        Log.Critical("IKE_AUTH received for established connection. We might have failed a DPD check, or not sent keep-alive messages?");
+                        // TODO: need to be able to re-establish a connection we thought was up.
+                        break;
+                    }
                     default:
                         throw new Exception($"Received {nameof(ExchangeType.IKE_AUTH)}, so expected to be in state {nameof(SessionState.SA_SENT)} or {nameof(SessionState.AUTH_SENT)}, but was in {State.ToString()}");
                 }
+
                 break;
 
             case ExchangeType.INFORMATIONAL: // pvpn/server.py:315
@@ -271,6 +283,40 @@ public class VpnSession
             default:
                 throw new Exception($"Unexpected request: {request.Exchange.ToString()}");
         }
+    }
+
+    /// <summary>
+    /// Handle a new IKE_AUTH during established state.
+    /// <p></p>
+    /// This is for signalling changes 
+    /// https://datatracker.ietf.org/doc/html/rfc4555
+    /// </summary>
+    /// <param name="request"></param>
+    /// <param name="sender"></param>
+    /// <param name="sendZeroHeader"></param>
+    private void HandleMobIke(IkeMessage request, IPEndPoint sender, bool sendZeroHeader)
+    {
+        // IEB: Continue here. Probably need to send a correctly formed reply
+        Log.Debug("        HandleMobIke():: payloads incoming:", request.DescribeAllPayloads);
+        Log.Debug($"        sender={sender.Address}:{sender.Port}, zero pad={sendZeroHeader}");
+        
+        // https://datatracker.ietf.org/doc/html/rfc4555#page-7
+        /*
+   (Initiator gets information from lower layers that its attachment
+   point and address have changed.)
+
+   3) (IP_I2:4500 -> IP_R1:4500)
+      HDR, SK { N(UPDATE_SA_ADDRESSES),
+                N(NAT_DETECTION_SOURCE_IP),
+                N(NAT_DETECTION_DESTINATION_IP) }  -->
+
+                            <-- (IP_R1:4500 -> IP_I2:4500)
+                                HDR, SK { N(NAT_DETECTION_SOURCE_IP),
+                                     N(NAT_DETECTION_DESTINATION_IP) }
+
+   (Responder verifies that the initiator has given it a correct IP
+   address.)
+         */
     }
 
     /// <summary>
@@ -300,6 +346,14 @@ public class VpnSession
         {
             Log.Debug("No delete payloads found in Informational packet. Will reply, but nothing else");
             Log.Trace($"Found payloads: {string.Join(", ", request.Payloads.Select(p => p.Type.ToString()))};");
+            
+            var mobIkeFlag = request.GetPayload<PayloadNotify>(pl => pl.NotificationType == NotifyId.UPDATE_SA_ADDRESSES);
+            if (mobIkeFlag is not null)
+            {
+                Log.Info("Received MOB-IKE update.");
+                HandleMobIke(request, sender, sendZeroHeader);
+                return;
+            }
 
             // Nothing to do, but we must reply
             Send(to: sender, message: BuildResponse(ExchangeType.INFORMATIONAL, sendZeroHeader, _myCrypto));
@@ -582,7 +636,7 @@ public class VpnSession
         RandomNumberGenerator.Fill(randomSpi);
 
         var spiOut = Bit.BytesToUInt32(randomSpi);
-        var childSa = new ChildSa(IpV4Address.FromEndpoint(gateway), randomSpi, childProposal.SpiData, cryptoIn, cryptoOut, _server);
+        var childSa = new ChildSa(IpV4Address.FromEndpoint(gateway), randomSpi, childProposal.SpiData, cryptoIn, cryptoOut, _server, this);
 
         // '_thisSessionChildren' using spiOut, '_sessionHost' using spiIn.
         // Note: we may need to fiddle these around (or use both) if sessions don't look like they're working
@@ -754,7 +808,7 @@ public class VpnSession
             new PayloadSa(espProposal),
             new PayloadTsi(Settings.LocalTrafficSelector), // our address ranges,
             new PayloadTsr(Settings.RemoteTrafficSelector), // expected ranges on their side
-            new PayloadNotify(IkeProtocolType.NONE, NotifyId.MOBIKE_SUPPORTED, null, null)
+            new PayloadNotify(IkeProtocolType.NONE, NotifyId.MOBIKE_SUPPORTED, null, null) // Enable mobility extensions
             // Notifications for extra IP addresses could go here, but we don't support them yet.
         );
         
@@ -763,6 +817,7 @@ public class VpnSession
         if (!ok) Log.Warn("Message did not pass our own checksum. Likely to be rejected by peer.");
         
         // Switch to 4500 port now. The protocol works without it, but VirtualVPN assumes the switch will happen.
+        // See https://docs.strongswan.org/docs/5.9/features/mobike.html
         Send(to: new IPEndPoint(sender.Address, port:4500), message: msgBytes);
         //Send(to: sender, message: msgBytes); // this would stay on 500, which I think is allowed. But it's not normal
         State = SessionState.AUTH_SENT;
@@ -926,5 +981,10 @@ public class VpnSession
         );
 
         Send(to: _lastContact, response);
+    }
+
+    public void UpdateTrafficTimeout()
+    {
+        LastTouchTimer.Restart();
     }
 }

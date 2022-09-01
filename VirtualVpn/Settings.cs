@@ -1,5 +1,8 @@
 ﻿using VirtualVpn.Enums;
 using VirtualVpn.EspProtocol.Payloads.PayloadSubunits;
+using VirtualVpn.Helpers;
+// ReSharper disable FieldCanBeMadeReadOnly.Global
+#pragma warning disable CA2211 // constants should not be public
 
 namespace VirtualVpn;
 
@@ -8,14 +11,13 @@ public static class Settings
     /// <summary>
     /// Prefix on capture files
     /// </summary>
-    //public const string FileBase = "/root/airlift/";
-    public const string FileBase = @"C:\temp\traffic\";
+    public static string FileBase = Platform.Current() == Platform.Kind.Linux ? "/root/airlift/" : @"C:\temp\traffic\";
     
     /// <summary>
     /// Listener prefix for the web "airlift". This helps you pull logs.
     /// </summary>
-    //public const string HttpPrefix = "://+:8011/"; // <-- this will require root/admin access.
-    public const string HttpPrefix = "://localhost:8011/"; // <-- use this if testing locally
+    public const string HttpPrefix = "://+:8011/"; // <-- this will require root/admin access.
+    //public const string HttpPrefix = "://localhost:8011/"; // <-- use this if testing locally
     
     /// <summary>
     /// INSECURE if true
@@ -71,6 +73,11 @@ public static class Settings
     public static TimeSpan IkeTimeout => TimeSpan.FromSeconds(30);
 
     /// <summary>
+    /// How often keep-alive messages are sent for ChildSa connections we started
+    /// </summary>
+    public static TimeSpan KeepAliveTimeout => TimeSpan.FromSeconds(10);
+    
+    /// <summary>
     /// A description of the network on our side of the VPN tunnel.
     /// This must match the expectations of the other side, or the connection will fail.
     /// </summary>
@@ -102,8 +109,8 @@ public static class Settings
     /// <p></p>
     /// This does NOT need to be a real machine's address.
     /// </summary>
-    //public static readonly byte[] LocalIpAddress = { 192, 168, 0, 2 }; // Hans
-    public static readonly byte[] LocalIpAddress = { 185, 81, 252, 44 }; // Behind NAT
+    public static readonly byte[] LocalIpAddress = { 192, 168, 0, 2 }; // Hans
+    //public static readonly byte[] LocalIpAddress = { 185, 81, 252, 44 }; // Behind NAT
     
     /// <summary>
     /// TCP port of the app we're tunnelling
