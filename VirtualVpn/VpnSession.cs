@@ -79,7 +79,7 @@ public class VpnSession
         _localSpi = Bit.RandomSpi();
         _localNonce = Bit.RandomNonce();
         State = SessionState.INITIAL;
-        _peerMsgId = -1;
+        _peerMsgId = 0;
         
         LastTouchTimer = new Stopwatch();
         LastTouchTimer.Start();
