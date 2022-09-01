@@ -24,12 +24,6 @@ public class EspTimedEvent
         Timer.Start();
     }
 
-    public EspTimedEvent()
-    {
-        Timer = new Stopwatch();
-        Timer.Start();
-    }
-
     /// <summary>
     /// Fire the event action if required.
     /// <p></p>

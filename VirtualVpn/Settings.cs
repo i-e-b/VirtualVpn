@@ -99,7 +99,7 @@ public static class Settings
         Protocol = IpProtocol.ANY,
         StartPort = 0,
         EndPort = 65535,
-        StartAddress = new byte[] { 192,168,0,0 },
+        StartAddress = new byte[] { 192,168,0,40 },
         EndAddress = new byte[] { 192,168,0,40 }
     };
 

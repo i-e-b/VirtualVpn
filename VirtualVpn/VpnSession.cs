@@ -526,6 +526,15 @@ public class VpnSession
         var idr = request.GetPayload<PayloadIDr>() ?? throw new Exception("IKE_AUTH did not have an IDi payload");
         var auth = request.GetPayload<PayloadAuth>();
         if (auth is null) throw new Exception("Peer requested EAP, which we don't support");
+        
+        // Check for
+        // Payload=Notification; ProtocolType=NONE; NotificationType=NO_PROPOSAL_CHOSEN; Spi=; InfoData=;
+        var noPropMessage = request.GetPayload<PayloadNotify>(pl => pl.NotificationType == NotifyId.NO_PROPOSAL_CHOSEN);
+        if (noPropMessage is not null)
+        {
+            Log.Critical("Peer did not accept any of the ChildSA proposals. Cannot continue.");
+            return;
+        }
 
         var pskAuth = GeneratePskAuth(_previousRequestRawData, _localNonce, idr, peerSkp, _peerCrypto?.Prf);
         if (Bit.AreDifferent(pskAuth, auth.AuthData))
