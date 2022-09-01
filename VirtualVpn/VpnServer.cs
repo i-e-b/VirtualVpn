@@ -253,14 +253,7 @@ public class VpnServer : ISessionHost, IDisposable
 
     public void AddChildSession(ChildSa childSa)
     {
-        if (childSa.WeAreInitiator)
-        {
-            _childSessions.Add(childSa.SpiOut, childSa);
-        }
-        else
-        {
-            _childSessions.Add(childSa.SpiIn, childSa);
-        }
+        _childSessions.Add(childSa.SpiIn, childSa);
     }
 
     public void RemoveSession(ulong spi)
