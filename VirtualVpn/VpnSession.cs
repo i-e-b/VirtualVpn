@@ -573,7 +573,9 @@ public class VpnSession
         _peerMsgId = 0; // ???
         
         // IKE flags Initiator, message id=1, first payload=SK
-        var msgBytes = BuildSerialMessage(ExchangeType.INFORMATIONAL, MessageFlag.Initiator, sendZeroHeader,
+        Log.Trace("Building AUTH/SA confirmation message, switching to port 4500");
+        var msgBytes = BuildSerialMessage(ExchangeType.INFORMATIONAL, MessageFlag.Initiator,
+            sendZeroHeader: true, // required when switching to 4500
             _myCrypto, _localSpi, _peerSpi, msgId: _ourMsgId++
         );
         
@@ -581,10 +583,9 @@ public class VpnSession
         var ok = _myCrypto!.VerifyChecksum(msgBytes.Skip(4).ToArray());
         if (!ok) Log.Warn("Message did not pass our own checksum. Likely to be rejected by peer.");
         
-        Send(to: sender, message: msgBytes);
         // Switch to 4500 port now. The protocol works without it, but VirtualVPN assumes the switch will happen.
         // See https://docs.strongswan.org/docs/5.9/features/mobike.html
-        //Send(to: new IPEndPoint(sender.Address, port:4500), message: msgBytes);
+        Send(to: new IPEndPoint(sender.Address, port:4500), message: msgBytes);
     }
 
     // ReSharper disable CommentTypo
@@ -826,9 +827,9 @@ public class VpnSession
         _lastSaProposal = espProposal;
         
         // IKE flags Initiator, message id=1, first payload=SK
-        Log.Trace("Building AUTH/SA confirmation message, switching to port 4500");
+        //Log.Trace("Building AUTH/SA confirmation message, switching to port 4500");
         var msgBytes = BuildSerialMessage(ExchangeType.IKE_AUTH, MessageFlag.Initiator,
-            sendZeroHeader:true, // because we are switching to 4500
+            sendZeroHeader,//:true, // because we are switching to 4500
             _myCrypto, _localSpi, _peerSpi, msgId: _ourMsgId++,
             
             mainIDi,
@@ -851,8 +852,8 @@ public class VpnSession
         
         // Switch to 4500 port now. The protocol works without it, but VirtualVPN assumes the switch will happen.
         // See https://docs.strongswan.org/docs/5.9/features/mobike.html
-        Send(to: new IPEndPoint(sender.Address, port:4500), message: msgBytes);
-        //Send(to: sender, message: msgBytes); // this would stay on 500, which I think is allowed. But it's not normal
+        //Send(to: new IPEndPoint(sender.Address, port:4500), message: msgBytes);
+        Send(to: sender, message: msgBytes); // this would stay on 500, which I think is allowed. But it's not normal
         State = SessionState.AUTH_SENT;
     }
     
