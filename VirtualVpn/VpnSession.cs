@@ -731,7 +731,7 @@ public class VpnSession
         _keyExchange ??= BCDiffieHellman.CreateForGroup(DhId.DH_14) ?? throw new Exception("Failed to generate key exchange when generating new session");
         _keyExchange.get_our_public_key(out var newPublicKey);
 
-        _initMessage = BuildSerialMessage(ExchangeType.IKE_SA_INIT, MessageFlag.Initiator, false, null, _localSpi, 0, _peerMsgId,
+        _initMessage = BuildSerialMessage(ExchangeType.IKE_SA_INIT, MessageFlag.Initiator, false, null, _localSpi, 0, _myMsgId++,
             new PayloadSa(defaultProposal),
             new PayloadNonce(_localNonce),
             new PayloadKeyExchange(DhId.DH_14, newPublicKey), // Pre-start our preferred exchange
