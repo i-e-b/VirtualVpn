@@ -372,13 +372,14 @@ public class VpnSession
             // Nothing to do, but we must reply
             if (_weAreInitiator)
             {
-                Log.Debug("Ignoring empty information, because we are the initiator");
+                if (request.Payloads.Count < 1) Log.Debug("Ignoring empty information, because we are the initiator");
+                else HandleInformationExchange(request, sender, sendZeroHeader);
+                
+                return;
             }
-            else
-            {
-                Send(to: sender, message: BuildResponse(ExchangeType.INFORMATIONAL, _peerMsgId, sendZeroHeader, _myCrypto));
-            }
-
+            
+            // Ping an empty message back
+            Send(to: sender, message: BuildResponse(ExchangeType.INFORMATIONAL, _peerMsgId, sendZeroHeader, _myCrypto));
             return;
         }
 
@@ -421,6 +422,27 @@ public class VpnSession
 
         Send(to: sender, message: BuildResponse(ExchangeType.INFORMATIONAL, _peerMsgId, sendZeroHeader, _myCrypto,
             new PayloadDelete(deletePayload.ProtocolType, matches)));
+    }
+
+    private void HandleInformationExchange(IkeMessage request, IPEndPoint sender, bool sendZeroHeader)
+    {
+        // IEB: Not sure what should be happening here.
+        /* Payload=Notification; ProtocolType=NONE; NotificationType=ADDITIONAL_IP4_ADDRESS; Address=159.69.13.126;
+    Payload=Notification; ProtocolType=NONE; NotificationType=ADDITIONAL_IP6_ADDRESS; Spi=; InfoData=2a0104f80c0c95a70000000000000001;
+    Payload=Notification; ProtocolType=NONE; NotificationType=ADDITIONAL_IP4_ADDRESS; Address=10.0.0.2;
+    Payload=Notification; ProtocolType=NONE; NotificationType=ADDITIONAL_IP4_ADDRESS; Address=192.168.0.40;
+*/
+        Log.Debug($"Info exchange (MobIke handshake?) MSG IN: flags={request.MessageFlag.ToString()}, msgId={request.MessageId}, spi_i={request.SpiI:x16}, spi_r={request.SpiR:x16}");
+        
+        var messageBytes = BuildSerialMessage(
+            ExchangeType.INFORMATIONAL, MessageFlag.Initiator|MessageFlag.Response, sendZeroHeader, _myCrypto, _localSpi/*??*/, _peerSpi, _peerMsgId,
+            new PayloadNotify(IkeProtocolType.NONE, NotifyId.ADDITIONAL_IP4_ADDRESS, null, Settings.LocalIpAddress),
+            new PayloadNotify(IkeProtocolType.NONE, NotifyId.ADDITIONAL_IP4_ADDRESS, null, Settings.LocalTrafficSelector.StartAddress)
+            );
+        
+        Log.Debug($"Info exchange (MobIke handshake?) MSG OUT. Sending addresses {new IpV4Address(Settings.LocalIpAddress).AsString} and {new IpV4Address(Settings.LocalTrafficSelector.StartAddress).AsString}");
+        
+        Send(to: sender, messageBytes);
     }
 
     private bool TryRemoveChild(byte[] deadSpi)
