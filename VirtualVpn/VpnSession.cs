@@ -502,7 +502,7 @@ public class VpnSession
             return;
         }
 
-        var childKey = CreateChildKey(sender, chosenChildProposal, _peerNonce, _localNonce, tsr);
+        var childKey = CreateChildKey(sender, chosenChildProposal, _peerNonce, _localNonce, tsi);
         Log.Debug($"    New ESP SPI = {childKey.SpiIn:x8}");
         chosenChildProposal.SpiData = Bit.UInt32ToBytes(childKey.SpiIn); // Used to refer to the child SA in ESP messages?
         chosenChildProposal.SpiSize = 4;

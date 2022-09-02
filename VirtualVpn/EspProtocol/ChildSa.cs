@@ -419,6 +419,7 @@ public class ChildSa : ITransportTunnel
 
         foreach (var selector in _trafficSelect.Selectors)
         {
+            Log.Trace($" comparing {target.AsString} to {selector.Describe()}");
             if (selector.Contains(target)) return true;
         }
         return false;
