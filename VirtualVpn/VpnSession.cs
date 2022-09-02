@@ -194,7 +194,8 @@ public class VpnSession
 
             if (request.MessageId == 0 && request.Exchange == ExchangeType.INFORMATIONAL)
             {
-                Log.Info("Got message ID=0 and information exchange. This should be some kind of keep alive? Not responding for now");
+                Log.Info("Got message ID=0 and information exchange. This should be some kind of keep alive? Sending reply back.");
+                Send(to: sender, request.RawData);
                 return;
             }
 
