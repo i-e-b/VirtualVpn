@@ -575,7 +575,7 @@ public class VpnSession
 
         Log.Debug("    Setting state to established");
         State = SessionState.ESTABLISHED; // Should now have a full Child SA
-        
+        /*
         // https://www.rfc-editor.org/rfc/rfc7296#section-1.3.1
         // Send a create child sa message?
         
@@ -593,6 +593,7 @@ public class VpnSession
         // See https://docs.strongswan.org/docs/5.9/features/mobike.html
         //Send(to: new IPEndPoint(sender.Address, port:4500), message: msgBytes);
         //Send(to: sender, message: msgBytes);
+        */
     }
 
     // ReSharper disable CommentTypo
@@ -733,7 +734,7 @@ public class VpnSession
         _keyExchange ??= BCDiffieHellman.CreateForGroup(DhId.DH_14) ?? throw new Exception("Failed to generate key exchange when generating new session");
         _keyExchange.get_our_public_key(out var newPublicKey);
 
-        _initMessage = BuildSerialMessage(ExchangeType.IKE_SA_INIT, MessageFlag.Initiator, false, null, _localSpi, 0, _myMsgId++,
+        _initMessage = BuildSerialMessage(ExchangeType.IKE_SA_INIT, MessageFlag.Initiator, false, null, _localSpi, 0, 0,
             new PayloadSa(defaultProposal),
             new PayloadNonce(_localNonce),
             new PayloadKeyExchange(DhId.DH_14, newPublicKey), // Pre-start our preferred exchange
@@ -843,7 +844,7 @@ public class VpnSession
         //Log.Trace("Building HandleSaConfirm confirmation message");
         var msgBytes = BuildSerialMessage(ExchangeType.IKE_AUTH, MessageFlag.Initiator,
             sendZeroHeader:true, // 'true' if we are switching to 4500
-            _myCrypto, _localSpi, _peerSpi, msgId: _myMsgId++,
+            _myCrypto, _localSpi, _peerSpi, msgId: 1,
             
             mainIDi,
             new PayloadNotify(IkeProtocolType.NONE, NotifyId.INITIAL_CONTACT, null, null),
