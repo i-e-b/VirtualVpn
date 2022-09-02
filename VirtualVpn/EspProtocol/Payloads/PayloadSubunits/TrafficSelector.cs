@@ -62,7 +62,7 @@ public class TrafficSelector
         if (StartAddress.Length == 4)
         {
             return $"Type={Type.ToString()}, Pr={Protocol.ToString()}, Port={StartPort}-{EndPort}, " +
-                   $"Address={StartAddress[0]}.{StartAddress[1]}.{StartAddress[2]}.{StartAddress[2]} - {EndAddress[0]}.{EndAddress[1]}.{EndAddress[2]}.{EndAddress[3]}";
+                   $"Address={StartAddress[0]}.{StartAddress[1]}.{StartAddress[2]}.{StartAddress[3]} - {EndAddress[0]}.{EndAddress[1]}.{EndAddress[2]}.{EndAddress[3]}";
         }
         
         return $"Type={Type.ToString()}, Pr={Protocol.ToString()}, Port={StartPort}-{EndPort}, " +
