@@ -164,15 +164,18 @@ public class VpnServer : ISessionHost, IDisposable
             }
             case "ping":
             {
-                try
-                {
-                    DoPing(prefix);
-                }
-                catch (Exception ex)
-                {
-                    Log.Error("Failed ping", ex);
-                }
-
+                try { DoPing(prefix); }
+                catch (Exception ex) { Log.Error("Failed ping", ex); }
+                break;
+            }
+            case "save": {
+                try { SaveSettings(prefix); }
+                catch (Exception ex) { Log.Error("Failed to save settings", ex); }
+                break;
+            }
+            case "load": {
+                try { LoadSettings(prefix); }
+                catch (Exception ex) { Log.Error("Failed to load settings", ex); }
                 break;
             }
             default:
@@ -185,8 +188,30 @@ public class VpnServer : ISessionHost, IDisposable
                 Console.WriteLine("        psk [psk-string]");
                 Console.WriteLine("    General:");
                 Console.WriteLine("        quit, capture, ping [ip-address]");
+                Console.WriteLine("        load [file-name], save [file-name]");
                 return;
         }
+    }
+
+    private void LoadSettings(string[] prefix)
+    {
+        if (string.IsNullOrWhiteSpace(prefix[1])) throw new Exception("Invalid file name for load");
+        if (!File.Exists(prefix[1])) throw new Exception($"File not found: {prefix[1]}; Base directory={Environment.CurrentDirectory}");
+        
+        var json = File.ReadAllText(prefix[1]);
+        Json.DefrostInto(typeof(Settings), json);
+        
+        Log.Info($"Loaded: {json}");
+    }
+
+    private void SaveSettings(string[] prefix)
+    {
+        if (string.IsNullOrWhiteSpace(prefix[1])) throw new Exception("Invalid file name for save");
+        
+        var json = Json.Freeze(typeof(Settings));
+        File.WriteAllText(prefix[1], json);
+        
+        Log.Info($"Stored: {json}");
     }
 
     private void DoPing(string[] prefix)
@@ -223,7 +248,7 @@ public class VpnServer : ISessionHost, IDisposable
         {
             if (childSession.Value.Gateway == requestedGateway)
             {
-                Console.WriteLine($"A VPN session is already open with {requestedGateway} as {childSession.Key}.\r\nTry 'kill {childSession.Key}' if you want to restart");
+                Console.WriteLine($"A VPN session is already open with {requestedGateway} as {childSession.Key:x}.\r\nTry 'kill {childSession.Key:x}' if you want to restart");
                 return;
             }
         }
@@ -233,7 +258,7 @@ public class VpnServer : ISessionHost, IDisposable
         {
             if (vpnSession.Value.Gateway == requestedGateway)
             {
-                Console.WriteLine($"A VPN session is in progress with {requestedGateway} as {vpnSession.Key}.\r\nTry 'kill {vpnSession.Key}' if you want to restart");
+                Console.WriteLine($"A VPN session is in progress with {requestedGateway} as {vpnSession.Key:x}.\r\nTry 'kill {vpnSession.Key:x}' if you want to restart");
                 return;
             }
         }

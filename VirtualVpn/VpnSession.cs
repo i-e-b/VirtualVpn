@@ -105,26 +105,41 @@ public class VpnSession
         // The EventPump() on each child is responsible for sending keep-alive messages if it is the initiator.
         // The VpnServer instance fires child session event pump separately from this one.
 
-        if (State == SessionState.ESTABLISHED)
+        switch (State)
         {
-            if (LastTouchTimer.Elapsed < Settings.EspTimeout) return;
-            // TODO: fire a DELETE message, but don't wait for reply
-            
-            Log.Critical("Session timed-out after establishment. Are keep-alive messages not arriving?");
-            foreach (var child in _thisSessionChildren)
+            case SessionState.ESTABLISHED:
             {
-                _sessionHost.RemoveChildSession(child.Key);
-            }
-
-            _sessionHost.RemoveSession(_localSpi);
-        }
-        else
-        {
-            if (LastTouchTimer.Elapsed < Settings.IkeTimeout) return;
-            // TODO: fire a DELETE message, but don't wait for reply
+                if (LastTouchTimer.Elapsed < Settings.EspTimeout) return;
+                // TODO: fire a DELETE message, but don't wait for reply
             
-            Log.Critical($"Session timed-out during negotiation (state={State.ToString()}). The session will be abandoned.");
-            _sessionHost.RemoveSession(_localSpi);
+                Log.Critical($"Session {_localSpi:x} timed-out after establishment. Are keep-alive messages not arriving?");
+                foreach (var child in _thisSessionChildren)
+                {
+                    _sessionHost.RemoveChildSession(child.Key);
+                }
+
+                _sessionHost.RemoveSession(_localSpi);
+                
+                State = SessionState.DELETED;
+                break;
+            }
+            case SessionState.DELETED:
+            {
+                Log.Trace($"Removing deleted session {_localSpi:x}");
+                _sessionHost.RemoveSession(_localSpi);
+                break;
+            }
+            default:
+            {
+                if (LastTouchTimer.Elapsed < Settings.IkeTimeout) return;
+                // TODO: fire a DELETE message, but don't wait for reply
+            
+                Log.Critical($"Session {_localSpi:x} timed-out during negotiation (state={State.ToString()}). The session will be abandoned.");
+                _sessionHost.RemoveSession(_localSpi);
+                
+                State = SessionState.DELETED;
+                break;
+            }
         }
     }
 

@@ -1,5 +1,8 @@
 ﻿using VirtualVpn;
+using VirtualVpn.Helpers;
 using VirtualVpn.Web;
+
+Console.WriteLine($"Starting up VirtualVPN. Current platform={Platform.Current().ToString()}");
 
 Log.SetLevel(Settings.DefaultLogLevel);
 
