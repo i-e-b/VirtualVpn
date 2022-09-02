@@ -192,6 +192,12 @@ public class VpnSession
                 return;
             }
 
+            if (request.MessageId == 0 && request.Exchange == ExchangeType.INFORMATIONAL)
+            {
+                Log.Info("Got message ID=0 and information exchange. This should be some kind of keep alive? Not responding for now");
+                return;
+            }
+
             Log.Info("    Asked to repeat a message we sent. Directly re-sending.");
             _server.SendRaw(_lastSentMessageBytes, sender); // don't add zero pad again?
             return;
