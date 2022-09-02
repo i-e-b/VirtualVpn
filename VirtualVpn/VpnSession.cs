@@ -710,10 +710,12 @@ public class VpnSession
         }
         var spiOut = Bit.BytesToUInt32(_localSpiOut);
 
+        // The crypto settings are swapped depending on who started the exchanges.
+        if (_weAreInitiator) (cryptoIn, cryptoOut) = (cryptoOut, cryptoIn);
+        
         var childSa = new ChildSa(IpV4Address.FromEndpoint(gateway), _localSpiOut, childProposal.SpiData, cryptoIn, cryptoOut, _server, this);
 
         // '_thisSessionChildren' using spiOut, '_sessionHost' using spiIn.
-        // Note: we may need to fiddle these around (or use both) if sessions don't look like they're working
         _sessionHost.AddChildSession(childSa); // this gets us the 32-bit SA used for ESA, not the 64-bit used for key exchange
         _thisSessionChildren.Add(spiOut, childSa);
 
