@@ -75,6 +75,8 @@ public class TrafficSelector
         var mid = target.AsInt;
         var high = new IpV4Address(EndAddress).AsInt;
         
+        Log.Trace($"    IPv4: {low} .. {mid} .. {high}");
+        
         return (mid >= low) && (mid <= high);
     }
 }
