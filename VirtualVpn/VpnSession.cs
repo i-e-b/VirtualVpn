@@ -329,12 +329,13 @@ public class VpnSession
     /// </summary>
     private void ReplyNotAcceptable(IPEndPoint sender, bool sendZeroHeader)
     {
-        var reKeyMessage = BuildSerialMessage(ExchangeType.IKE_SA_INIT, MessageFlag.Initiator, sendZeroHeader, null, _localSpi, _peerSpi, _peerMsgId,
+        var message = BuildSerialMessage(ExchangeType.IKE_SA_INIT, MessageFlag.Initiator | MessageFlag.Response, sendZeroHeader, null, _localSpi, _peerSpi, _peerMsgId,
             new PayloadDelete(IkeProtocolType.IKE, Array.Empty<byte[]>())
         );
 
         State = SessionState.DELETED;
-        Send(to: sender, reKeyMessage);
+        Log.Trace($"Sending 'not acceptable' message. Message ID={_peerMsgId}");
+        Send(to: sender, message);
     }
 
 
@@ -743,6 +744,7 @@ public class VpnSession
         );
 
         State = SessionState.IKE_INIT_SENT;
+        Log.Trace("Sending initial request for new session");
         Send(to: target, _initMessage);
         // Next should be HandleSaConfirm()
     }
@@ -766,7 +768,7 @@ public class VpnSession
         if (saPayload is null || saPayload.Proposals.Count != 1)
         {
             Log.Warn($"        Session: Peer did not agree with our proposition. Sending rejection to {sender.Address}:{sender.Port}");
-            Send(to: sender, message: BuildResponse(ExchangeType.IKE_SA_INIT, _peerMsgId, sendZeroHeader, null,
+            Send(to: sender, message: BuildResponse(ExchangeType.IKE_SA_INIT, 1, sendZeroHeader, null,
                 new PayloadNotify(IkeProtocolType.IKE, NotifyId.INVALID_KE_PAYLOAD, null, null)
             ));
             return;
@@ -780,7 +782,7 @@ public class VpnSession
         if (chosenProposal is null || preferredDiffieHellman != (uint)DhId.DH_14 || payloadKe is null)
         {
             Log.Warn($"        Session: Peer is trying to negotiate a different crypto setting. This is not currently supported. Sending rejection to {sender.Address}:{sender.Port}");
-            Send(to: sender, message: BuildResponse(ExchangeType.IKE_SA_INIT, _peerMsgId, sendZeroHeader, null,
+            Send(to: sender, message: BuildResponse(ExchangeType.IKE_SA_INIT, 1, sendZeroHeader, null,
                 new PayloadNotify(IkeProtocolType.IKE, NotifyId.INVALID_KE_PAYLOAD, null, null)
             ));
             return;
@@ -866,6 +868,7 @@ public class VpnSession
         
         // Switch to 4500 port now. The protocol works without it, but VirtualVPN assumes the switch will happen.
         // See https://docs.strongswan.org/docs/5.9/features/mobike.html
+        Log.Trace("Sending IKE_AUTH message");
         Send(to: new IPEndPoint(sender.Address, port:4500), message: msgBytes);
         //Send(to: sender, message: msgBytes); // this would stay on 500, which I think is allowed. But it's not normal
         State = SessionState.AUTH_SENT;
@@ -990,6 +993,7 @@ public class VpnSession
     {
         _lastContact = to;
         _lastSentMessageBytes = message;
+        Log.Trace($"Message outgoing. {message.Length} bytes to {to.Address}:{to.Port}");
         _server.SendRaw(message, to);
 
         if (Settings.CaptureTraffic)
@@ -1029,6 +1033,7 @@ public class VpnSession
             new PayloadNotify(IkeProtocolType.NONE, NotifyId.ADDITIONAL_IP4_ADDRESS, null, address.Value)
         );
 
+        Log.Error($"Sending ADDITIONAL_IP4_ADDRESS message. MsgId={_peerMsgId}");
         Send(to: _lastContact, response);
     }
 

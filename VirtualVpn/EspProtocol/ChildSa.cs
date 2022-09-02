@@ -42,7 +42,7 @@ public class ChildSa : ITransportTunnel
     {
         Log.Debug($"Sending keep-alive to {Gateway.AsString}:{4500}");
         _keepAliveTrigger.Reset();
-        //_server?.SendRaw(new byte[]{ 0xff }, Gateway.MakeEndpoint(4500));
+        _server?.SendRaw(new byte[]{ 0xff }, Gateway.MakeEndpoint(4500));
     }
 
     public void IncrementMessageId(uint espPacketSequence)
@@ -189,7 +189,7 @@ public class ChildSa : ITransportTunnel
     /// </summary>
     public void Send(IpV4Packet reply, IPEndPoint gateway)
     {
-        Log.Info("Sending reply");
+        Log.Info("ChildSa - Sending reply packet through gateway");
         var raw = WriteSpe(reply);
         Reply(raw, gateway);
     }
