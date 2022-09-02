@@ -162,6 +162,19 @@ public class VpnServer : ISessionHost, IDisposable
                 Settings.PreSharedKeyString = prefix[1]; // TODO: this should be on a per-gateway basis
                 break;
             }
+            case "ping":
+            {
+                try
+                {
+                    DoPing(prefix);
+                }
+                catch (Exception ex)
+                {
+                    Log.Error("Failed ping", ex);
+                }
+
+                break;
+            }
             default:
                 Console.WriteLine("Known commands:");
                 Console.WriteLine("    Logging:");
@@ -171,9 +184,22 @@ public class VpnServer : ISessionHost, IDisposable
                 Console.WriteLine("        notify [gateway-ip, network-location-ip]");
                 Console.WriteLine("        psk [psk-string]");
                 Console.WriteLine("    General:");
-                Console.WriteLine("        quit, capture");
+                Console.WriteLine("        quit, capture, ping [ip-address]");
                 return;
         }
+    }
+
+    private void DoPing(string[] prefix)
+    {
+        // First, try to find a VPN session that includes the target IP address
+        var target = IpV4Address.FromString(prefix[1]);
+
+        var matchingSessions = _childSessions.Values.Where(s => s.ContainsIp(target)).ToList();
+        if (matchingSessions.Count > 1) throw new Exception("More than one session claims this IP address (conflict)");
+        if (matchingSessions.Count < 1) throw new Exception("No session claims this IP address (not found)");
+        
+        var session = matchingSessions[0];
+        session.SendPing(target);
     }
 
     private void ListGateways()

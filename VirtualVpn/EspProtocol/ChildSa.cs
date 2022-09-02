@@ -1,6 +1,7 @@
 ﻿using System.Net;
 using VirtualVpn.Crypto;
 using VirtualVpn.Enums;
+using VirtualVpn.EspProtocol.Payloads;
 using VirtualVpn.Helpers;
 using VirtualVpn.InternetProtocol;
 using VirtualVpn.TcpProtocol;
@@ -17,7 +18,8 @@ public class ChildSa : ITransportTunnel
     public bool WeAreInitiator => _parent?.WeStarted ?? false;
 
     // pvpn/server.py:18
-    public ChildSa(IpV4Address gateway, byte[] spiIn, byte[] spiOut, IkeCrypto cryptoIn, IkeCrypto cryptoOut, IUdpServer? server, VpnSession? parent)
+    public ChildSa(IpV4Address gateway, byte[] spiIn, byte[] spiOut, IkeCrypto cryptoIn, IkeCrypto cryptoOut,
+        IUdpServer? server, VpnSession? parent, PayloadTsx? trafficSelect)
     {
         Gateway = gateway;
         _spiIn = spiIn;
@@ -26,7 +28,8 @@ public class ChildSa : ITransportTunnel
         _cryptoOut = cryptoOut;
         _server = server;
         _parent = parent;
-        
+        _trafficSelect = trafficSelect;
+
         _keepAliveTrigger = new EspTimedEvent(KeepAliveEvent, Settings.KeepAliveTimeout);
 
         _msgIdIn = 1;
@@ -149,22 +152,11 @@ public class ChildSa : ITransportTunnel
         if (espPacket.Spi != SpiIn) throw new Exception($"Mismatch SPI. Expected {SpiIn:x8}, got {espPacket.Spi:x8}");
         if (espPacket.Sequence < _msgIdIn) throw new Exception($"Mismatch Sequence. Expected {_msgIdIn}, got {espPacket.Sequence}");
         
-        /*
-         System.Exception: ESP Checksum failed
-   at VirtualVpn.EspProtocol.ChildSa.ReadSpe(Byte[] encrypted, EspPacket& espPacket) in /root/VirtualVpn/VirtualVpn/EspProtocol/ChildSa.cs:line 154
-   at VirtualVpn.EspProtocol.ChildSa.HandleSpe(Byte[] data, IPEndPoint sender) in /root/VirtualVpn/VirtualVpn/EspProtocol/ChildSa.cs:line 219
-   at VirtualVpn.VpnServer.SpeResponder(Byte[] data, IPEndPoint sender) in /root/VirtualVpn/VirtualVpn/VpnServer.cs:line 405
-   
-   IEB: Might need to flip the crypto or checksum settings if we are initiator?
-         */
         // checksum
         var checkOk = _cryptoIn.VerifyChecksum(encrypted);
         if (!checkOk)
         {
-            if (_cryptoOut.VerifyChecksum(encrypted))
-            {
-                Log.Critical("Crypto settings are back to front!!!");
-            }
+            if (_cryptoOut.VerifyChecksum(encrypted)) { Log.Critical("Crypto settings are reversed. This is likely a code fault."); }
 
             throw new Exception("ESP Checksum failed");
         }
@@ -201,6 +193,7 @@ public class ChildSa : ITransportTunnel
     private readonly IkeCrypto _cryptoOut;
     private readonly IUdpServer? _server;
     private readonly VpnSession? _parent;
+    private readonly PayloadTsx? _trafficSelect;
     private long _msgIdIn;
     private long _msgIdOut;
     private long _captureNumber;
@@ -208,6 +201,9 @@ public class ChildSa : ITransportTunnel
     private readonly ThreadSafeMap<SenderPort, TcpAdaptor> _tcpSessions = new();
     private readonly ThreadSafeMap<SenderPort, TcpAdaptor> _parkedSessions = new();
     private readonly EspTimedEvent _keepAliveTrigger;
+
+    private static readonly Random _rnd = new();
+    private static int RandomPacketId() => _rnd.Next();
 
     /// <summary>
     /// Immediately remove the connection from sessions and stop event pump
@@ -335,6 +331,10 @@ public class ChildSa : ITransportTunnel
             {
                 ReplyToPing(sender, icmp, incomingIpv4Message);
             }
+            else if (icmp.MessageType == IcmpType.EchoReply)
+            {
+                Log.Info($"    ICMP ping reply from {sender.Address}:{sender.Port}");
+            }
             else Log.Debug($"Unsupported ICMP message '{icmp.MessageType.ToString()}' -- not replying");
         }
         catch (Exception ex)
@@ -359,8 +359,8 @@ public class ChildSa : ITransportTunnel
             Version = IpV4Version.Version4,
             HeaderLength = 5,
             ServiceType = 0,
-            TotalLength = 20 + icmpData.Length, // calculate later?
-            PacketId = 642, // should be random?
+            TotalLength = 20 + icmpData.Length,
+            PacketId = RandomPacketId(),
             Flags = IpV4HeaderFlags.DontFragment,
             FragmentIndex = 0,
             Ttl = 64,
@@ -397,5 +397,74 @@ public class ChildSa : ITransportTunnel
         
         File.WriteAllText(Settings.FileBase + $"IPv4_{_captureNumber}_{direction}.txt", Bit.Describe($"ipv4_{_captureNumber}_{direction}", plain));
         _captureNumber++;
+    }
+
+    /// <summary>
+    /// Returns true if any of the ranges declared by the gateway
+    /// include the supplied target address
+    /// </summary>
+    public bool ContainsIp(IpV4Address target)
+    {
+        if (_trafficSelect is null)
+        {
+            Log.Debug("ChildSA has no traffic select");
+            return false;
+        }
+
+        if (_trafficSelect.Selectors.Count < 1)
+        {
+            Log.Debug("ChildSA was provided a traffic select, but it is empty");
+            return false;
+        }
+
+        foreach (var selector in _trafficSelect.Selectors)
+        {
+            if (selector.Contains(target)) return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Send a single ICMP ping request to the target
+    /// </summary>
+    public void SendPing(IpV4Address target)
+    {
+        var icmp = new IcmpPacket
+        {
+            MessageType = IcmpType.EchoRequest,
+            MessageCode = 0,
+            Checksum = 0,
+            PingIdentifier = 0,
+            PingSequence = 0,
+            Payload = Array.Empty<byte>()
+        };
+
+        var checksum = IpChecksum.CalculateChecksum(ByteSerialiser.ToBytes(icmp));
+        icmp.Checksum = checksum;
+
+        var icmpData = ByteSerialiser.ToBytes(icmp);
+        var ipv4Reply = new IpV4Packet
+        {
+            Version = IpV4Version.Version4,
+            HeaderLength = 5,
+            ServiceType = 0,
+            TotalLength = 20 + icmpData.Length,
+            PacketId = RandomPacketId(),
+            Flags = IpV4HeaderFlags.DontFragment,
+            FragmentIndex = 0,
+            Ttl = 64,
+            Protocol = IpV4Protocol.ICMP,
+            Checksum = 0,
+            Source = new IpV4Address(Settings.LocalTrafficSelector.StartAddress),
+            Destination = target,
+            Options = Array.Empty<byte>(),
+            Payload = icmpData
+        };
+        
+        ipv4Reply.UpdateChecksum();
+
+        Log.Info("    Sending ping...");
+        var encryptedData = WriteSpe(ipv4Reply);
+        Reply(encryptedData, Gateway.MakeEndpoint(4500));
     }
 }

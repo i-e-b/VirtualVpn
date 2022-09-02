@@ -30,6 +30,8 @@ public class IpV4Address: IEquatable<IpV4Address>
     /// </summary>
     public static IpV4Address Any => new(new byte[] { 0, 0, 0, 0 });
 
+    public uint AsInt => Bit.BytesToUInt32(Value);
+
     public override string ToString()
     {
         if (Value.Length < 4) return "<empty>";

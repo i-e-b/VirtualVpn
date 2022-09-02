@@ -502,7 +502,7 @@ public class VpnSession
             return;
         }
 
-        var childKey = CreateChildKey(sender, chosenChildProposal, _peerNonce, _localNonce);
+        var childKey = CreateChildKey(sender, chosenChildProposal, _peerNonce, _localNonce, tsr);
         Log.Debug($"    New ESP SPI = {childKey.SpiIn:x8}");
         chosenChildProposal.SpiData = Bit.UInt32ToBytes(childKey.SpiIn); // Used to refer to the child SA in ESP messages?
         chosenChildProposal.SpiSize = 4;
@@ -566,6 +566,7 @@ public class VpnSession
         if (_peerNonce is null) throw new Exception("Peer N-once was not established before IKE_AUTH received");
         if (_previousRequestRawData is null) throw new Exception("Peer's previous raw request not stored during IKE_INIT_SA to use in IKE_AUTH");
 
+        var tsr = request.GetPayload<PayloadTsr>() ?? throw new Exception("IKE_AUTH did not have an IDi payload");
         var idr = request.GetPayload<PayloadIDr>() ?? throw new Exception("IKE_AUTH did not have an IDi payload");
         var auth = request.GetPayload<PayloadAuth>();
         if (auth is null) throw new Exception("Peer requested EAP, which we don't support");
@@ -598,33 +599,14 @@ public class VpnSession
             return;
         }
 
-        // IEB: Need to check we generate the child SA with keys the right way around.
-        var childKey = CreateChildKey(sender, chosenChildProposal, _peerNonce, _localNonce);
+        // Generate a new ChildSA with crypto and IP range
+        var childKey = CreateChildKey(sender, chosenChildProposal, _peerNonce, _localNonce, tsr);
         Log.Debug($"    New ESP SPI = {childKey.SpiIn:x8}; spi_out={childKey.SpiOut:x8}");
         chosenChildProposal.SpiData = Bit.UInt32ToBytes(childKey.SpiIn); // Used to refer to the child SA in ESP messages?
         chosenChildProposal.SpiSize = 4;
 
         Log.Debug("    Setting state to established");
         State = SessionState.ESTABLISHED; // Should now have a full Child SA
-        /*
-        // https://www.rfc-editor.org/rfc/rfc7296#section-1.3.1
-        // Send a create child sa message?
-        
-        Log.Trace("Building HandleAuthConfirm confirmation message - CREATE_CHILD_SA, switching to port 4500");
-        var msgBytes = BuildSerialMessage(ExchangeType.CREATE_CHILD_SA, MessageFlag.Initiator,
-            sendZeroHeader,//: true, // 'true' required when *switching* to 4500
-            _myCrypto, _localSpi, _peerSpi, msgId: _myMsgId++
-        );
-        
-        // The message should be something that VirtualVpn.Crypto.IkeCrypto.VerifyChecksumInternal would give the OK to
-        var ok = _myCrypto!.VerifyChecksum(msgBytes.Skip(4).ToArray());
-        if (!ok) Log.Warn("Message did not pass our own checksum. Likely to be rejected by peer.");
-        
-        // Switch to 4500 port now. The protocol works without it, but VirtualVPN assumes the switch will happen.
-        // See https://docs.strongswan.org/docs/5.9/features/mobike.html
-        //Send(to: new IPEndPoint(sender.Address, port:4500), message: msgBytes);
-        //Send(to: sender, message: msgBytes);
-        */
     }
 
     // ReSharper disable CommentTypo
@@ -672,12 +654,13 @@ public class VpnSession
     /// <remarks>
     /// <p>Related to <see cref="IkeCrypto.CreateKeysAndCryptoInstances"/></p>
     /// </remarks>
-    private ChildSa CreateChildKey(IPEndPoint gateway, Proposal childProposal, byte[] peerNonce, byte[] localNonce)
+    private ChildSa CreateChildKey(IPEndPoint gateway, Proposal childProposal, byte[] peerNonce, byte[] localNonce, PayloadTsx? trafficSelect)
     {
         // pvpn/server.py:237
 
         if (_skD is null) throw new Exception("SK-d was not initialised before trying to create a CHILD-SA. Key exchange failed?");
         if (_myCrypto?.Prf is null) throw new Exception("Crypto was not initialised before trying to create a CHILD SA.");
+        if (trafficSelect is null) Log.Warn("ChildSA created without traffic selector");
 
         // Gather up selected protocol, and check all results are valid
         var integId = childProposal.GetTransform(TransformType.INTEG)?.Id;
@@ -718,7 +701,7 @@ public class VpnSession
         // The crypto settings are swapped depending on who started the exchanges.
         if (_weAreInitiator) (cryptoIn, cryptoOut) = (cryptoOut, cryptoIn);
         
-        var childSa = new ChildSa(IpV4Address.FromEndpoint(gateway), _localSpiOut, childProposal.SpiData, cryptoIn, cryptoOut, _server, this);
+        var childSa = new ChildSa(IpV4Address.FromEndpoint(gateway), _localSpiOut, childProposal.SpiData, cryptoIn, cryptoOut, _server, this, trafficSelect);
 
         // '_thisSessionChildren' using spiOut, '_sessionHost' using spiIn.
         _sessionHost.AddChildSession(childSa); // this gets us the 32-bit SA used for ESA, not the 64-bit used for key exchange

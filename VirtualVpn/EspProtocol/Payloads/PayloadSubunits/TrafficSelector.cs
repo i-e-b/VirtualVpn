@@ -1,5 +1,6 @@
 ﻿using VirtualVpn.Enums;
 using VirtualVpn.Helpers;
+using VirtualVpn.InternetProtocol;
 
 namespace VirtualVpn.EspProtocol.Payloads.PayloadSubunits;
 
@@ -68,4 +69,12 @@ public class TrafficSelector
                $"Address={Bit.HexString(StartAddress)} - {Bit.HexString(EndAddress)}";
     }
 
+    public bool Contains(IpV4Address target)
+    {
+        var low = new IpV4Address(StartAddress).AsInt;
+        var mid = target.AsInt;
+        var high = new IpV4Address(EndAddress).AsInt;
+        
+        return (mid >= low) && (mid <= high);
+    }
 }

@@ -239,6 +239,7 @@ public class TcpAdaptor : ITcpAdaptor
             if ((_realSocketToWebApp?.Available ?? 0) < 1)
             {
                 Log.Trace("Web app reporting no data yet");
+                return false;
             }
 
             while (_realSocketToWebApp is not null
@@ -251,7 +252,7 @@ public class TcpAdaptor : ITcpAdaptor
                 Log.Debug($"Got {received} bytes from socket");
             }
 
-            Log.Info($"Web app replied with {finalBytes.Count} bytes of data");
+            Log.Debug($"Web app replied with {finalBytes.Count} bytes of data");
 
             var outgoingBuffer = finalBytes.ToArray();
             if (outgoingBuffer.Length > 0)
