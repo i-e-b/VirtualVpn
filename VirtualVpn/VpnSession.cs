@@ -185,23 +185,25 @@ public class VpnSession
         // Check for peer requesting a repeat of last message
         if (request.MessageId == _peerMsgId - 1)
         {
-            if (_lastSentMessageBytes is null)
-            {
-                Log.Warn("    Asked to repeat a message we didn't send? This session has faulted");
-                ReplyNotAcceptable(sender, sendZeroHeader);
-                return;
-            }
-
+            // Might be restart ID of next exchange type?
             if (request.MessageId == 0 && request.Exchange == ExchangeType.INFORMATIONAL)
             {
                 Log.Info("Got message ID=0 and information exchange. This should be some kind of keep alive? Sending reply back.");
-                Send(to: sender, request.RawData);
+                _peerMsgId = 0;
+            }
+            else
+            {
+                if (_lastSentMessageBytes is null)
+                {
+                    Log.Warn("    Asked to repeat a message we didn't send? This session has faulted");
+                    ReplyNotAcceptable(sender, sendZeroHeader);
+                    return;
+                }
+
+                Log.Info("    Asked to repeat a message we sent. Directly re-sending.");
+                _server.SendRaw(_lastSentMessageBytes, sender); // don't add zero pad again?
                 return;
             }
-
-            Log.Info("    Asked to repeat a message we sent. Directly re-sending.");
-            _server.SendRaw(_lastSentMessageBytes, sender); // don't add zero pad again?
-            return;
         }
         
         // We should have crypto now, as long as we're out of IKE_SA_INIT phase
