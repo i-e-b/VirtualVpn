@@ -59,7 +59,7 @@ public class VpnSession
     private BCDiffieHellman? _keyExchange;
     private Proposal? _lastSaProposal;
     private int _peerMsgId;
-    private int _myMsgId;
+    private int _mobIkeMsgId;
 
     /// <summary>
     /// Start a new session object
@@ -82,7 +82,7 @@ public class VpnSession
         _localNonce = Bit.RandomNonce();
         State = SessionState.INITIAL;
         _peerMsgId = 0;
-        _myMsgId = 0;
+        _mobIkeMsgId = 0;
         
         LastTouchTimer = new Stopwatch();
         LastTouchTimer.Start();
@@ -372,9 +372,7 @@ public class VpnSession
             // Nothing to do, but we must reply
             if (_weAreInitiator)
             {
-                if (request.Payloads.Count < 1) Log.Debug("Ignoring empty information, because we are the initiator");
-                else HandleMobIkeHandshake(request, sender, sendZeroHeader);
-                
+                HandleMobIkeHandshake(request, sender, sendZeroHeader);
                 return;
             }
             
@@ -426,16 +424,23 @@ public class VpnSession
 
     private void HandleMobIkeHandshake(IkeMessage request, IPEndPoint sender, bool sendZeroHeader)
     {
+        if (request.MessageId != _mobIkeMsgId) Log.Warn($"Treating message as MobIke handshake, but it was out of sequence- expected {_mobIkeMsgId}, got {request.MessageId}");
         Log.Debug($"Info exchange (MobIke handshake) MSG IN: flags={request.MessageFlag.ToString()}, msgId={request.MessageId}, spi_i={request.SpiI:x16}, spi_r={request.SpiR:x16}");
         
         var messageBytes = BuildSerialMessage(
-            ExchangeType.INFORMATIONAL, MessageFlag.Initiator|MessageFlag.Response, sendZeroHeader, _myCrypto, _localSpi/*??*/, _peerSpi, _peerMsgId,
+            ExchangeType.INFORMATIONAL, MessageFlag.Initiator | MessageFlag.Response, sendZeroHeader, _myCrypto, _localSpi, _peerSpi, request.MessageId,
             new PayloadNotify(IkeProtocolType.NONE, NotifyId.ADDITIONAL_IP4_ADDRESS, null, Settings.LocalIpAddress),
             new PayloadNotify(IkeProtocolType.NONE, NotifyId.ADDITIONAL_IP4_ADDRESS, null, Settings.LocalTrafficSelector.StartAddress)
             );
-        
+
+        if (request.Payloads.Count < 1) // other side is saying no change?
+        {
+            Log.Debug("MobIke handshake with no elements. Other side network unchanged?");
+        }
+
         Log.Debug($"Info exchange (MobIke handshake) MSG OUT. Sending addresses {new IpV4Address(Settings.LocalIpAddress).AsString} and {new IpV4Address(Settings.LocalTrafficSelector.StartAddress).AsString}");
         
+        _mobIkeMsgId++;
         Send(to: sender, messageBytes);
     }
 
