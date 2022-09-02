@@ -80,6 +80,10 @@ public class IkeCrypto
     /// <summary>
     /// Generate a set of crypto classes given the required data from an IKEv2 session
     /// </summary>
+    /// <remarks>
+    /// <p>Called from <see cref="VpnSession.CreateKeyAndCrypto"/></p>
+    /// <p>Related to <see cref="VpnSession.CreateChildKey"/></p>
+    /// </remarks>
     public static void CreateKeysAndCryptoInstances(
         bool weAreInitiator,
         byte[] theirNonce, byte[] myNonce, byte[] sharedSecret,
