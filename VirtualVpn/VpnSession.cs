@@ -775,7 +775,7 @@ public class VpnSession
         _initMessage = BuildSerialMessage(ExchangeType.IKE_SA_INIT, MessageFlag.Initiator, false, null, _localSpi, 0, 0,
             new PayloadSa(defaultProposal),
             new PayloadNonce(_localNonce),
-            new PayloadKeyExchange(DhId.DH_14, newPublicKey), // Pre-start our preferred exchange
+            new PayloadKeyExchange((DhId)Settings.StartKeyExchangeFunction, newPublicKey), // Pre-start our preferred exchange
             new PayloadNotify(IkeProtocolType.NONE, NotifyId.NAT_DETECTION_DESTINATION_IP, Array.Empty<byte>(), Bit.RandomBytes(20)),
             new PayloadNotify(IkeProtocolType.NONE, NotifyId.NAT_DETECTION_SOURCE_IP, Array.Empty<byte>(), Bit.RandomBytes(20))
         );
@@ -871,7 +871,7 @@ public class VpnSession
                 new Transform
                 {
                     Type = TransformType.INTEG,
-                    Id = (uint)IntegId.AUTH_HMAC_SHA2_256_128
+                    Id = Settings.StartIntegrity
                 },
                 new Transform
                 {
