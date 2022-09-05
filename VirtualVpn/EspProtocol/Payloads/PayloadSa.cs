@@ -30,7 +30,7 @@ public class PayloadSa : MessagePayload
 
     public override string Describe()
     {
-        return $"Payload=SA; ProposalCount={Proposals.Count};";
+        return $"Payload=SA; Proposals[{Proposals.Count}]=[{string.Join(" | ", Proposals.Select(p=>p.Describe()))}];";
     }
     
     protected override void Serialise()

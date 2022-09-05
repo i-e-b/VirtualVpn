@@ -105,4 +105,9 @@ public class Proposal
     }
 
     public Transform? GetTransform(TransformType type) => Transforms.FirstOrDefault(t=>t.Type == type);
+
+    public string Describe()
+    {
+        return $"Protocol={Protocol.ToString()}, Transforms[{Transforms.Count}]=[{string.Join(", ", Transforms.Select(t=>t.ToString()))}]";
+    }
 }

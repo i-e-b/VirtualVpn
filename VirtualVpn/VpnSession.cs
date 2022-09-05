@@ -781,7 +781,7 @@ public class VpnSession
         );
 
         State = SessionState.IKE_INIT_SENT;
-        Log.Trace("Sending initial request for new session");
+        Log.Debug("Sending initial request for new session");
         Send(to: target, _initMessage);
         // Next should be HandleSaConfirm()
     }
