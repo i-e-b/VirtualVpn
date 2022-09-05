@@ -560,6 +560,7 @@ public class VpnSession
     /// <summary>
     /// Handle the reply to AUTH message, when we are the initiator.
     /// The remote gateway should already consider us as Established.
+    /// Follows from <see cref="HandleSaConfirm"/>
     /// <p></p>
     /// This is related to <see cref="HandleAuth"/>
     /// </summary>
@@ -581,6 +582,7 @@ public class VpnSession
         if (_peerNonce is null) throw new Exception("Peer N-once was not established before IKE_AUTH received");
         if (_previousRequestRawData is null) throw new Exception("Peer's previous raw request not stored during IKE_INIT_SA to use in IKE_AUTH");
 
+        // Test for some rejection notifications
         var rejection = request.GetPayload<PayloadNotify>(p=>p.NotificationType == NotifyId.TS_UNACCEPTABLE);
         if (rejection is not null)
         {
@@ -589,20 +591,18 @@ public class VpnSession
                          $"\r\nRemote:\r\n{Settings.RemoteTrafficSelector.Describe()}");
             return;
         }
+        var noPropMessage = request.GetPayload<PayloadNotify>(pl => pl.NotificationType == NotifyId.NO_PROPOSAL_CHOSEN);
+        if (noPropMessage is not null)
+        {
+            Log.Critical("Peer did not accept any of the ChildSA proposals. Check 'espProposal' in VirtualVpn.VpnSession.HandleSaConfirm");
+            return;
+        }
 
+        // Read in payloads from peer. If they are all present, we probably have a valid Child SA
         var tsr = request.GetPayload<PayloadTsr>() ?? throw new Exception("IKE_AUTH did not have an TSr payload");
         var idr = request.GetPayload<PayloadIDr>() ?? throw new Exception("IKE_AUTH did not have an IDi payload");
         var auth = request.GetPayload<PayloadAuth>();
         if (auth is null) throw new Exception("Peer requested EAP, which we don't support");
-        
-        // Check for
-        // Payload=Notification; ProtocolType=NONE; NotificationType=NO_PROPOSAL_CHOSEN; Spi=; InfoData=;
-        var noPropMessage = request.GetPayload<PayloadNotify>(pl => pl.NotificationType == NotifyId.NO_PROPOSAL_CHOSEN);
-        if (noPropMessage is not null)
-        {
-            Log.Critical("Peer did not accept any of the ChildSA proposals. Cannot continue.");
-            return;
-        }
 
         var pskAuth = GeneratePskAuth(_previousRequestRawData, _localNonce, idr, peerSkp, _peerCrypto?.Prf);
         if (Bit.AreDifferent(pskAuth, auth.AuthData))
@@ -798,6 +798,7 @@ public class VpnSession
     /// <summary>
     /// We are the initiator, and we got an IKE_SA_INIT message.
     /// We should now check the message is acceptable; and if so, send the first IKE_AUTH message
+    /// Follows from <see cref="RequestNewSession"/>
     /// <p></p>
     /// This is closely related to <see cref="HandleSaInit"/>
     /// </summary>
@@ -872,10 +873,10 @@ public class VpnSession
             SpiData = _localSpiOut,
             Transforms = {
                 new Transform
-                {
+                {// M-Pesa requests AES_CBC_256/HMAC_SHA1_96
                     Type = TransformType.ENCR,
                     Id = (uint)EncryptionTypeId.ENCR_AES_CBC,
-                    Attributes = { new TransformAttribute(TransformAttr.KEY_LENGTH, 128) }
+                    Attributes = { new TransformAttribute(TransformAttr.KEY_LENGTH, 256) }
                 },
                 new Transform
                 {
