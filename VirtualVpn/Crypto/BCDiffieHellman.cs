@@ -142,7 +142,7 @@ public class BCDiffieHellman
             case DhId.DH_30:
             case DhId.DH_31:
             case DhId.DH_32:
-                return true; // todo: check. See src/libstrongswan/crypto/key_exchange.c:547
+                return true; // src/libstrongswan/crypto/key_exchange.c:547
             default:
                 throw new ArgumentOutOfRangeException(nameof(dhId), dhId, null);
         }

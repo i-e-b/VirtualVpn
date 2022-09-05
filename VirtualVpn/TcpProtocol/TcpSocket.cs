@@ -481,7 +481,6 @@ public class TcpSocket
                 _nudgeDataSent = false;
             }
 
-            // BUG: _tcb.Snd.Nxt is one ahead of the send buffer!
             var sent = SendData(sequence: _tcb.Snd.Nxt, maxSize: (int)space, flags: TcpSegmentFlags.None, isRetransmit: false, isNudge: _nudgeDataSent);
             Log.Trace($"SendIfPossible - sent {sent} bytes, {_sendBuffer.RemainingData()} remaining");
             return true;
@@ -1358,7 +1357,7 @@ public class TcpSocket
                           the retransmission queue is empty, the user's CLOSE can be
                           acknowledged ("ok") but do not delete the TCB.
                     */
-                // TODO: trigger anything that need to happen when close is acknowledged.
+                // trigger anything that need to happen when close is acknowledged.
                 break;
             case TcpSocketState.Closing: // lib/tcp/input.c:798
                 /*
@@ -1370,7 +1369,7 @@ public class TcpSocket
                     */
                 SetState(TcpSocketState.TimeWait);
                 _timeWait.Reset();
-                // TODO: anything waiting on close can continue now
+                // anything waiting on close can continue now
                 break;
             case TcpSocketState.LastAck: // lib/tcp/input.c:813
                 /*
@@ -1555,7 +1554,7 @@ public class TcpSocket
         begins at RCV.NXT.  Segments with higher beginning sequence
         numbers may be held for later processing.
 
-        TODO: Store out-of-order segments that are >RCV.NXT for later processing
+        We could store out-of-order segments that are >RCV.NXT for later processing
         Not required, as the packet should get re-sent, but would reduce network use.
 
         second check the RST bit,

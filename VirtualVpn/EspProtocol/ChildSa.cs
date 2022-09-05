@@ -15,6 +15,7 @@ public class ChildSa : ITransportTunnel
     public UInt32 SpiIn { get; }
     public UInt32 SpiOut { get; }
     public IpV4Address Gateway { get; set; }
+    public VpnSession? Parent { get; }
 
     // pvpn/server.py:18
     public ChildSa(IpV4Address gateway, byte[] spiIn, byte[] spiOut, IkeCrypto cryptoIn, IkeCrypto cryptoOut,
@@ -26,7 +27,7 @@ public class ChildSa : ITransportTunnel
         _cryptoIn = cryptoIn;
         _cryptoOut = cryptoOut;
         _server = server;
-        _parent = parent;
+        Parent = parent;
         _trafficSelect = trafficSelect;
 
         _keepAliveTrigger = new EspTimedEvent(KeepAliveEvent, Settings.KeepAliveTimeout);
@@ -60,7 +61,7 @@ public class ChildSa : ITransportTunnel
     public bool EventPump()
     {
         // if we are the initiator, we should send periodic keep-alive pings to the peer.
-        if (_parent?.WeStarted == true)
+        if (Parent?.WeStarted == true)
         {
             _keepAliveTrigger.TriggerIfExpired();
         }
@@ -191,7 +192,6 @@ public class ChildSa : ITransportTunnel
     private readonly IkeCrypto _cryptoIn;
     private readonly IkeCrypto _cryptoOut;
     private readonly IUdpServer? _server;
-    private readonly VpnSession? _parent;
     private readonly PayloadTsx? _trafficSelect;
     private long _msgIdIn;
     private long _msgIdOut;
@@ -226,7 +226,7 @@ public class ChildSa : ITransportTunnel
     {
         Log.Info($"HandleSpe: data={data.Length} bytes, sender={sender}");
         
-        _parent?.UpdateTrafficTimeout();
+        Parent?.UpdateTrafficTimeout();
         var incomingIpv4Message = ReadSpe(data, out var espPkt);
 
 

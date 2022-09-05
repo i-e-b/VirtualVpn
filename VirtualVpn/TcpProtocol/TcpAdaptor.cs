@@ -178,10 +178,6 @@ public class TcpAdaptor : ITcpAdaptor
 
         Log.Trace($"### Run Data Transfer ### vRead={_totalVirtualRead}, rSend={_totalRealSent}, rRead={_totalRealRead}, vSend={_totalVirtualSent}," +
                   $" vSocket={VirtualSocket.State.ToString()}, webApp connected={_realSocketToWebApp?.Connected ?? false}");
-
-        // Virtual socket not up? Nothing to do.
-        //if (VirtualSocket.State != TcpSocketState.Established) return false;
-        // TODO: flag to end the session when everything is done.
         
         
         // If we are ready to talk to web app, make sure we have a real socket

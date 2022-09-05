@@ -40,26 +40,29 @@ public class VpnSession
     private readonly Dictionary<uint, ChildSa> _thisSessionChildren = new();
     private SessionState _state;
     private IPEndPoint? _lastContact;
+    
+    private bool _haveSentMobIkeAddresses; // Have we responded with network addresses?
+    private byte[]? _localSpiOut; // for spawned child SA
+    private readonly byte[] _localNonce;
+    private int _peerMsgId;
+    private int _myMsgId;
+    private int _mobIkeMsgId;
+
+    private ulong _peerSpi;
+    private readonly ulong _localSpi;
 
     //## Algorithmic selections (negotiated with peer) ##//
 
     private IkeCrypto? _myCrypto;
     private IkeCrypto? _peerCrypto;
+    private BCDiffieHellman? _keyExchange;
+    private Proposal? _lastSaProposal;
 
     //## Locked for session ##//
-
-    private ulong _peerSpi;
     
     private readonly IUdpServer _server; // note: should increment _seqOut when sending
     private readonly ISessionHost _sessionHost;
     private readonly bool _weAreInitiator;
-    private readonly ulong _localSpi;
-    private byte[]? _localSpiOut; // for spawned child SA
-    private readonly byte[] _localNonce;
-    private BCDiffieHellman? _keyExchange;
-    private Proposal? _lastSaProposal;
-    private int _peerMsgId;
-    private int _mobIkeMsgId;
 
     /// <summary>
     /// Start a new session object
@@ -82,6 +85,7 @@ public class VpnSession
         _localNonce = Bit.RandomNonce();
         State = SessionState.INITIAL;
         _peerMsgId = 0;
+        _myMsgId = 0;
         _mobIkeMsgId = 0;
         
         LastTouchTimer = new Stopwatch();
@@ -110,7 +114,8 @@ public class VpnSession
             case SessionState.ESTABLISHED:
             {
                 if (LastTouchTimer.Elapsed < Settings.EspTimeout) return;
-                // TODO: fire a DELETE message, but don't wait for reply
+                
+                EndConnectionWithPeer(); // fire a DELETE message, but don't wait for reply
             
                 Log.Critical($"Session {_localSpi:x} timed-out after establishment. Are keep-alive messages not arriving?");
                 foreach (var child in _thisSessionChildren)
@@ -118,29 +123,62 @@ public class VpnSession
                     _sessionHost.RemoveChildSession(child.Key);
                 }
 
-                _sessionHost.RemoveSession(_localSpi);
+                _sessionHost.RemoveSession(_localSpi, wasRemoteRequest: false);
                 
                 State = SessionState.DELETED;
                 break;
             }
             case SessionState.DELETED:
             {
-                Log.Trace($"Removing deleted session {_localSpi:x}");
-                _sessionHost.RemoveSession(_localSpi);
+                Log.Info($"Removing deleted session {_localSpi:x}");
+                foreach (var child in _thisSessionChildren)
+                {
+                    Log.Trace($"Removing child SA {child.Key:x}");
+                    _sessionHost.RemoveChildSession(child.Key);
+                }
+                _sessionHost.RemoveSession(_localSpi, wasRemoteRequest: false);
                 break;
             }
             default:
             {
                 if (LastTouchTimer.Elapsed < Settings.IkeTimeout) return;
-                // TODO: fire a DELETE message, but don't wait for reply
+                
+                EndConnectionWithPeer(); // fire a DELETE message, but don't wait for reply
             
                 Log.Critical($"Session {_localSpi:x} timed-out during negotiation (state={State.ToString()}). The session will be abandoned.");
-                _sessionHost.RemoveSession(_localSpi);
+                _sessionHost.RemoveSession(_localSpi, wasRemoteRequest: false);
                 
                 State = SessionState.DELETED;
                 break;
             }
         }
+    }
+
+    public void EndConnectionWithPeer()
+    {
+        // Check we're in a fit state
+        if (_lastContact is null)
+        {
+            Log.Error("Tried to cleanly end session, but can't send message -- I don't have a last contact address");
+            return;
+        }
+
+        // List SPIs for this session
+        var spiList = new List<byte[]>{
+            Bit.UInt64ToBytes(_localSpi),
+            Bit.UInt64ToBytes(_peerSpi)
+        };
+
+        // Send the delete
+        var response = BuildResponse(ExchangeType.INFORMATIONAL, _myMsgId++, sendZeroHeader: true, _myCrypto,
+            new PayloadDelete(IkeProtocolType.IKE, spiList)
+        );
+
+        Log.Warn($"Sending DELETE message to gateway {_lastContact.ToString()}. MsgId={_myMsgId}, localSpi={_localSpi:x16}, peerSpi={_peerSpi:x16}");
+        Send(to: _lastContact, response);
+        
+        // Switch our mode
+        State = SessionState.DELETED; // event pump should unbind the session and it's child soon.
     }
 
     // pvpn/server.py:253
@@ -362,7 +400,6 @@ public class VpnSession
         Send(to: sender, message);
     }
 
-
     private void HandleInformational(IkeMessage request, IPEndPoint sender, bool sendZeroHeader)
     {
         // pvpn/server.py:315
@@ -400,7 +437,7 @@ public class VpnSession
         {
             // This session should be removed?
             State = SessionState.DELETED;
-            _sessionHost.RemoveSession(_localSpi);
+            _sessionHost.RemoveSession(_localSpi, wasRemoteRequest: true);
 
             Log.Info($"    Removing entire session {_localSpi:x16}");
             foreach (var childSa in _thisSessionChildren)
@@ -441,16 +478,33 @@ public class VpnSession
     {
         if (request.MessageId != _mobIkeMsgId) Log.Warn($"Treating message as MobIke handshake, but it was out of sequence- expected {_mobIkeMsgId}, got {request.MessageId}");
         Log.Debug($"Info exchange (MobIke handshake) MSG IN: flags={request.MessageFlag.ToString()}, msgId={request.MessageId}, spi_i={request.SpiI:x16}, spi_r={request.SpiR:x16}");
-        
-        var messageBytes = BuildSerialMessage(
-            ExchangeType.INFORMATIONAL, MessageFlag.Initiator | MessageFlag.Response, sendZeroHeader, _myCrypto, _localSpi, _peerSpi, request.MessageId,
-            new PayloadNotify(IkeProtocolType.NONE, NotifyId.ADDITIONAL_IP4_ADDRESS, null, IpV4Address.FromString(Settings.LocalIpAddress).Value),
-            new PayloadNotify(IkeProtocolType.NONE, NotifyId.ADDITIONAL_IP4_ADDRESS, null, IpV4Address.FromString(Settings.LocalTrafficSelector.StartAddress).Value)
-            );
 
         if (request.Payloads.Count < 1) // other side is saying no change?
         {
             Log.Debug("MobIke handshake with no elements. Other side network unchanged?");
+        }
+
+        if (request.MessageFlag.FlagsSet(MessageFlag.Response))
+        {
+            Log.Warn("Unexpected response in HandleMobIkeHandshake. Will not reply");
+            return;
+        }
+
+        byte[] messageBytes;
+        if (_haveSentMobIkeAddresses)
+        {
+            messageBytes = BuildSerialMessage(
+                ExchangeType.INFORMATIONAL, MessageFlag.Initiator | MessageFlag.Response, sendZeroHeader, _myCrypto, _localSpi, _peerSpi, request.MessageId
+            );
+        }
+        else
+        {
+            messageBytes = BuildSerialMessage(
+                ExchangeType.INFORMATIONAL, MessageFlag.Initiator | MessageFlag.Response, sendZeroHeader, _myCrypto, _localSpi, _peerSpi, request.MessageId,
+                new PayloadNotify(IkeProtocolType.NONE, NotifyId.ADDITIONAL_IP4_ADDRESS, null, IpV4Address.FromString(Settings.LocalIpAddress).Value),
+                new PayloadNotify(IkeProtocolType.NONE, NotifyId.ADDITIONAL_IP4_ADDRESS, null, IpV4Address.FromString(Settings.LocalTrafficSelector.StartAddress).Value)
+            );
+            _haveSentMobIkeAddresses = true;
         }
 
         Log.Debug($"Info exchange (MobIke handshake) MSG OUT. Sending addresses {Settings.LocalIpAddress} and {Settings.LocalTrafficSelector.StartAddress}");
@@ -781,7 +835,7 @@ public class VpnSession
         _keyExchange ??= BCDiffieHellman.CreateForGroup(DhId.DH_14) ?? throw new Exception("Failed to generate key exchange when generating new session");
         _keyExchange.get_our_public_key(out var newPublicKey);
 
-        _initMessage = BuildSerialMessage(ExchangeType.IKE_SA_INIT, MessageFlag.Initiator, false, null, _localSpi, 0, 0,
+        _initMessage = BuildSerialMessage(ExchangeType.IKE_SA_INIT, MessageFlag.Initiator, false, null, _localSpi, 0, _myMsgId++,
             new PayloadSa(defaultProposal),
             new PayloadNonce(_localNonce),
             new PayloadKeyExchange((DhId)Settings.StartKeyExchangeFunction, newPublicKey), // Pre-start our preferred exchange
@@ -820,7 +874,7 @@ public class VpnSession
         if (saPayload is null || saPayload.Proposals.Count != 1)
         {
             Log.Warn($"        Session: Peer did not agree with our proposition. Sending rejection to {sender.Address}:{sender.Port}");
-            Send(to: sender, message: BuildResponse(ExchangeType.IKE_SA_INIT, 1, sendZeroHeader, null,
+            Send(to: sender, message: BuildResponse(ExchangeType.IKE_SA_INIT, _myMsgId, sendZeroHeader, null,
                 new PayloadNotify(IkeProtocolType.IKE, NotifyId.INVALID_KE_PAYLOAD, null, null)
             ));
             return;
@@ -834,7 +888,7 @@ public class VpnSession
         if (chosenProposal is null || preferredDiffieHellman != (uint)DhId.DH_14 || payloadKe is null)
         {
             Log.Warn($"        Session: Peer is trying to negotiate a different crypto setting. This is not currently supported. Sending rejection to {sender.Address}:{sender.Port}");
-            Send(to: sender, message: BuildResponse(ExchangeType.IKE_SA_INIT, 1, sendZeroHeader, null,
+            Send(to: sender, message: BuildResponse(ExchangeType.IKE_SA_INIT, _myMsgId, sendZeroHeader, null,
                 new PayloadNotify(IkeProtocolType.IKE, NotifyId.INVALID_KE_PAYLOAD, null, null)
             ));
             return;
@@ -897,7 +951,7 @@ public class VpnSession
         Log.Trace("Building HandleSaConfirm confirmation message, switching to port 4500");
         var msgBytes = BuildSerialMessage(ExchangeType.IKE_AUTH, MessageFlag.Initiator,
             sendZeroHeader:true, // 'true' if we are switching to 4500
-            _myCrypto, _localSpi, _peerSpi, msgId: 1,
+            _myCrypto, _localSpi, _peerSpi, _myMsgId++,
             
             mainIDi,
             new PayloadNotify(IkeProtocolType.NONE, NotifyId.INITIAL_CONTACT, null, null),
@@ -1066,25 +1120,6 @@ public class VpnSession
         }
 
         Log.Debug($"        Session: State correct: {State.ToString()} = {expected.ToString()}");
-    }
-
-    public void NotifyIpAddresses(IpV4Address address)
-    {
-        // HACK - just send a notify with a fixed IP address
-        if (_lastContact is null)
-        {
-            Log.Error("Can't send IP addresses -- I don't have a last contact address");
-            return;
-        }
-
-        // This currently kills the session? Maybe if we've got more than one?
-
-        var response = BuildResponse(ExchangeType.INFORMATIONAL, _peerMsgId, sendZeroHeader: true, _myCrypto,
-            new PayloadNotify(IkeProtocolType.NONE, NotifyId.ADDITIONAL_IP4_ADDRESS, null, address.Value)
-        );
-
-        Log.Error($"Sending ADDITIONAL_IP4_ADDRESS message. MsgId={_peerMsgId}");
-        Send(to: _lastContact, response);
     }
 
     public void UpdateTrafficTimeout()

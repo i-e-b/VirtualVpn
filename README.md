@@ -2,8 +2,6 @@
 
 An IKEv2/IPSEC VPN gateway that presents an application as if it was on a private network
 
-This is currently in progress.
-
 It will respond to StrongSwan opening a session from outside, and will
 correctly start a secured session. It allows communication to and from
 a configured web app.
@@ -12,13 +10,28 @@ It is slow compared to a hardware VPN device. It is slow compared to a
 pair of tin-cans with a tight string in between. It might be just fast
 enough for a basic API that is called a few times a second at most.
 
+This VPN does **not** support all IKEv2 settings, and doesn't support IKEv1 at all.
+
+Hopefully it's simple enough that any new parts can be added.
+
+## Layout
+
+The projects `JustListen` and `SmallWebTest` are tools to help with development,
+and are not required when running Virtual VPN
+
+### Virtual VPN parts
+
+- **Crypto** - Diffie-Hellman key exchange, cryptographic routines, secure hashes etc.
+- **Enums** - Standard numeric values for IKE, ESP, and TCP/IP
+- **EspProtocol** - Handlers for Child SAs, ESP packets, IKE packets. This is where the gateway-to-gateway tunnelled traffic is handled
+- **Helpers** - Serialisation tools, low level C# bits
+- **InternetProtocol** - Various IP bits, including packet, addresses, and ICMP bits
+- **TcpProtocol** - Embedded TCP stack to handle termination and re-routing to host web-app
+- **Web** - A tiny website for remotely lifting traffic captures off of the VirtualVPN
+- VpnServer - root listener for IKE and ESP traffic. This directs to one of a set of VpnSessions
+- VpnSession - handler for a single VPN session. This deals with IKEv2 protocol, but not tunnelled traffic.
+
 ## Current issues & work-face
-
-### Now
-
-- [ ] Need to be able to start an SA from this side
-
-### Next
 
 - [ ] Need to be able to CLOSE an SA from this side (regardless of who started it)
 - [ ] Migrate Payloads to Bitwise serialiser? (this would need counts & looping)

@@ -6,12 +6,9 @@ Console.WriteLine($"Starting up VirtualVPN. Current platform={Platform.Current()
 
 Log.SetLevel(Settings.DefaultLogLevel);
 
-if (Settings.RunAirliftSite)
-{
-    // Mini web site for file captures
-    var http = new HttpCapture();
-    http.Start();
-}
+// Mini web site for file captures
+var http = new HttpCapture();
+http.Start();
 
 // Run the VPN server
 // This also listens for console input

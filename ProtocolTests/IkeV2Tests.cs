@@ -105,7 +105,7 @@ public class TestSessionHost : ISessionHost
         throw new NotImplementedException();
     }
 
-    public void RemoveSession(ulong localSpi)
+    public void RemoveSession(ulong localSpi, bool wasRemoteRequest)
     {
         throw new NotImplementedException();
     }

@@ -247,7 +247,8 @@ public class IkeMessage
     {
         Log.Debug($"    Reading payload {nextPayload.ToString()} from source ({srcData.Length} bytes starting at {idx})");
         var thisType = nextPayload;
-        // TODO: continue to fill out
+        
+        // This is not exhaustive, but has everything I've needed so far.
         switch (thisType)
         {
             case PayloadType.SA:

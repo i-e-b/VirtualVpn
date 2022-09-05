@@ -1,4 +1,5 @@
-﻿using System.Net;
+﻿using System.Globalization;
+using System.Net;
 using System.Net.Sockets;
 using SkinnyJson;
 using VirtualVpn.Enums;
@@ -14,7 +15,7 @@ public interface ISessionHost
 {
     void AddChildSession(ChildSa childSa);
     void RemoveChildSession(uint spi);
-    void RemoveSession(ulong localSpi);
+    void RemoveSession(ulong localSpi, bool wasRemoteRequest);
 }
 
 public class VpnServer : ISessionHost, IDisposable
@@ -109,7 +110,7 @@ public class VpnServer : ISessionHost, IDisposable
 
             case "kill": // stop an association
             {
-                Log.Error("Not implemented yet");
+                KillSessionBySpi(prefix[1]);
                 return;
             }
             case "list": // list open SAs
@@ -138,28 +139,14 @@ public class VpnServer : ISessionHost, IDisposable
             }
             case "airlift":
             {
-                Settings.RunAirliftSite = true;
-                // TODO: start the airlift loop
-                break;
-            }
-            case "notify":
-            {
-                var bits = Min2(prefix[1].Split(",", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries));
-                var gateway = IpV4Address.FromString(bits[0]);
-                var session = _sessions.Values.SingleOrDefault(cs => cs.Gateway == gateway);
-                if (session is null)
-                {
-                    Console.WriteLine("Could not find an established session to that gateway");
-                    return;
-                }
-
-                var networkLoc = IpV4Address.FromString(bits[1]);
-                session.NotifyIpAddresses(networkLoc);
+                Settings.RunAirliftSite = !Settings.RunAirliftSite;
+                Console.WriteLine($"Airlift site toggled {(Settings.RunAirliftSite?"on":"off")}. It may take a few seconds to process.");
                 break;
             }
             case "psk":
             {
-                Settings.PreSharedKeyString = prefix[1]; // TODO: this should be on a per-gateway basis
+                Settings.PreSharedKeyString = prefix[1]; // this should be on a per-gateway basis
+                Console.WriteLine("Pre-shared key updated. This will affect NEW sessions only.");
                 break;
             }
             case "ping":
@@ -184,13 +171,55 @@ public class VpnServer : ISessionHost, IDisposable
                 Console.WriteLine("        trace, loud, less ... crypto (INSECURE)");
                 Console.WriteLine("    Connection:");
                 Console.WriteLine("        list, start [gateway], kill [sa-id],");
-                Console.WriteLine("        notify [gateway-ip, network-location-ip]");
                 Console.WriteLine("        psk [psk-string]");
                 Console.WriteLine("    General:");
                 Console.WriteLine("        quit, capture, ping [ip-address]");
                 Console.WriteLine("        load [file-name], save [file-name]");
                 return;
         }
+    }
+
+    private void KillSessionBySpi(string spiStr)
+    {
+        var ok = ulong.TryParse(spiStr, NumberStyles.HexNumber, null, out var spi);
+        if (!ok)
+        {
+            Console.WriteLine($"Could not interpret '{spiStr}' as a hex number. Use 'list' to get current sessions.");
+            return;
+        }
+
+        // Try to find an IKE/ESP session
+        foreach (var vpnSession in _sessions)
+        {
+            if (vpnSession.Key != spi) continue;
+            
+            Console.WriteLine($"Found session with {vpnSession.Value.Gateway}, ending now.");
+            vpnSession.Value.EndConnectionWithPeer();
+            return;
+        }
+        
+        // Otherwise, try to find just the ESP session
+        foreach (var espSession in _childSessions)
+        {
+            if (espSession.Key != spi) continue;
+            
+            Console.WriteLine($"Found ChildSA (ESP session) with {espSession.Value.Gateway}, ending now.");
+            var parent = espSession.Value.Parent;
+
+            if (parent is null)
+            {
+                Log.Warn("Session was orphaned!");
+            }
+            else
+            {
+                Log.Info("Ending session");
+                parent.EndConnectionWithPeer();
+            }
+
+            return;
+        }
+        
+        Console.WriteLine($"Could not find an active session with SPI {spi:x}. Use 'list' to get current sessions.");
     }
 
     private void LoadSettings(string[] prefix)
@@ -236,7 +265,11 @@ public class VpnServer : ISessionHost, IDisposable
         Console.WriteLine("\r\nEstablished connections:");
         foreach (var session in _childSessions)
         {
-            Console.WriteLine($"    {session.Value.Gateway} [{session.Key}]");
+            var p = session.Value.Parent;
+            var ikeDesc = p is null
+                ? "(orphaned)"
+                : $"from session {p.LocalSpi}. State={p.State.ToString()}, Last touch={p.LastTouchTimer.Elapsed}. Initiated={(p.WeStarted ? "here" : "remotely")}";
+            Console.WriteLine($"    {session.Value.Gateway} [{session.Key}] {ikeDesc}");
         }
     }
 
@@ -311,9 +344,21 @@ public class VpnServer : ISessionHost, IDisposable
         _childSessions.Add(childSa.SpiIn, childSa);
     }
 
-    public void RemoveSession(ulong spi)
+    public void RemoveSession(ulong spi, bool wasRemoteRequest)
     {
-        if (_sessions.ContainsKey(spi)) _sessions.Remove(spi);
+        if (!_sessions.ContainsKey(spi)) return;
+        
+        // Unhook the old session
+        var session = _sessions[spi];
+        _sessions.Remove(spi);
+        Log.Trace($"Session {spi} removed. It was connected to {session.Gateway}");
+
+        // If this is a persistent session ended from elsewhere, start it back up
+        if (wasRemoteRequest && Settings.ReEstablishOnDisconnect)
+        {
+            Log.Info($"Attempting to restart session with {session.Gateway}");
+            StartVpnSession(session.Gateway);
+        }
     }
 
     public void RemoveChildSession(uint spi)
@@ -445,7 +490,6 @@ public class VpnServer : ISessionHost, IDisposable
         // reject unknown sessions
         if (!_childSessions.ContainsKey(spi))
         {
-            // TODO: check for a child session with reversed key?
             Log.Warn($"    Unknown session: 0x{spi:x8} -- not replying");
             Log.Debug("    Expected sessions=", ListKnownSpis);
             return;

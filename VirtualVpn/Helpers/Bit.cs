@@ -82,14 +82,19 @@ public static class Bit
         return result;
     }
 
+    /// <summary>
+    /// Higher security random bytes for N-once 
+    /// </summary>
     public static byte[] RandomNonce()
     {
-        // TODO: use System.Security.Cryptography.RandomNumberGenerator  ?
         var result = new byte[32];
-        _rnd.NextBytes(result);
+        RandomNumberGenerator.Fill(result);
         return result;
     }
 
+    /// <summary>
+    /// Low security random bytes
+    /// </summary>
     public static byte[] RandomBytes(int count)
     {
         var result = new byte[count];

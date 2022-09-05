@@ -7,7 +7,8 @@ namespace VirtualVpn.Web;
 public class HttpCapture
 {
     private readonly HttpListener _listener;
-    private readonly Thread _thread;
+    private readonly Thread _listenThread;
+    private readonly Thread _switchThread;
 
     public HttpCapture()
     {
@@ -16,53 +17,99 @@ public class HttpCapture
 
         _listener.Prefixes.Add("http" + Settings.HttpPrefix);
         
-        _thread = new Thread(RequestThread){IsBackground = true};
+        _listenThread = new Thread(ListenThreadLoop){IsBackground = true}; // handles actual web requests
+        _switchThread = new Thread(SwitchThreadLoop){IsBackground = true}; // handles turning the listener on and off
     }
     
     public void Start()
     {
-        Log.Info("Listening on port 8011");
-        _listener.Start();
-        _thread.Start();
+        _listenThread.Start();
+        _switchThread.Start();
     }
 
-    private void RequestThread()
+    private void SwitchThreadLoop()
     {
-        while (_thread.ThreadState != ThreadState.Stopped)
+        while (_switchThread.ThreadState != ThreadState.Stopped)
         {
-            var ctx = _listener.GetContext();
-            
-            var url = ctx.Request.RawUrl ?? "<null>";
-            Log.Debug($"HTTP listener responding to {url}");
-
-            byte[] bytes;
-            
-            if (url == "/")
+            try
             {
-                ctx.Response.AddHeader("Content-Type", "text/html");
-                ctx.Response.StatusCode = 200;
-                bytes = ShowIndexPage();
-            }
-            else
-            {
-                var path = Settings.FileBase + "/" + Path.GetFileName(url);
-                if (File.Exists(path))
+                while (!Settings.RunAirliftSite)
                 {
-                    ctx.Response.AddHeader("Content-Type", "text/plain");
+                    Thread.Sleep(1000);
+                }
+
+                Log.Info("Starting 'airlift' web handler");
+                _listener.Start();
+
+                while (Settings.RunAirliftSite)
+                {
+                    Thread.Sleep(1000);
+                }
+
+                Log.Info("Stopping 'airlift' web handler");
+                _listener.Stop();
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Fault while switching 'airlift' site", ex);
+                Thread.Sleep(1000);
+            }
+        }
+    }
+
+    private void ListenThreadLoop()
+    {
+        while (_listenThread.ThreadState != ThreadState.Stopped)
+        {
+            while (!Settings.RunAirliftSite || !_listener.IsListening)
+            {
+                // Long sleep if we never switch on
+                Thread.Sleep(5000);
+            }
+            
+            Log.Info("Listening on port 8011");
+            
+            try
+            {
+                var ctx = _listener.GetContext();
+
+                var url = ctx.Request.RawUrl ?? "<null>";
+                Log.Debug($"HTTP listener responding to {url}");
+
+                byte[] bytes;
+
+                if (url == "/")
+                {
+                    ctx.Response.AddHeader("Content-Type", "text/html");
                     ctx.Response.StatusCode = 200;
-                    bytes = File.ReadAllBytes(path);
+                    bytes = ShowIndexPage();
                 }
                 else
                 {
-                    ctx.Response.AddHeader("Content-Type", "text/html");
-                    ctx.Response.StatusCode = 404;
-                    bytes = ShowErrorPage();
+                    var path = Settings.FileBase + "/" + Path.GetFileName(url);
+                    if (File.Exists(path))
+                    {
+                        ctx.Response.AddHeader("Content-Type", "text/plain");
+                        ctx.Response.StatusCode = 200;
+                        bytes = File.ReadAllBytes(path);
+                    }
+                    else
+                    {
+                        ctx.Response.AddHeader("Content-Type", "text/html");
+                        ctx.Response.StatusCode = 404;
+                        bytes = ShowErrorPage();
+                    }
                 }
-            }
 
-            ctx.Response.OutputStream.Write(bytes);
-            
-            ctx.Response.Close();
+                ctx.Response.OutputStream.Write(bytes);
+
+                ctx.Response.Close();
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Failure in 'airlift' handler", ex);
+                Thread.Sleep(1000);
+            }
         }
     }
     
