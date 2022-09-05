@@ -171,7 +171,7 @@ public class TcpAdaptor : ITcpAdaptor
 
     #region Transfer between web app and VPN tunnel
     long _totalVirtualSent, _totalVirtualRead, _totalRealSent, _totalRealRead;
-    bool _shutdownTransfer = false;
+    bool _shutdownTransfer;
     private bool RunDataTransfer()
     {
         if (_shutdownTransfer) return false;
@@ -319,7 +319,7 @@ public class TcpAdaptor : ITcpAdaptor
         // Connect to web app
         Log.Debug("Connecting to web app");
         var webApiSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-        webApiSocket.Connect(new IPAddress(Settings.WebAppIpAddress), Settings.WebAppPort);
+        webApiSocket.Connect(IpV4Address.FromString(Settings.WebAppIpAddress).MakeEndpoint(Settings.WebAppPort));
         Log.Debug("connection up");
         return webApiSocket;
     }

@@ -444,8 +444,8 @@ public class VpnSession
         
         var messageBytes = BuildSerialMessage(
             ExchangeType.INFORMATIONAL, MessageFlag.Initiator | MessageFlag.Response, sendZeroHeader, _myCrypto, _localSpi, _peerSpi, request.MessageId,
-            new PayloadNotify(IkeProtocolType.NONE, NotifyId.ADDITIONAL_IP4_ADDRESS, null, Settings.LocalIpAddress),
-            new PayloadNotify(IkeProtocolType.NONE, NotifyId.ADDITIONAL_IP4_ADDRESS, null, Settings.LocalTrafficSelector.StartAddress)
+            new PayloadNotify(IkeProtocolType.NONE, NotifyId.ADDITIONAL_IP4_ADDRESS, null, IpV4Address.FromString(Settings.LocalIpAddress).Value),
+            new PayloadNotify(IkeProtocolType.NONE, NotifyId.ADDITIONAL_IP4_ADDRESS, null, IpV4Address.FromString(Settings.LocalTrafficSelector.StartAddress).Value)
             );
 
         if (request.Payloads.Count < 1) // other side is saying no change?
@@ -453,7 +453,7 @@ public class VpnSession
             Log.Debug("MobIke handshake with no elements. Other side network unchanged?");
         }
 
-        Log.Debug($"Info exchange (MobIke handshake) MSG OUT. Sending addresses {new IpV4Address(Settings.LocalIpAddress).AsString} and {new IpV4Address(Settings.LocalTrafficSelector.StartAddress).AsString}");
+        Log.Debug($"Info exchange (MobIke handshake) MSG OUT. Sending addresses {Settings.LocalIpAddress} and {Settings.LocalTrafficSelector.StartAddress}");
         
         _mobIkeMsgId++;
         Send(to: sender, messageBytes);
@@ -525,7 +525,7 @@ public class VpnSession
         if (_lastSentMessageBytes is null) throw new Exception("IKE_AUTH stage reached without recording a last sent message? Auth cannot proceed.");
 
         // pvpn/server.py:301
-        var responsePayloadIdr = new PayloadIDr(IdType.ID_IPV4_ADDR, Settings.LocalIpAddress, 0, 0); // must be same as ipsec.conf, otherwise auth will fail
+        var responsePayloadIdr = new PayloadIDr(IdType.ID_IPV4_ADDR, IpV4Address.FromString(Settings.LocalIpAddress).Value, 0, 0); // must be same as ipsec.conf, otherwise auth will fail
         var mySkp = _myCrypto?.SkP;
         if (mySkp is null) throw new Exception("Local SK-p not established before IKE_AUTH received");
         var authData = GeneratePskAuth(_lastSentMessageBytes, _peerNonce, responsePayloadIdr, mySkp, _peerCrypto?.Prf); // I think this is based on the last thing we sent
@@ -799,6 +799,11 @@ public class VpnSession
         
         _peerNonce ??= request.GetPayload<PayloadNonce>()?.Data;
         
+        // Read bits from current settings
+        var localAddress = IpV4Address.FromString(Settings.LocalIpAddress);
+        var localTrafficSelector = Settings.LocalTrafficSelector.ToSelector();
+        var remoteTrafficSelector = Settings.RemoteTrafficSelector.ToSelector();
+        
         // Check to see if exactly one SA was chosen
         var saPayload = request.GetPayload<PayloadSa>();
 
@@ -833,7 +838,7 @@ public class VpnSession
         // create keys from exchange result. If something went wrong, we will end up with a checksum failure
         CreateKeyAndCrypto(chosenProposal, secret, null);
         
-        var mainIDi = new PayloadIDi(IdType.ID_IPV4_ADDR, Settings.LocalIpAddress, 0, IpProtocol.ANY);
+        var mainIDi = new PayloadIDi(IdType.ID_IPV4_ADDR, localAddress.Value, 0, IpProtocol.ANY);
         mainIDi.ToBytes();// just to trigger the serialisation
         
         var peerIDr = new PayloadIDr(IdType.ID_IPV4_ADDR, Gateway.Value, 0, IpProtocol.ANY);
@@ -880,7 +885,6 @@ public class VpnSession
         
         // IKE flags Initiator, message id=1, first payload=SK
         Log.Trace("Building HandleSaConfirm confirmation message, switching to port 4500");
-        //Log.Trace("Building HandleSaConfirm confirmation message");
         var msgBytes = BuildSerialMessage(ExchangeType.IKE_AUTH, MessageFlag.Initiator,
             sendZeroHeader:true, // 'true' if we are switching to 4500
             _myCrypto, _localSpi, _peerSpi, msgId: 1,
@@ -890,10 +894,10 @@ public class VpnSession
             peerIDr,
             new PayloadAuth(AuthMethod.PSK, pskAuth),
             new PayloadSa(espProposal),
-            new PayloadTsi(Settings.LocalTrafficSelector), // our address ranges,
-            new PayloadTsr(Settings.RemoteTrafficSelector), // expected ranges on their side
+            new PayloadTsi(localTrafficSelector), // our address ranges,
+            new PayloadTsr(remoteTrafficSelector), // expected ranges on their side
             
-            new PayloadNotify(IkeProtocolType.NONE, NotifyId.ADDITIONAL_IP4_ADDRESS, null, Settings.LocalTrafficSelector.StartAddress), // ??? test
+            new PayloadNotify(IkeProtocolType.NONE, NotifyId.ADDITIONAL_IP4_ADDRESS, null, localTrafficSelector.StartAddress),
             
             new PayloadNotify(IkeProtocolType.NONE, NotifyId.MOBIKE_SUPPORTED, null, null) // Enable mobility extensions
             // Notifications for extra IP addresses could go here, but we don't support them yet.
@@ -907,7 +911,6 @@ public class VpnSession
         // See https://docs.strongswan.org/docs/5.9/features/mobike.html
         Log.Trace("Sending IKE_AUTH message");
         Send(to: new IPEndPoint(sender.Address, port:4500), message: msgBytes);
-        //Send(to: sender, message: msgBytes); // this would stay on 500, which I think is allowed. But it's not normal
         State = SessionState.AUTH_SENT;
         // Next is HandleAuthConfirm()
     }

@@ -15,7 +15,6 @@ public class ChildSa : ITransportTunnel
     public UInt32 SpiIn { get; }
     public UInt32 SpiOut { get; }
     public IpV4Address Gateway { get; set; }
-    public bool WeAreInitiator => _parent?.WeStarted ?? false;
 
     // pvpn/server.py:18
     public ChildSa(IpV4Address gateway, byte[] spiIn, byte[] spiOut, IkeCrypto cryptoIn, IkeCrypto cryptoOut,
@@ -448,6 +447,8 @@ public class ChildSa : ITransportTunnel
 
         var checksum = IpChecksum.CalculateChecksum(ByteSerialiser.ToBytes(icmp));
         icmp.Checksum = checksum;
+        
+        var selector = Settings.LocalTrafficSelector.ToSelector();
 
         var icmpData = ByteSerialiser.ToBytes(icmp);
         var ipv4Reply = new IpV4Packet
@@ -462,7 +463,7 @@ public class ChildSa : ITransportTunnel
             Ttl = 64,
             Protocol = IpV4Protocol.ICMP,
             Checksum = 0,
-            Source = new IpV4Address(Settings.LocalTrafficSelector.StartAddress),
+            Source = new IpV4Address(selector.StartAddress),
             Destination = target,
             Options = Array.Empty<byte>(),
             Payload = icmpData

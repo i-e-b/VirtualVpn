@@ -1,5 +1,4 @@
-﻿using VirtualVpn.Enums;
-using VirtualVpn.EspProtocol.Payloads.PayloadSubunits;
+﻿using VirtualVpn.EspProtocol.Payloads.PayloadSubunits;
 using VirtualVpn.Helpers;
 // ReSharper disable FieldCanBeMadeReadOnly.Global
 #pragma warning disable CA2211 // constants should not be public
@@ -81,26 +80,22 @@ public static class Settings
     /// A description of the network on our side of the VPN tunnel.
     /// This must match the expectations of the other side, or the connection will fail.
     /// </summary>
-    public static TrafficSelector LocalTrafficSelector => new() {
-        Type = TrafficSelectType.TS_IPV4_ADDR_RANGE,
-        Protocol = IpProtocol.ANY,
+    public static TrafficSelectorSetting LocalTrafficSelector => new() {
         StartPort = 0,
         EndPort = 65535,
-        StartAddress = new byte[] { 55, 55, 0, 0 },
-        EndAddress = new byte[] { 55, 55, 255, 255 }
+        StartAddress = "55.55.0.0",
+        EndAddress = "55.55.255.255"
     };
 
     /// <summary>
     /// A description of the network on the far side of the VPN tunnel.
     /// This must match the expectations of the other side, or the connection will fail.
     /// </summary>
-    public static TrafficSelector RemoteTrafficSelector => new() {
-        Type = TrafficSelectType.TS_IPV4_ADDR_RANGE,
-        Protocol = IpProtocol.ANY,
+    public static TrafficSelectorSetting RemoteTrafficSelector => new() {
         StartPort = 0,
         EndPort = 65535,
-        StartAddress = new byte[] { 192,168,0,40 },
-        EndAddress = new byte[] { 192,168,0,40 }
+        StartAddress = "192.168.0.40",
+        EndAddress = "192.168.0.40"
     };
 
     /// <summary>
@@ -109,8 +104,8 @@ public static class Settings
     /// <p></p>
     /// This does NOT need to be a real machine's address.
     /// </summary>
-    public static readonly byte[] LocalIpAddress = { 192, 168, 0, 2 }; // Hans
-    //public static readonly byte[] LocalIpAddress = { 185, 81, 252, 44 }; // Behind NAT
+    public static readonly string LocalIpAddress = "192.168.0.2"; // Hans
+    //public static readonly string LocalIpAddress = "185.81.252.44"; // Behind NAT
     
     /// <summary>
     /// TCP port of the app we're tunnelling
@@ -120,5 +115,5 @@ public static class Settings
     /// <summary>
     /// IPv4 address of the app we're tunnelling. If on the same machine, use 127.0.0.1
     /// </summary>
-    public static readonly byte[] WebAppIpAddress = { 127, 0, 0, 1 };
+    public static readonly string WebAppIpAddress = "127.0.0.1";
 }

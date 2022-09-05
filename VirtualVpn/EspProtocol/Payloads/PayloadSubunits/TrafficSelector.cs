@@ -4,6 +4,33 @@ using VirtualVpn.InternetProtocol;
 
 namespace VirtualVpn.EspProtocol.Payloads.PayloadSubunits;
 
+/// <summary>
+/// Class for saving settings, to be used with <see cref="TrafficSelector"/>
+/// </summary>
+public class TrafficSelectorSetting
+{
+    public ushort StartPort { get; set; }
+    public ushort EndPort { get; set; } = 65535;
+    public string StartAddress { get; set; } = "";
+    public string EndAddress { get; set; } = "";
+
+    public TrafficSelector ToSelector()
+    {
+        return new TrafficSelector
+        {
+            Type = TrafficSelectType.TS_IPV4_ADDR_RANGE,
+            Protocol = IpProtocol.ANY,
+            StartPort = StartPort,
+            EndPort = EndPort,
+            StartAddress = IpV4Address.FromString(StartAddress).Value,
+            EndAddress = IpV4Address.FromString(EndAddress).Value,
+        };
+    }
+}
+
+/// <summary>
+/// Class for IKEv2 payloads
+/// </summary>
 public class TrafficSelector
 {
     // pvpn/message.py:402
