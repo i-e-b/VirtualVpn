@@ -26,6 +26,12 @@ public class TrafficSelectorSetting
             EndAddress = IpV4Address.FromString(EndAddress).Value,
         };
     }
+
+    public string Describe()
+    {
+        return $"    Ports: {StartPort} - {EndPort};\r\n" +
+               $"    Addresses: {StartAddress} - {EndAddress};";
+    }
 }
 
 /// <summary>

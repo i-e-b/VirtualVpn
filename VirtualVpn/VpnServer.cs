@@ -206,11 +206,15 @@ public class VpnServer : ISessionHost, IDisposable
 
     private void SaveSettings(string[] prefix)
     {
-        if (string.IsNullOrWhiteSpace(prefix[1])) throw new Exception("Invalid file name for save");
-        
         var json = Json.Freeze(typeof(Settings));
-        File.WriteAllText(prefix[1], json);
         
+        if (string.IsNullOrWhiteSpace(prefix[1]))
+        {
+            Log.Info($"Not stored (no file name given). Current settings:\r\n{json}");
+            return;
+        }
+
+        File.WriteAllText(prefix[1], json);
         Log.Info($"Stored: {json}");
     }
 

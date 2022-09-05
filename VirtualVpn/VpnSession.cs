@@ -575,13 +575,22 @@ public class VpnSession
         // The SA will be used to confirm the ChildSA spi used for session keying.
         //
         // We MUST add a ChildSA session correctly if we exit without error.
-
+        
         var peerSkp = _peerCrypto?.SkP;
         if (peerSkp is null) throw new Exception("Peer SK-p not established before IKE_AUTH received");
         if (_peerNonce is null) throw new Exception("Peer N-once was not established before IKE_AUTH received");
         if (_previousRequestRawData is null) throw new Exception("Peer's previous raw request not stored during IKE_INIT_SA to use in IKE_AUTH");
 
-        var tsr = request.GetPayload<PayloadTsr>() ?? throw new Exception("IKE_AUTH did not have an IDi payload");
+        var rejection = request.GetPayload<PayloadNotify>(p=>p.NotificationType == NotifyId.TS_UNACCEPTABLE);
+        if (rejection is not null)
+        {
+            Log.Critical("Remote gateway rejected traffic selectors. Check IP and port ranges." +
+                         $"\r\nCurrent settings:\r\nLocal:\r\n{Settings.LocalTrafficSelector.Describe()}"+
+                         $"\r\nRemote:\r\n{Settings.RemoteTrafficSelector.Describe()}");
+            return;
+        }
+
+        var tsr = request.GetPayload<PayloadTsr>() ?? throw new Exception("IKE_AUTH did not have an TSr payload");
         var idr = request.GetPayload<PayloadIDr>() ?? throw new Exception("IKE_AUTH did not have an IDi payload");
         var auth = request.GetPayload<PayloadAuth>();
         if (auth is null) throw new Exception("Peer requested EAP, which we don't support");
