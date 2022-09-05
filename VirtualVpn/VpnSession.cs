@@ -752,21 +752,21 @@ public class VpnSession
         defaultProposal.Transforms.Add(new Transform
         {
             Type = TransformType.DH,
-            Id = (uint)DhId.DH_14
+            Id = Settings.StartKeyExchangeFunction
         });
 
         // Supply a hash function for checksums
         defaultProposal.Transforms.Add(new Transform
         {
             Type = TransformType.INTEG,
-            Id = (uint)IntegId.AUTH_HMAC_SHA2_256_128
+            Id = Settings.StartIntegrity
         });
 
         // Supply a hash function for random number generation
         defaultProposal.Transforms.Add(new Transform
         {
             Type = TransformType.PRF,
-            Id = (uint)PrfId.PRF_HMAC_SHA2_256
+            Id = Settings.StartRandomFunction
         });
 
         _keyExchange ??= BCDiffieHellman.CreateForGroup(DhId.DH_14) ?? throw new Exception("Failed to generate key exchange when generating new session");

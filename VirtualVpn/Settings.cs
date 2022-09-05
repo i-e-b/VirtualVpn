@@ -1,6 +1,8 @@
-﻿using VirtualVpn.EspProtocol.Payloads.PayloadSubunits;
+﻿using VirtualVpn.Enums;
+using VirtualVpn.EspProtocol.Payloads.PayloadSubunits;
 using VirtualVpn.Helpers;
 // ReSharper disable FieldCanBeMadeReadOnly.Global
+// ReSharper disable ConvertToConstant.Global
 #pragma warning disable CA2211 // constants should not be public
 
 namespace VirtualVpn;
@@ -15,8 +17,8 @@ public static class Settings
     /// <summary>
     /// Listener prefix for the web "airlift". This helps you pull logs.
     /// </summary>
-    public const string HttpPrefix = "://+:8011/"; // <-- this will require root/admin access.
-    //public const string HttpPrefix = "://localhost:8011/"; // <-- use this if testing locally
+    public static string HttpPrefix = "://+:8011/"; // <-- this will require root/admin access.
+    //public static string HttpPrefix = "://localhost:8011/"; // <-- use this if testing locally
     
     /// <summary>
     /// INSECURE if true
@@ -41,7 +43,7 @@ public static class Settings
     /// <summary>
     /// Log level that will be set at startup
     /// </summary>
-    public const LogLevel DefaultLogLevel = LogLevel.Info;
+    public static LogLevel DefaultLogLevel = LogLevel.Info;
     
     /// <summary>
     /// If true, the output of `Bit.Describe` generates C# code.
@@ -104,16 +106,37 @@ public static class Settings
     /// <p></p>
     /// This does NOT need to be a real machine's address.
     /// </summary>
-    public static readonly string LocalIpAddress = "192.168.0.2"; // Hans
-    //public static readonly string LocalIpAddress = "185.81.252.44"; // Behind NAT
+    //public static readonly string LocalIpAddress = "192.168.0.2"; // Hans
+    public static string LocalIpAddress = "185.81.252.44"; // Behind NAT
     
     /// <summary>
     /// TCP port of the app we're tunnelling
     /// </summary>
-    public const int WebAppPort = 5223;
+    public static int WebAppPort = 5223;
     
     /// <summary>
     /// IPv4 address of the app we're tunnelling. If on the same machine, use 127.0.0.1
     /// </summary>
-    public static readonly string WebAppIpAddress = "127.0.0.1";
+    public static string WebAppIpAddress = "127.0.0.1";
+    
+    
+    /// <summary>
+    /// Integrity algorithm ID.
+    /// Supplied to peer when VirtualVPN is initiator
+    /// </summary>
+    //public static readonly uint StartIntegrity = (uint)IntegId.AUTH_HMAC_SHA2_256_128; // preferred
+    public static uint StartIntegrity = (uint)IntegId.AUTH_HMAC_SHA1_96; // accepted by old systems
+    
+    /// <summary>
+    /// Pseudo-random function algorithm ID.
+    /// Supplied to peer when VirtualVPN is initiator
+    /// </summary>
+    //public static uint StartRandomFunction = (uint)PrfId.PRF_HMAC_SHA2_256; // preferred
+    public static uint StartRandomFunction = (uint)PrfId.PRF_HMAC_SHA1; // accepted by old systems
+    
+    /// <summary>
+    /// Key exchange algorithm ID.
+    /// Supplied to peer when VirtualVPN is initiator
+    /// </summary>
+    public static uint StartKeyExchangeFunction = (uint)DhId.DH_14;
 }
