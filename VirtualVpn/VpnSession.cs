@@ -120,7 +120,8 @@ public class VpnSession
                 Log.Critical($"Session {_localSpi:x} timed-out after establishment. Are keep-alive messages not arriving?");
                 foreach (var child in _thisSessionChildren)
                 {
-                    _sessionHost.RemoveChildSession(child.Key);
+                    _sessionHost.RemoveChildSession(child.Value.SpiIn);
+                    _sessionHost.RemoveChildSession(child.Value.SpiOut);
                 }
 
                 _sessionHost.RemoveSession(_localSpi, wasRemoteRequest: false);
@@ -131,12 +132,15 @@ public class VpnSession
             case SessionState.DELETED:
             {
                 Log.Info($"Removing deleted session {_localSpi:x}");
+                _sessionHost.RemoveSession(_localSpi, wasRemoteRequest: false);
+
                 foreach (var child in _thisSessionChildren)
                 {
-                    Log.Trace($"Removing child SA {child.Key:x}");
-                    _sessionHost.RemoveChildSession(child.Key);
+                    Log.Trace($"Removing child SA {child.Key:x}; spi-in={child.Value.SpiIn:x}, spi-out={child.Value.SpiOut:x}");
+                    _sessionHost.RemoveChildSession(child.Value.SpiIn);
+                    _sessionHost.RemoveChildSession(child.Value.SpiOut);
                 }
-                _sessionHost.RemoveSession(_localSpi, wasRemoteRequest: false);
+
                 break;
             }
             default:

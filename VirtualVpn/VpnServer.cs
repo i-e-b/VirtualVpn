@@ -364,6 +364,7 @@ public class VpnServer : ISessionHost, IDisposable
     public void RemoveChildSession(uint spi)
     {
         if (_childSessions.ContainsKey(spi)) _childSessions.Remove(spi);
+        else Log.Debug($"Did not find child session by key {spi:x}");
     }
 
     private void StopRunning(object? sender, ConsoleCancelEventArgs e)
