@@ -14,6 +14,33 @@ This VPN does **not** support all IKEv2 settings, and doesn't support IKEv1 at a
 
 Hopefully it's simple enough that any new parts can be added.
 
+## Starting
+
+In the VirtualVPN project folder (where the `VirtualVPN.csproj` file is), call
+`dotnet run .`
+
+Once the project is compiled and running, you should get a message like:
+```
+Starting up VirtualVPN. Current platform=Windows
+Log level set to 3 (Info)
+2022-09-06T09:07 (utc) Listening on 4500...
+2022-09-06T09:07 (utc) Listening on 500...
+```
+
+If you get an error message, you might not have permissions to attach to the network
+(in which case, make sure you are running as root/administrator),
+or there is already VPN software running on these ports.
+
+Press <kbd>enter</kbd> in the console to get a list of available commands.
+
+You will want to load a configuration file before connecting to a remote gateway.
+The default settings can be saved or viewed by typing `save mySettings.json`<kbd>enter</kbd> into the console.
+
+Load settings with `load mySettings.json`<kbd>enter</kbd>
+
+Once settings are loaded, you can connect from the remote gateway, or request a connection
+by typing `start 192.168.x.x`<kbd>enter</kbd> at the console (with the IP address of the remote gateway).
+
 ## Layout
 
 The projects `JustListen` and `SmallWebTest` are tools to help with development,
@@ -33,11 +60,7 @@ and are not required when running Virtual VPN
 
 ## Current issues & work-face
 
-- [ ] Need to be able to CLOSE an SA from this side (regardless of who started it)
-- [ ] Migrate Payloads to Bitwise serialiser? (this would need counts & looping)
-
-### Future
-
+- [ ] Migrate Payloads to Bitwise serialiser? (might need counts & looping)
 - [ ] Go through the collection types and make them thread safe
 - [ ] Check all "to-do" items
 

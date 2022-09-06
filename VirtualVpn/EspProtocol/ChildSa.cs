@@ -1,4 +1,5 @@
-﻿using System.Net;
+﻿using System.Diagnostics;
+using System.Net;
 using VirtualVpn.Crypto;
 using VirtualVpn.Enums;
 using VirtualVpn.EspProtocol.Payloads;
@@ -12,10 +13,37 @@ namespace VirtualVpn.EspProtocol;
 
 public class ChildSa : ITransportTunnel
 {
+    // Keys
     public UInt32 SpiIn { get; }
     public UInt32 SpiOut { get; }
     public IpV4Address Gateway { get; set; }
     public VpnSession? Parent { get; }
+    
+    // Stats
+    public ulong DataIn { get; set; }
+    public ulong DataOut { get; set; }
+    public ulong MessagesIn { get; set; }
+    public ulong MessagesOut { get; set; }
+    
+    
+    private readonly byte[] _spiIn;
+    private readonly byte[] _spiOut;
+    private readonly IkeCrypto _cryptoIn;
+    private readonly IkeCrypto _cryptoOut;
+    private readonly IUdpServer? _server;
+    private readonly PayloadTsx? _trafficSelect;
+    private long _msgIdIn;
+    private long _msgIdOut;
+    private long _captureNumber;
+    
+    private readonly ThreadSafeMap<SenderPort, TcpAdaptor> _tcpSessions = new();
+    private readonly ThreadSafeMap<SenderPort, TcpAdaptor> _parkedSessions = new();
+    private readonly EspTimedEvent _keepAliveTrigger;
+    private readonly Stopwatch _pingTimer; // for pings we send
+
+    private static readonly Random _rnd = new();
+    private static int RandomPacketId() => _rnd.Next();
+
 
     // pvpn/server.py:18
     public ChildSa(IpV4Address gateway, byte[] spiIn, byte[] spiOut, IkeCrypto cryptoIn, IkeCrypto cryptoOut,
@@ -29,6 +57,7 @@ public class ChildSa : ITransportTunnel
         _server = server;
         Parent = parent;
         _trafficSelect = trafficSelect;
+        _pingTimer = new Stopwatch();
 
         _keepAliveTrigger = new EspTimedEvent(KeepAliveEvent, Settings.KeepAliveTimeout);
 
@@ -140,6 +169,9 @@ public class ChildSa : ITransportTunnel
         return message;
     }
 
+    /// <summary>
+    /// Public for testing reasons. This should only be called by <see cref="HandleSpe"/>
+    /// </summary>
     public IpV4Packet ReadSpe(byte[] encrypted, out EspPacket espPacket)
     {
         // sanity check
@@ -186,24 +218,6 @@ public class ChildSa : ITransportTunnel
         Reply(raw, gateway);
     }
     
-    
-    private readonly byte[] _spiIn;
-    private readonly byte[] _spiOut;
-    private readonly IkeCrypto _cryptoIn;
-    private readonly IkeCrypto _cryptoOut;
-    private readonly IUdpServer? _server;
-    private readonly PayloadTsx? _trafficSelect;
-    private long _msgIdIn;
-    private long _msgIdOut;
-    private long _captureNumber;
-    
-    private readonly ThreadSafeMap<SenderPort, TcpAdaptor> _tcpSessions = new();
-    private readonly ThreadSafeMap<SenderPort, TcpAdaptor> _parkedSessions = new();
-    private readonly EspTimedEvent _keepAliveTrigger;
-
-    private static readonly Random _rnd = new();
-    private static int RandomPacketId() => _rnd.Next();
-
     /// <summary>
     /// Immediately remove the connection from sessions and stop event pump
     /// </summary>
@@ -228,7 +242,8 @@ public class ChildSa : ITransportTunnel
         
         Parent?.UpdateTrafficTimeout();
         var incomingIpv4Message = ReadSpe(data, out var espPkt);
-
+        MessagesIn++;
+        DataIn += (ulong)data.Length;
 
         switch (incomingIpv4Message.Protocol)
         {
@@ -332,7 +347,8 @@ public class ChildSa : ITransportTunnel
             }
             else if (icmp.MessageType == IcmpType.EchoReply)
             {
-                Log.Info($"    ICMP ping reply from {sender.Address}:{sender.Port}");
+                _pingTimer.Stop();
+                Log.Info($"    ICMP ping reply\r\n Time={_pingTimer.ElapsedMilliseconds}ms, Responder={incomingIpv4Message.Source}, Gateway={sender.Address}:{sender.Port}.");
             }
             else Log.Debug($"Unsupported ICMP message '{icmp.MessageType.ToString()}' -- not replying");
         }
@@ -384,6 +400,9 @@ public class ChildSa : ITransportTunnel
             Log.Warn($"Can't send to {to.Address}, this Child SA has no UDP server connection");
             return;
         }
+        
+        MessagesOut++;
+        DataOut += (ulong)message.Length;
         
         _server.SendRaw(message, to);
 
@@ -474,5 +493,6 @@ public class ChildSa : ITransportTunnel
         Log.Info("    Sending ping...");
         var encryptedData = WriteSpe(ipv4Reply);
         Reply(encryptedData, Gateway.MakeEndpoint(4500));
+        _pingTimer.Restart();
     }
 }

@@ -101,6 +101,22 @@ public static class Bit
         _rnd.NextBytes(result);
         return result;
     }
+    
+    /// <summary>
+    /// Render a human-friendly string for a file size in bytes
+    /// </summary>
+    public static string Human(ulong byteLength)
+    {
+        double size = byteLength;
+        var prefix = new []{ "b", "kb", "mb", "gb", "tb", "pb" };
+        int i;
+        for (i = 0; i < prefix.Length; i++)
+        {
+            if (size < 1024) break;
+            size /= 1024;
+        }
+        return size.ToString("#0.##") + prefix[i];
+    }
 
 
     public static byte[] UInt16ToBytes(ushort value)

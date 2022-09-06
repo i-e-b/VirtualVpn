@@ -22,6 +22,11 @@ public class UdpServer : IUdpServer, IDisposable
     private readonly UdpClient _speClient;
     private readonly UdpClient _ikeClient;
 
+    /// <summary> Total bytes received </summary>
+    public ulong TotalIn { get; private set; }
+    /// <summary> Total bytes sent </summary>
+    public ulong TotalOut { get; private set; }
+
     public UdpServer(Action<byte[], IPEndPoint>? ikeResponder, Action<byte[], IPEndPoint>? speResponder)
     {
         _ikeResponder = ikeResponder;
@@ -35,6 +40,9 @@ public class UdpServer : IUdpServer, IDisposable
         
         _commsThreadIke = new Thread(IkeLoop){IsBackground = true};
         _commsThreadSpe = new Thread(SpeLoop){IsBackground = true};
+        
+        TotalIn = 0;
+        TotalOut = 0;
     }
 
     public void Start()
@@ -49,10 +57,11 @@ public class UdpServer : IUdpServer, IDisposable
         var sender = new IPEndPoint(IPAddress.Any, 0);
         while (_running)
         {
-            Log.Info("Listening on 500...");
-            var buffer = _ikeClient.Receive(ref sender);
             try
             {
+                Log.Info("Listening on 500...");
+                var buffer = _ikeClient.Receive(ref sender);
+                TotalIn += (ulong)buffer.Length;
                 _ikeResponder?.Invoke(buffer, sender);
             }
             catch (Exception ex)
@@ -67,10 +76,11 @@ public class UdpServer : IUdpServer, IDisposable
         var sender = new IPEndPoint(IPAddress.Any, 0);
         while (_running)
         {
-            Log.Info("Listening on 4500...");
-            var buffer = _speClient.Receive(ref sender);
             try
             {
+                Log.Info("Listening on 4500...");
+                var buffer = _speClient.Receive(ref sender);
+                TotalIn += (ulong)buffer.Length;
                 _speResponder?.Invoke(buffer, sender);
             }
             catch (Exception ex)
@@ -88,6 +98,7 @@ public class UdpServer : IUdpServer, IDisposable
         // `UdpClient.Send()` seems to cause 500 port to be used on the way back,
         // unlike `Socket.SendTo(buf,flags,target)` which gives an ephemeral port
 
+        TotalOut += (ulong)data.Length;
         switch (target.Port)
         {
             case 4500:

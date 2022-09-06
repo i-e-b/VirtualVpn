@@ -120,12 +120,11 @@ public class VpnSession
                 Log.Critical($"Session {_localSpi:x} timed-out after establishment. Are keep-alive messages not arriving?");
                 foreach (var child in _thisSessionChildren)
                 {
-                    _sessionHost.RemoveChildSession(child.Value.SpiIn);
-                    _sessionHost.RemoveChildSession(child.Value.SpiOut);
+                    Log.Trace($"Removing child SA {child.Key:x}; spi-in={child.Value.SpiIn:x}, spi-out={child.Value.SpiOut:x}");
+                    _sessionHost.RemoveChildSession(child.Value.SpiIn, child.Value.SpiOut);
                 }
 
-                _sessionHost.RemoveSession(_localSpi, wasRemoteRequest: false);
-                _sessionHost.RemoveSession(_peerSpi, wasRemoteRequest: false);
+                _sessionHost.RemoveSession(wasRemoteRequest: false, _localSpi, _peerSpi);
                 
                 State = SessionState.DELETED;
                 break;
@@ -133,14 +132,12 @@ public class VpnSession
             case SessionState.DELETED:
             {
                 Log.Info($"Removing deleted session {_localSpi:x}");
-                _sessionHost.RemoveSession(_localSpi, wasRemoteRequest: false);
-                _sessionHost.RemoveSession(_peerSpi, wasRemoteRequest: false);
+                _sessionHost.RemoveSession(wasRemoteRequest: false, _localSpi, _peerSpi);
 
                 foreach (var child in _thisSessionChildren)
                 {
                     Log.Trace($"Removing child SA {child.Key:x}; spi-in={child.Value.SpiIn:x}, spi-out={child.Value.SpiOut:x}");
-                    _sessionHost.RemoveChildSession(child.Value.SpiIn);
-                    _sessionHost.RemoveChildSession(child.Value.SpiOut);
+                    _sessionHost.RemoveChildSession(child.Value.SpiIn, child.Value.SpiOut);
                 }
 
                 break;
@@ -152,8 +149,7 @@ public class VpnSession
                 EndConnectionWithPeer(); // fire a DELETE message, but don't wait for reply
             
                 Log.Critical($"Session {_localSpi:x} timed-out during negotiation (state={State.ToString()}). The session will be abandoned.");
-                _sessionHost.RemoveSession(_localSpi, wasRemoteRequest: false);
-                _sessionHost.RemoveSession(_peerSpi, wasRemoteRequest: false);
+                _sessionHost.RemoveSession(wasRemoteRequest: false, _localSpi, _peerSpi);
                 
                 State = SessionState.DELETED;
                 break;
@@ -443,15 +439,15 @@ public class VpnSession
         if (deletePayload.ProtocolType == IkeProtocolType.IKE) // pvpn/server.py:321
         {
             // This session should be removed?
-            State = SessionState.DELETED;
-            _sessionHost.RemoveSession(_localSpi, wasRemoteRequest: true);
-
             Log.Info($"    Removing entire session {_localSpi:x16}");
             foreach (var childSa in _thisSessionChildren)
             {
-                _sessionHost.RemoveChildSession(childSa.Value.SpiIn);
+                _sessionHost.RemoveChildSession(childSa.Value.SpiIn, childSa.Value.SpiOut);
             }
+            
+            _sessionHost.RemoveSession(wasRemoteRequest: true, _localSpi, _peerSpi);
 
+            State = SessionState.DELETED;
             _thisSessionChildren.Clear();
             Send(to: sender, message: BuildResponse(ExchangeType.INFORMATIONAL, _peerMsgId, sendZeroHeader, _myCrypto, deletePayload));
             return;

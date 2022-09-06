@@ -137,6 +137,13 @@ public static class Settings
     /// How often keep-alive messages are sent for ChildSa connections we started
     /// </summary>
     public static TimeSpan KeepAliveTimeout { get; set; } = TimeSpan.FromSeconds(10);
+
+    /// <summary>
+    /// How often to print statistics to the console.
+    /// Stats are written with 'Info' log level.
+    /// </summary>
+    public static TimeSpan StatsFrequency { get; set; } = TimeSpan.FromSeconds(30);
+
     #endregion
 
     #region Cryptographic parameters

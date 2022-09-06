@@ -33,6 +33,7 @@ public static class Log
 {
     private static LogLevel _level = LogLevel.Warning;
     public static bool IncludeCrypto => _level >= LogLevel.Crypto;
+    public static bool IncludeInfo => _level >= LogLevel.Info;
 
     public static void SetLevel(LogLevel level)
     {

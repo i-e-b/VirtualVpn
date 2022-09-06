@@ -1,6 +1,7 @@
 ﻿using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
+using System.Text;
 using SkinnyJson;
 using VirtualVpn.Enums;
 using VirtualVpn.EspProtocol;
@@ -14,21 +15,29 @@ namespace VirtualVpn;
 public interface ISessionHost
 {
     void AddChildSession(ChildSa childSa);
-    void RemoveChildSession(uint spi);
-    void RemoveSession(ulong localSpi, bool wasRemoteRequest);
+    void RemoveChildSession(params uint[] spis);
+    void RemoveSession(bool wasRemoteRequest, params ulong[] spis);
 }
 
 public class VpnServer : ISessionHost, IDisposable
 {
     private const int NonEspHeader = 0; // https://docs.strongswan.org/docs/5.9/features/natTraversal.html
 
+    // Session management
     private readonly Thread _eventPumpThread;
     private readonly UdpServer _server;
     private readonly Dictionary<UInt64, VpnSession> _sessions = new();
     private readonly Dictionary<UInt32, ChildSa> _childSessions = new();
+    
+    // Internal counts
     private volatile bool _running;
     private long _espCount;
     private int _messageCount;
+    
+    // Stats stuff
+    private readonly EspTimedEvent _statsTimer;
+    private ulong _sessionsStarted;
+
 
     public VpnServer()
     {
@@ -43,7 +52,33 @@ public class VpnServer : ISessionHost, IDisposable
             throw;
         }
 
+        _statsTimer = new EspTimedEvent(StatsEvent, Settings.StatsFrequency);
         _eventPumpThread = new Thread(EventPumpLoop) { IsBackground = true };
+    }
+
+    /// <summary>
+    /// Writes server statistics to console
+    /// </summary>
+    private void StatsEvent(EspTimedEvent obj)
+    {
+        _statsTimer.Reset();
+        if ( ! Log.IncludeInfo) return;
+        
+        var sb = new StringBuilder();
+        
+        sb.Append($"Statistics:\r\n\r\nSessions={_sessions.Count} active, {_sessionsStarted} started;"); 
+        sb.Append($"\r\nTotal data in={Bit.Human(_server.TotalIn)}, out={Bit.Human(_server.TotalOut)}");
+        sb.Append("\r\nChild sessions:\r\n");
+        foreach (var childSa in _childSessions.Values)
+        {
+            sb.Append($"    Gateway={childSa.Gateway}, Spi-in={childSa.SpiIn}, Spi-out={childSa.SpiOut}\r\n");
+            sb.Append($"        Parent: spi={childSa.Parent?.LocalSpi:x}, state={(childSa.Parent?.State.ToString() ?? "<orphan>")}\r\n");
+            sb.Append($"        Messages: in={childSa.MessagesIn}, out={childSa.MessagesOut}\r\n");
+            sb.Append($"        Data: in={Bit.Human(childSa.DataIn)}, out={Bit.Human(childSa.DataOut)}\r\n");
+        }
+        sb.Append("\r\n");
+        
+        Log.Info(sb.ToString());
     }
 
     public void Run()
@@ -316,6 +351,7 @@ public class VpnServer : ISessionHost, IDisposable
         var newSession = new VpnSession(gateway, _server, this, weAreInitiator:true, 0);
         Log.Debug($"Starting new session with SPI {newSession.LocalSpi:x16}");
         _sessions.Add(newSession.LocalSpi, newSession);
+        _sessionsStarted++;
         
         newSession.RequestNewSession(gateway.MakeEndpoint(port:500));
     }
@@ -344,31 +380,57 @@ public class VpnServer : ISessionHost, IDisposable
         _childSessions.Add(childSa.SpiIn, childSa);
     }
 
-    public void RemoveSession(ulong spi, bool wasRemoteRequest)
+    public void RemoveSession(bool wasRemoteRequest, params ulong[] spis)
     {
-        if (!_sessions.ContainsKey(spi))
+        var removedCount = 0;
+
+        foreach (var spi in spis)
         {
-            Log.Debug($"Session not found: {spi:x}");
-            return;
+            if (!_sessions.ContainsKey(spi)) continue;
+
+            // Unhook the old session
+            var session = _sessions[spi];
+            var removed = _sessions.Remove(spi);
+            Log.Trace($"Session {spi:x} removed. It was connected to {session.Gateway}");
+
+            if (removed) removedCount++;
+            
+            // If this is a persistent session ended from elsewhere, start it back up
+            if (wasRemoteRequest && Settings.ReEstablishOnDisconnect)
+            {
+                Log.Info($"Attempting to restart session with {session.Gateway}");
+                StartVpnSession(session.Gateway);
+            }
         }
 
-        // Unhook the old session
-        var session = _sessions[spi];
-        _sessions.Remove(spi);
-        Log.Trace($"Session {spi:x} removed. It was connected to {session.Gateway}");
 
-        // If this is a persistent session ended from elsewhere, start it back up
-        if (wasRemoteRequest && Settings.ReEstablishOnDisconnect)
+        if (removedCount < 1)
         {
-            Log.Info($"Attempting to restart session with {session.Gateway}");
-            StartVpnSession(session.Gateway);
+            Log.Warn($"No matching session found in set: {string.Join(", ", spis.Select(i=>i.ToString("x")))}");
         }
+
     }
 
-    public void RemoveChildSession(uint spi)
+    public void RemoveChildSession(params uint[] spis)
     {
-        if (_childSessions.ContainsKey(spi)) _childSessions.Remove(spi);
-        else Log.Debug($"Did not find child session by key {spi:x}");
+        var removedCount = 0;
+
+        foreach (var spi in spis)
+        {
+            if (!_childSessions.ContainsKey(spi)) continue;
+
+            // Unhook the old session
+            var session = _childSessions[spi];
+            var removed = _childSessions.Remove(spi);
+            Log.Trace($"Child session {spi:x} removed. It was connected to {session.Gateway}");
+
+            if (removed) removedCount++;
+        }
+
+        if (removedCount < 1)
+        {
+            Log.Warn($"No matching child session found in set: {string.Join(", ", spis.Select(i=>i.ToString("x")))}");
+        }
     }
 
     private void StopRunning(object? sender, ConsoleCancelEventArgs e)
@@ -435,6 +497,7 @@ public class VpnServer : ISessionHost, IDisposable
         // Start a new session and store it, keyed by the initiator id
         var newSession = new VpnSession(IpV4Address.FromEndpoint(sender), _server, this, weAreInitiator:false, ikeMessage.SpiI);
         _sessions.Add(ikeMessage.SpiI, newSession);
+        _sessionsStarted++;
             
         // Pass message to new session
         newSession.HandleIke(ikeMessage, sender, sendZeroHeader); 
@@ -575,6 +638,8 @@ public class VpnServer : ISessionHost, IDisposable
                         Log.Error("Event pump failure, ChildSA", ex);
                     }
                 }
+                
+                _statsTimer.TriggerIfExpired();
                 
                 // Wait before looping, unless any of the ChildSA are active,
                 // in which case we go full speed.
