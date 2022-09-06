@@ -1,5 +1,6 @@
 ﻿// ReSharper disable BuiltInTypeReferenceStyle
 
+using System.Diagnostics.CodeAnalysis;
 using VirtualVpn.Crypto;
 using VirtualVpn.Enums;
 using VirtualVpn.EspProtocol.Payloads;
@@ -7,6 +8,8 @@ using VirtualVpn.Helpers;
 
 namespace VirtualVpn.EspProtocol;
 
+[SuppressMessage("ReSharper", "PropertyCanBeMadeInitOnly.Global")]
+[SuppressMessage("ReSharper", "PropertyCanBeMadeInitOnly.Local")]
 public class IkeMessage
 {
     /// <summary>
@@ -89,12 +92,11 @@ public class IkeMessage
         FirstPayload = Payloads.Count > 0 ? Payloads[0].Type : PayloadType.NONE;
         
         var payloadData = EncodePayloads();
-        byte[]? rawEncrypted = null;
 
         if (ikeCrypto is not null)
         {
             // pvpn/message.py:555
-            rawEncrypted = ikeCrypto.Encrypt(payloadData);
+            var rawEncrypted = ikeCrypto.Encrypt(payloadData);
             var sk = new PayloadSecured(rawEncrypted)
             {
                 NextPayload = FirstPayload

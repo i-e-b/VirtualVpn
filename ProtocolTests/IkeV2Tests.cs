@@ -2,8 +2,6 @@
 using NUnit.Framework;
 using SkinnyJson;
 using VirtualVpn;
-using VirtualVpn.Crypto;
-using VirtualVpn.Enums;
 using VirtualVpn.EspProtocol;
 using VirtualVpn.Helpers;
 using VirtualVpn.InternetProtocol;
@@ -100,12 +98,12 @@ public class TestSessionHost : ISessionHost
         throw new NotImplementedException();
     }
 
-    public void RemoveChildSession(uint spi)
+    public void RemoveChildSession(params uint[] spis)
     {
         throw new NotImplementedException();
     }
 
-    public void RemoveSession(ulong localSpi, bool wasRemoteRequest)
+    public void RemoveSession(bool wasRemoteRequest, params ulong[] spis)
     {
         throw new NotImplementedException();
     }

@@ -1,5 +1,4 @@
 ﻿using System.Net.Sockets;
-using System.Security.Cryptography;
 using System.Text;
 using NUnit.Framework;
 using VirtualVpn;

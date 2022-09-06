@@ -22,7 +22,7 @@ public class DiffieHellmanParameters
     /**
 	 * Exponent length to use
 	 */
-    public int ExponentLength = 0;
+    public int ExponentLength;
 
     /**
 	 * Prime order subgroup; for MODP Groups 22-24

@@ -8,8 +8,19 @@ using VirtualVpn.Helpers;
 using VirtualVpn.InternetProtocol;
 using VirtualVpn.TcpProtocol;
 
+var running = true;
+var shutdown = false;
+// ReSharper disable once StringLiteralTypo
 Console.Write("[T]CP, [U]DP, [S]end packets, [L]isten on socket 5223 ");
 var x = Console.Read();
+
+void OnConsoleOnCancelKeyPress(object? sender, ConsoleCancelEventArgs consoleCancelEventArgs)
+{
+    running = false;
+    shutdown = true;
+}
+
+Console.CancelKeyPress += OnConsoleOnCancelKeyPress;
 
 if (x == 'u' || x == 'U')
 {
@@ -27,7 +38,7 @@ if (x == 'u' || x == 'U')
 else
 {
     Console.WriteLine("\r\nWhat?");
-}
+} 
 
 void SendPackets()
 {
@@ -95,8 +106,9 @@ void ListenSocket5223()
 
     var buffer = new byte[65536];
     
-    while (true)
+    while (running)
     {
+        if (shutdown) running = false;
         Console.WriteLine("Waiting for data");
         EndPoint endPoint = new IPEndPoint(IPAddress.Any, 5223);
         var bytes = sock.ReceiveFrom(buffer, ref endPoint);
@@ -119,8 +131,9 @@ void ListenUdp()
     var localEp = new IPEndPoint(IPAddress.Any, 5223);
     var tcpListener = new UdpClient(localEp);
 
-    while (true)
+    while (running)
     {
+        if (shutdown) running = false;
         Console.WriteLine("Waiting for a connection");
         var endPoint = new IPEndPoint(IPAddress.Any, 0);
         var bytes = tcpListener.Receive(ref endPoint);
@@ -140,8 +153,9 @@ void ListenTcp()
     var buffer = new byte[65536];
     tcpListener.Start();
 
-    while (true)
+    while (running)
     {
+        if (shutdown) running = false;
         Console.WriteLine("Waiting for a connection");
         using var client = tcpListener.AcceptTcpClient();
         Console.WriteLine("Got a connection. Reading...");
