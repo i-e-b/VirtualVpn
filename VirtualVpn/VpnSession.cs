@@ -125,6 +125,7 @@ public class VpnSession
                 }
 
                 _sessionHost.RemoveSession(_localSpi, wasRemoteRequest: false);
+                _sessionHost.RemoveSession(_peerSpi, wasRemoteRequest: false);
                 
                 State = SessionState.DELETED;
                 break;
@@ -133,6 +134,7 @@ public class VpnSession
             {
                 Log.Info($"Removing deleted session {_localSpi:x}");
                 _sessionHost.RemoveSession(_localSpi, wasRemoteRequest: false);
+                _sessionHost.RemoveSession(_peerSpi, wasRemoteRequest: false);
 
                 foreach (var child in _thisSessionChildren)
                 {
@@ -151,6 +153,7 @@ public class VpnSession
             
                 Log.Critical($"Session {_localSpi:x} timed-out during negotiation (state={State.ToString()}). The session will be abandoned.");
                 _sessionHost.RemoveSession(_localSpi, wasRemoteRequest: false);
+                _sessionHost.RemoveSession(_peerSpi, wasRemoteRequest: false);
                 
                 State = SessionState.DELETED;
                 break;

@@ -268,8 +268,8 @@ public class VpnServer : ISessionHost, IDisposable
             var p = session.Value.Parent;
             var ikeDesc = p is null
                 ? "(orphaned)"
-                : $"from session {p.LocalSpi}. State={p.State.ToString()}, Last touch={p.LastTouchTimer.Elapsed}. Initiated={(p.WeStarted ? "here" : "remotely")}";
-            Console.WriteLine($"    {session.Value.Gateway} [{session.Key}] {ikeDesc}");
+                : $"from session {p.LocalSpi:x}. State={p.State.ToString()}, Last touch={p.LastTouchTimer.Elapsed}. Initiated={(p.WeStarted ? "here" : "remotely")}";
+            Console.WriteLine($"    {session.Value.Gateway} [{session.Key:x}] {ikeDesc}");
         }
     }
 
@@ -346,12 +346,16 @@ public class VpnServer : ISessionHost, IDisposable
 
     public void RemoveSession(ulong spi, bool wasRemoteRequest)
     {
-        if (!_sessions.ContainsKey(spi)) return;
-        
+        if (!_sessions.ContainsKey(spi))
+        {
+            Log.Debug($"Session not found: {spi:x}");
+            return;
+        }
+
         // Unhook the old session
         var session = _sessions[spi];
         _sessions.Remove(spi);
-        Log.Trace($"Session {spi} removed. It was connected to {session.Gateway}");
+        Log.Trace($"Session {spi:x} removed. It was connected to {session.Gateway}");
 
         // If this is a persistent session ended from elsewhere, start it back up
         if (wasRemoteRequest && Settings.ReEstablishOnDisconnect)
