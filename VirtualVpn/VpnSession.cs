@@ -1129,4 +1129,32 @@ public class VpnSession
     {
         LastTouchTimer.Restart();
     }
+
+    /// <summary>
+    /// Returns true if this sessions is in a starting-up state.
+    /// Returns false if it is established, stopped, or stopping.
+    /// </summary>
+    public bool IsStarting()
+    {
+        switch (State)
+        {
+            case SessionState.INITIAL:
+            case SessionState.IKE_INIT_SENT:
+            case SessionState.SA_SENT:
+            case SessionState.CHILD_SA_SENT:
+            case SessionState.AUTH_SENT:
+                return true;
+                
+            case SessionState.ESTABLISHED:
+            case SessionState.DELETED:
+            case SessionState.KE_SENT:
+            case SessionState.HASH_SENT:
+            case SessionState.AUTH_SET:
+            case SessionState.CONF_SENT:
+                return false;
+            
+            default:
+                throw new ArgumentOutOfRangeException();
+        }
+    }
 }

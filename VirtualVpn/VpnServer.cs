@@ -37,6 +37,7 @@ public class VpnServer : ISessionHost, IDisposable
     // Stats stuff
     private readonly EspTimedEvent _statsTimer;
     private ulong _sessionsStarted;
+    private ISet<IpV4Address> _alwaysConnections = new HashSet<IpV4Address>();
 
 
     public VpnServer()
@@ -166,6 +167,26 @@ public class VpnServer : ISessionHost, IDisposable
 
                 return;
             }
+            case "always": // try to keep a connection up at all times
+            {
+                try
+                {
+                    var target = TryStartVpnIfNotAlreadyConnected(prefix[1]);
+                    if (target is null)
+                    {
+                        Log.Critical($"Target '{prefix[1]}' does not seem to be a valid IP address.");
+                        return;
+                    }
+
+                    RegisterAlways(target);
+                }
+                catch (Exception ex)
+                {
+                    Log.Error("Could not start VPN connection: ", ex);
+                }
+
+                return;
+            }
             case "capture":
             {
                 Settings.CaptureTraffic = !Settings.CaptureTraffic;
@@ -205,13 +226,24 @@ public class VpnServer : ISessionHost, IDisposable
                 Console.WriteLine("    Logging:");
                 Console.WriteLine("        trace, loud, less ... crypto (INSECURE)");
                 Console.WriteLine("    Connection:");
-                Console.WriteLine("        list, start [gateway], kill [sa-id],");
+                Console.WriteLine("        list, kill [sa-id],");
+                Console.WriteLine("        start [gateway], always [gateway],");
                 Console.WriteLine("        psk [psk-string]");
                 Console.WriteLine("    General:");
                 Console.WriteLine("        quit, capture, ping [ip-address]");
                 Console.WriteLine("        load [file-name], save [file-name]");
                 return;
         }
+    }
+
+    /// <summary>
+    /// Register a target to be always connected
+    /// </summary>
+    private void RegisterAlways(IpV4Address target)
+    {
+        if (_alwaysConnections.Contains(target)) return;
+        
+        _alwaysConnections.Add(target);
     }
 
     private void KillSessionBySpi(string spiStr)
@@ -308,7 +340,7 @@ public class VpnServer : ISessionHost, IDisposable
         }
     }
 
-    private void TryStartVpnIfNotAlreadyConnected(string gatewayAddress)
+    private IpV4Address? TryStartVpnIfNotAlreadyConnected(string gatewayAddress)
     {
         // Assume gateway address is IPv4 decimals for now.
         Console.WriteLine($"Requested connection to [{gatewayAddress}], searching for existing connections");
@@ -321,22 +353,23 @@ public class VpnServer : ISessionHost, IDisposable
             if (childSession.Value.Gateway == requestedGateway)
             {
                 Console.WriteLine($"A VPN session is already open with {requestedGateway} as {childSession.Key:x}.\r\nTry 'kill {childSession.Key:x}' if you want to restart");
-                return;
+                return null;
             }
         }
         
         // next, see if we've already got a connection pending:
         foreach (var vpnSession in _sessions)
         {
-            if (vpnSession.Value.Gateway == requestedGateway)
+            if (vpnSession.Value.Gateway == requestedGateway && vpnSession.Value.IsStarting())
             {
                 Console.WriteLine($"A VPN session is in progress with {requestedGateway} as {vpnSession.Key:x}.\r\nTry 'kill {vpnSession.Key:x}' if you want to restart");
-                return;
+                return null;
             }
         }
         
         Console.WriteLine("Starting contact with gateway");
         StartVpnSession(requestedGateway);
+        return requestedGateway;
     }
 
     /// <summary>
@@ -615,6 +648,7 @@ public class VpnServer : ISessionHost, IDisposable
                 var goFaster = false;
                 //Log.Trace("Triggering event pump");
 
+                // Pump sessions (timing and connection)
                 foreach (var session in _sessions.Values)
                 {
                     try
@@ -627,6 +661,7 @@ public class VpnServer : ISessionHost, IDisposable
                     }
                 }
 
+                // Pump Child SAs (tunnel data)
                 foreach (var childSa in _childSessions.Values)
                 {
                     try
@@ -639,6 +674,10 @@ public class VpnServer : ISessionHost, IDisposable
                     }
                 }
                 
+                // Ensure 'always' connections are up
+                RestartAlwaysConnectedGatewaysIfDown();
+
+                // Display stats
                 _statsTimer.TriggerIfExpired();
                 
                 // Wait before looping, unless any of the ChildSA are active,
@@ -653,6 +692,35 @@ public class VpnServer : ISessionHost, IDisposable
                 Log.Warn($"Outer event pump failure: {ex.Message}"); // most likely a thread conflict?
                 Thread.Sleep(Settings.EventPumpRate);
             }
+        }
+    }
+
+    private void RestartAlwaysConnectedGatewaysIfDown()
+    {
+        foreach (var requiredGateway in _alwaysConnections)
+        {
+            var found = false;
+
+            // first, see if we've already got a connection up:
+            foreach (var childSession in _childSessions)
+            {
+                if (childSession.Value.Gateway != requiredGateway) continue;
+                found = true;
+                break;
+            }
+
+            // next, see if we've already got a connection pending:
+            foreach (var vpnSession in _sessions)
+            {
+                if (vpnSession.Value.Gateway != requiredGateway || !vpnSession.Value.IsStarting()) continue;
+                found = true;
+                break;
+            }
+
+            if (found) continue;
+
+            // Nothing found. Start again
+            StartVpnSession(requiredGateway);
         }
     }
 }
