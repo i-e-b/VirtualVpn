@@ -727,6 +727,8 @@ public class VpnServer : ISessionHost, IDisposable
 
     public ProxyResponse MakeProxyCall(ProxyRequest request)
     {
+        // IEB: continue here
+        // We probably need to wrap/unwrap HTTPS crypto
         throw new NotImplementedException();
     }
 }

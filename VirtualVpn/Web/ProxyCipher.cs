@@ -16,6 +16,10 @@ public class ProxyCipher
     private readonly int _blockSizeBytes;
     private readonly byte[] _iv;
 
+    /// <summary>
+    /// Create a new proxy-message cipher helper with
+    /// a given PRIVATE keyGen, and PUBLIC timeStamp.
+    /// </summary>
     public ProxyCipher(string keyGen, string timeStamp)
     {
         // Check general validity
@@ -24,7 +28,7 @@ public class ProxyCipher
         _timeStamp = Bit.BytesToInt64Msb(tickBytes);
         
         _keyGen = keyGen;
-        _cipher = AesCipher(_keyGen+timeStamp);
+        _cipher = AesCipher(_keyGen + timeStamp);
         _blockSizeBytes = _cipher.BlockSize / 8;
         _iv = new byte[_blockSizeBytes];
         MixBitsToBits(tickBytes, _iv);
@@ -36,7 +40,8 @@ public class ProxyCipher
     public static string TimestampNow => Convert.ToBase64String(Bit.Int64ToBytes(DateTime.UtcNow.Ticks));
 
     /// <summary>
-    /// Scramble source bytes to dest bytes 
+    /// Scramble source bytes to dest bytes, changing size as required.
+    /// This does NOT add entropy, but just spreads it about.
     /// </summary>
     private static void MixBitsToBits(byte[] source, byte[] dest)
     {
@@ -57,6 +62,9 @@ public class ProxyCipher
         }
     }
 
+    /// <summary>
+    /// Create CBC-mode AES cipher, generating a crypto key from a string keyGen source
+    /// </summary>
     private static Aes AesCipher(string keySource)
     {
         // Hash the secret down to a key
@@ -71,6 +79,10 @@ public class ProxyCipher
         return aes;
     }
 
+    /// <summary>
+    /// Returns true if a public key hash is valid given a private keyGen, and the message
+    /// timestamp
+    /// </summary>
     public bool IsValidCall(string keyHash)
     {
         // Clock drift must be less than one hour
@@ -83,12 +95,15 @@ public class ProxyCipher
         return MakeKey() == keyHash;
     }
 
+    /// <summary>
+    /// Decode an array of bytes into a string.
+    /// </summary>
     public string Decode(byte[] bytes)
     {
         if (bytes.Length < _blockSizeBytes) throw new Exception("Invalid incoming data");
         try
         {
-            var plain = _cipher.DecryptCbc(bytes, _iv, PaddingMode.ISO10126);
+            var plain = _cipher.DecryptCbc(bytes, _iv);
             return Encoding.UTF8.GetString(plain);
         }
         catch (CryptographicException ex)
@@ -97,10 +112,13 @@ public class ProxyCipher
         }
     }
 
+    /// <summary>
+    /// Encrypt a string into an array of bytes
+    /// </summary>
     public byte[] Encode(string message)
     {
         var data = Encoding.UTF8.GetBytes(message);
-        return _cipher.EncryptCbc(data, _iv, PaddingMode.ISO10126);
+        return _cipher.EncryptCbc(data, _iv);
     }
 
     /// <summary>

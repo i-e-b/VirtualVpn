@@ -43,7 +43,7 @@ by typing `start 192.168.x.x`<kbd>enter</kbd> at the console (with the IP addres
 
 ## Layout
 
-The projects `JustListen` and `SmallWebTest` are tools to help with development,
+The projects `JustListen`, `ManualTlsTest`, and `SmallWebTest` are tools to help with development,
 and are not required when running Virtual VPN
 
 ### Virtual VPN parts
@@ -60,6 +60,8 @@ and are not required when running Virtual VPN
 
 ## Current issues & work-face
 
+- [ ] Add an API so outbound calls can go through the virtual network
+- [ ] Handle HTTPS unwrapping to retarget in virtual network.
 - [ ] Migrate Payloads to Bitwise serialiser? (might need counts & looping)
 - [ ] Go through the collection types and make them thread safe
 - [ ] Check all "to-do" items
