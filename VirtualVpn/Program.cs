@@ -1,19 +1,31 @@
-﻿using VirtualVpn;
-using VirtualVpn.Helpers;
+﻿using VirtualVpn.Helpers;
 using VirtualVpn.Web;
 
-Console.WriteLine($"Starting up VirtualVPN. Current platform={Platform.Current().ToString()}");
+namespace VirtualVpn;
 
-Log.SetLevel(Settings.DefaultLogLevel);
+internal static class Program
+{
+    public static VpnServer? VpnServer;
 
-// Mini web site for file captures
-var http = new HttpCapture();
-http.Start();
+    public static void Main(string[] args)
+    {
+        Console.WriteLine($"Starting up VirtualVPN. Current platform={Platform.Current().ToString()}");
+
+        Log.SetLevel(Settings.DefaultLogLevel);
+
+// Mini web site that provides an API,
+// and allows file captures to be retrieved if Settings.RunAirliftSite is on.
+        var http = new HttpCapture();
+        http.Start();
 
 // Run the VPN server
 // This also listens for console input
 // for various commands, including for
 // starting IP-SEC connections, and to
 // set log levels.
-using var vpnServer = new VpnServer();
-vpnServer.Run();
+        using var vpnServer = new VpnServer();
+        VpnServer = vpnServer;
+        vpnServer.Run();
+        VpnServer = null;
+    }
+}

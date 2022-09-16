@@ -7,6 +7,7 @@ using VirtualVpn.Enums;
 using VirtualVpn.EspProtocol;
 using VirtualVpn.Helpers;
 using VirtualVpn.InternetProtocol;
+using VirtualVpn.Web;
 
 // ReSharper disable BuiltInTypeReferenceStyle
 
@@ -722,5 +723,10 @@ public class VpnServer : ISessionHost, IDisposable
             // Nothing found. Start again
             StartVpnSession(requiredGateway);
         }
+    }
+
+    public ProxyResponse MakeProxyCall(ProxyRequest request)
+    {
+        throw new NotImplementedException();
     }
 }

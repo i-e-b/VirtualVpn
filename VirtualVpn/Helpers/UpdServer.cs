@@ -59,7 +59,7 @@ public class UdpServer : IUdpServer, IDisposable
         {
             try
             {
-                Log.Info("Listening on 500...");
+                Log.Info("VPN Listening for IKE messages on port 500...");
                 var buffer = _ikeClient.Receive(ref sender);
                 TotalIn += (ulong)buffer.Length;
                 _ikeResponder?.Invoke(buffer, sender);
@@ -78,7 +78,7 @@ public class UdpServer : IUdpServer, IDisposable
         {
             try
             {
-                Log.Info("Listening on 4500...");
+                Log.Info("VPN Listening for IKE/ESP/SPN messages on port 4500...");
                 var buffer = _speClient.Receive(ref sender);
                 TotalIn += (ulong)buffer.Length;
                 _speResponder?.Invoke(buffer, sender);

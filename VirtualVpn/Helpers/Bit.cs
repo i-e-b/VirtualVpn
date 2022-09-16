@@ -178,6 +178,36 @@ public static class Bit
         return result;
     }
     
+    /// <summary>
+    /// Read most significant bytes first from data, filling in
+    /// as much of a 64-bit integer as possible,
+    /// starting at most significant byte of output.
+    /// Will stop after 8 bytes, OR if data is exhausted.
+    /// </summary>
+    public static long BytesToInt64Msb(byte[] data)
+    {
+        var result = 0L;
+        var idx = 0;
+        var end = data.Length;
+        result |= (long)data[idx++] << 56;
+        if (idx >= end) return result;
+        result |= (long)data[idx++] << 48;
+        if (idx >= end) return result;
+        result |= (long)data[idx++] << 40;
+        if (idx >= end) return result;
+        result |= (long)data[idx++] << 32;
+        if (idx >= end) return result;
+        
+        result |= (long)data[idx++] << 24;
+        if (idx >= end) return result;
+        result |= (long)data[idx++] << 16;
+        if (idx >= end) return result;
+        result |= (long)data[idx++] <<  8;
+        if (idx >= end) return result;
+        result |= (long)data[idx  ] <<  0;
+        return result;
+    }
+    
     public static void WriteUInt32(uint value, byte[] data, ref int idx)
     {
         data[idx++] = (byte)((value >> 24) & 0xff);
@@ -200,6 +230,23 @@ public static class Bit
     }
 
     public static byte[] UInt64ToBytes(ulong value)
+    {
+        var data = new byte[8];
+        
+        data[0] = (byte)((value >> 56) & 0xff);
+        data[1] = (byte)((value >> 48) & 0xff);
+        data[2] = (byte)((value >> 40) & 0xff);
+        data[3] = (byte)((value >> 32) & 0xff);
+        
+        data[4] = (byte)((value >> 24) & 0xff);
+        data[5] = (byte)((value >> 16) & 0xff);
+        data[6] = (byte)((value >>  8) & 0xff);
+        data[7] = (byte)((value >>  0) & 0xff);
+        
+        return data;
+    }
+    
+    public static byte[] Int64ToBytes(long value)
     {
         var data = new byte[8];
         

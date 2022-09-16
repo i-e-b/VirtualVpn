@@ -1,5 +1,6 @@
 ﻿using System.Net;
 using System.Text;
+using SkinnyJson;
 using Tag;
 
 namespace VirtualVpn.Web;
@@ -8,7 +9,6 @@ public class HttpCapture
 {
     private readonly HttpListener _listener;
     private readonly Thread _listenThread;
-    private readonly Thread _switchThread;
 
     public HttpCapture()
     {
@@ -17,102 +17,197 @@ public class HttpCapture
 
         _listener.Prefixes.Add("http" + Settings.HttpPrefix);
         
-        _listenThread = new Thread(ListenThreadLoop){IsBackground = true}; // handles actual web requests
-        _switchThread = new Thread(SwitchThreadLoop){IsBackground = true}; // handles turning the listener on and off
+        _listenThread = new Thread(ListenThreadLoop){IsBackground = true}; 
     }
     
     public void Start()
     {
+        Log.Info("Starting API");
+        _listener.Start();
         _listenThread.Start();
-        _switchThread.Start();
-    }
-
-    private void SwitchThreadLoop()
-    {
-        while (_switchThread.ThreadState != ThreadState.Stopped)
-        {
-            try
-            {
-                while (!Settings.RunAirliftSite)
-                {
-                    Thread.Sleep(1000);
-                }
-
-                Log.Info("Starting 'airlift' web handler");
-                _listener.Start();
-
-                while (Settings.RunAirliftSite)
-                {
-                    Thread.Sleep(1000);
-                }
-
-                Log.Info("Stopping 'airlift' web handler");
-                _listener.Stop();
-            }
-            catch (Exception ex)
-            {
-                Log.Error("Fault while switching 'airlift' site", ex);
-                Thread.Sleep(1000);
-            }
-        }
     }
 
     private void ListenThreadLoop()
     {
-        while (_listenThread.ThreadState != ThreadState.Stopped)
+        Log.Info($"API Listening on {string.Join(" | ", _listener.Prefixes.Select(p => p))}");
+        while (_listenThread.ThreadState == ThreadState.Background || _listenThread.ThreadState == ThreadState.Running)
         {
-            while (!Settings.RunAirliftSite || !_listener.IsListening)
-            {
-                // Long sleep if we never switch on
-                Thread.Sleep(5000);
-            }
             
-            Log.Info("Listening on port 8011");
-            
+            HttpListenerContext? ctx = null;
             try
             {
-                var ctx = _listener.GetContext();
+                ctx = _listener.GetContext();
 
                 var url = ctx.Request.RawUrl ?? "<null>";
                 Log.Debug($"HTTP listener responding to {url}");
 
-                byte[] bytes;
-
-                if (url == "/")
+                if (IsApi(url))
                 {
-                    ctx.Response.AddHeader("Content-Type", "text/html");
-                    ctx.Response.StatusCode = 200;
-                    bytes = ShowIndexPage();
+                    HandleApiRequest(url, ctx);
                 }
-                else
+                else if (Settings.RunAirliftSite)
                 {
-                    var path = Settings.FileBase + "/" + Path.GetFileName(url);
-                    if (File.Exists(path))
-                    {
-                        ctx.Response.AddHeader("Content-Type", "text/plain");
-                        ctx.Response.StatusCode = 200;
-                        bytes = File.ReadAllBytes(path);
-                    }
-                    else
-                    {
-                        ctx.Response.AddHeader("Content-Type", "text/html");
-                        ctx.Response.StatusCode = 404;
-                        bytes = ShowErrorPage();
-                    }
+                    HandleAirliftRequest(url, ctx);
                 }
-
-                ctx.Response.OutputStream.Write(bytes);
-
+                // Ignore anything else
+                
                 ctx.Response.Close();
+                ctx = null;
             }
             catch (Exception ex)
             {
-                Log.Error("Failure in 'airlift' handler", ex);
+                Log.Error("Failure in HTTP handler", ex);
+                TryCloseContext(ctx);
                 Thread.Sleep(1000);
             }
         }
     }
+
+    /// <summary>
+    /// Respond to API requests
+    /// </summary>
+    private void HandleApiRequest(string url, HttpListenerContext ctx)
+    {
+        ctx.Response.AddHeader("Content-Type", "text/html");
+        ctx.Response.StatusCode = 200;
+        
+        var cmd = url.Substring(5);
+        switch (cmd)
+        {
+            case "send":
+                // should have a JSON body with:
+                // - target IP (at far end of VPN tunnel)
+                // - proxy IP (in the Virtual VPN)
+                // - body of call (e.g. entire HTTP headers & body, as required)
+                var ok = HandleProxyCall(ctx);
+                if (!ok) goto default;
+                return;
+            
+            default:
+                var bytes = ShowApiInfoPage();
+                ctx.Response.StatusCode = 450;
+                ctx.Response.StatusDescription = "Blocked by Windows Parental Controls";
+                ctx.Response.OutputStream.Write(bytes);
+                return;
+        }
+    }
+
+    /// <summary>
+    /// Make a HTTP call from a remote location
+    /// as-if the call originated from a node inside
+    /// the VirtualVPN.
+    /// <p></p>
+    /// This should have a JSON body with:
+    /// <ul><li>target IP (at far end of VPN tunnel)</li>
+    ///     <li>proxy IP (in the Virtual VPN)</li>
+    ///     <li>body of call (e.g. entire HTTP headers and body, as required)</li>
+    /// </ul>
+    /// </summary>
+    private static bool HandleProxyCall(HttpListenerContext ctx)
+    {
+        var keyHash = ctx.Request.Headers.Get("X-Api-Key"); // Hash output of timestamp + ApiKey
+        var timestamp = ctx.Request.Headers.Get("X-Api-TS"); // Caller's claimed local time (UTC, in ticks, base64)
+        if (keyHash is null || timestamp is null) return false;
+        
+        var ms = new MemoryStream();
+        ctx.Request.InputStream.Seek(0, SeekOrigin.Begin);
+        ctx.Request.InputStream.CopyTo(ms);
+        ms.Seek(0, SeekOrigin.Begin);
+        var bodyCipherText = ms.ToArray();
+
+        var finalOutput = HandleProxyCallInternal(Settings.ApiKey, keyHash, timestamp, bodyCipherText, rq => Program.VpnServer?.MakeProxyCall(rq));
+        if (finalOutput is null) return false;
+
+        ctx.Response.StatusCode = 200;
+        ctx.Response.SendChunked = false;
+        ctx.Response.OutputStream.Write(finalOutput);
+        
+        return true;
+    }
+
+    /// <summary>
+    /// Handler for testing. Do not call
+    /// </summary>
+    public static byte[]? HandleProxyCallInternal(string keyGen, string keyHash, string timestamp, byte[] bodyCipherText, Func<ProxyRequest, ProxyResponse?> core)
+    {
+        var cipher = new ProxyCipher(keyGen, timestamp);
+        if (!cipher.IsValidCall(keyHash)) return null;
+
+        var bodyString = cipher.Decode(bodyCipherText);
+        var request = Json.Defrost<ProxyRequest>(bodyString);
+
+        var response = core(request);
+        if (response is null) return null;
+
+        var finalOutput = cipher.Encode(Json.Freeze(response));
+        return finalOutput;
+    }
+
+    /// <summary>
+    /// Allow files stored in <see cref="Settings.FileBase"/>
+    /// to be read remotely. Traffic capture files will be
+    /// written here if enabled.
+    /// </summary>
+    private static void HandleAirliftRequest(string url, HttpListenerContext ctx)
+    {
+        byte[] bytes;
+        if (url == "/")
+        {
+            ctx.Response.AddHeader("Content-Type", "text/html");
+            ctx.Response.StatusCode = 200;
+            bytes = ShowIndexPage();
+        }
+        else
+        {
+            var path = Settings.FileBase + "/" + Path.GetFileName(url);
+            if (File.Exists(path))
+            {
+                ctx.Response.AddHeader("Content-Type", "text/plain");
+                ctx.Response.StatusCode = 200;
+                bytes = File.ReadAllBytes(path);
+            }
+            else
+            {
+                ctx.Response.AddHeader("Content-Type", "text/html");
+                ctx.Response.StatusCode = 404;
+                bytes = ShowErrorPage();
+            }
+        }
+
+        ctx.Response.OutputStream.Write(bytes);
+    }
     
+    /// <summary>
+    /// Show a basic greeting message for the API
+    /// </summary>
+    private static byte[] ShowApiInfoPage()
+    {
+        var head = T.g("head")[
+            T.g("title")["VirtualVPN - API"]
+        ];
+
+        var body = T.g("body")[
+            T.g("h1")["Virtual VPN"],
+            T.g("p")["This is a VirtualVPN instance"],
+            T.g("p")[
+                "You have successfully connected to the API interface. ",
+                "You will need to provide your API keys in request headers. ",
+                "See documentation for details. "
+            ]
+        ];
+
+        var document = T.g("html")[
+            head,
+            body
+        ];
+
+        return document.ToBytes(Encoding.UTF8);
+    }
+
+    /// <summary>
+    /// Show a basic error message if an Airlift
+    /// file is not found
+    /// </summary>
     private static byte[] ShowErrorPage()
     {
         var head = T.g("head")[
@@ -133,6 +228,11 @@ public class HttpCapture
         return document.ToBytes(Encoding.UTF8);
     }
 
+    /// <summary>
+    /// Show the index page for Airlift.
+    /// This lists out the files that can
+    /// be extracted, along with links.
+    /// </summary>
     private static byte[] ShowIndexPage()
     {
         var head = T.g("head")[
@@ -161,5 +261,23 @@ public class HttpCapture
         ];
         
         return document.ToBytes(Encoding.UTF8);
+    }
+    
+
+    private bool IsApi(string url)
+    {
+        return url.StartsWith("/api/");
+    }
+
+    private static void TryCloseContext(HttpListenerContext? ctx)
+    {
+        try
+        {
+            ctx?.Response.Close();
+        }
+        catch
+        {
+            // ignore
+        }
     }
 }

@@ -52,7 +52,7 @@ public static class Settings
     /// Declared IP address of this VPN node.
     /// It *MUST* match what is in ipsec.conf, otherwise auth will fail.
     /// <p></p>
-    /// This is not the virtual addresses the web app will appear to be on --
+    /// This is NOT the virtual addresses the web app will appear to be on --
     /// that is in <see cref="LocalTrafficSelector"/>
     /// <p></p>
     /// This does NOT need to be a real machine's address.
@@ -70,6 +70,13 @@ public static class Settings
     /// </summary>
     public static string WebAppIpAddress = "127.0.0.1";
     
+    /// <summary>
+    /// The SECRET api key for sending proxy messages.
+    /// Callers should NOT send this directly, but use
+    /// a time-coded version.
+    /// </summary>
+    public static string ApiKey = "lDnEsTrDuTnReToGoRlGnGnTeTlDtRgEyKgNyEdFoDtFtNpTgUgSuTdEo";
+    
     
     #region Debug tools and logging
     /// <summary>
@@ -80,8 +87,8 @@ public static class Settings
     /// <summary>
     /// Listener prefix for the web "airlift". This helps you pull logs.
     /// </summary>
-    public static string HttpPrefix = "://+:8011/"; // <-- this will require root/admin access.
-    //public static string HttpPrefix = "://localhost:8011/"; // <-- use this if testing locally
+    //public static string HttpPrefix = "://+:8011/"; // <-- this will require root/admin access.
+    public static string HttpPrefix = "://localhost:8011/"; // <-- use this if testing locally
     
     /// <summary>
     /// INSECURE if true
