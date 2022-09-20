@@ -20,6 +20,7 @@ namespace ManualTlsTest;
 		/// <param name="socket">socket to wrap</param>
 		public SocketStream(Socket socket)
 		{
+			Console.WriteLine(nameof(SocketStream));
 			_socket = socket;
 		}
 
@@ -33,6 +34,7 @@ namespace ManualTlsTest;
 		/// </summary>
 		~SocketStream()
 		{
+			Console.WriteLine("~"+nameof(SocketStream));
 			Dispose(false);
 		}
 
@@ -41,6 +43,7 @@ namespace ManualTlsTest;
 		/// </summary>
 		protected override void Dispose(bool disposing)
 		{
+			Console.WriteLine(nameof(Dispose));
 			var sock = Interlocked.Exchange(ref _socket, null);
 			if (sock == null) return;
 			if (sock.Connected)
@@ -52,7 +55,9 @@ namespace ManualTlsTest;
 		}
 
 		/// <summary> Does nothing </summary>
-		public override void Flush() { }
+		public override void Flush() { 
+			Console.WriteLine(nameof(Flush));
+		}
 
 		/// <summary>
 		/// Reads from the underlying socket into a provided buffer.
@@ -63,7 +68,9 @@ namespace ManualTlsTest;
 		/// <param name="buffer">An array of bytes. When this method returns, the buffer contains the specified byte array with the values between <paramref name="offset"/> and (<paramref name="offset"/> + <paramref name="count"/> - 1) replaced by the bytes read from the current source. </param><param name="offset">The zero-based byte offset in <paramref name="buffer"/> at which to begin storing the data read from the current stream. </param><param name="count">The maximum number of bytes to be read from the current stream. </param><exception cref="T:System.ArgumentException">The sum of <paramref name="offset"/> and <paramref name="count"/> is larger than the buffer length. </exception><exception cref="T:System.ArgumentNullException"><paramref name="buffer"/> is null. </exception><exception cref="T:System.ArgumentOutOfRangeException"><paramref name="offset"/> or <paramref name="count"/> is negative. </exception><exception cref="T:System.IO.IOException">An I/O error occurs. </exception><exception cref="T:System.NotSupportedException">The stream does not support reading. </exception><exception cref="T:System.ObjectDisposedException">Methods were called after the stream was closed. </exception><filterpriority>1</filterpriority>
 		public override int Read(byte[] buffer, int offset, int count)
 		{
+			Console.WriteLine($"{nameof(Read)}(buffer[{buffer.Length}], offset={offset}, count={count})");
             if (_socket == null) throw new InvalidOperationException("Attempted to read from a disconnected socket");
+            
             var len = _socket.Receive(buffer, offset, count, SocketFlags.None, out var err);
 			if (err != SocketError.Success && err != SocketError.WouldBlock)
 			{
@@ -71,6 +78,7 @@ namespace ManualTlsTest;
 					throw new TimeoutException();
 				throw new SocketException((int) err);
 			}
+			Console.WriteLine($"    {nameof(Read)} got {len} bytes; err={err.ToString()}");
 			Position += len;
 			return len;
 		}
@@ -81,6 +89,7 @@ namespace ManualTlsTest;
 		/// <param name="buffer">An array of bytes. This method copies <paramref name="count"/> bytes from <paramref name="buffer"/> to the current stream. </param><param name="offset">The zero-based byte offset in <paramref name="buffer"/> at which to begin copying bytes to the current stream. </param><param name="count">The number of bytes to be written to the current stream. </param><filterpriority>1</filterpriority>
 		public override void Write(byte[] buffer, int offset, int count)
 		{
+			Console.WriteLine(nameof(Write));
             if (_socket == null) throw new InvalidOperationException("Attempted to read from a disconnected socket");
             _socket.Send(buffer, offset, count, SocketFlags.None, out var err);
 			if (err != SocketError.Success)
@@ -105,7 +114,10 @@ namespace ManualTlsTest;
 		/// <summary>
 		/// Number of bytes written to socket
 		/// </summary>
-		public override long Length { get { return _writtenLength; } }
+		public override long Length { get { 
+			Console.WriteLine(nameof(Length));
+			return _writtenLength; 
+		} }
 
 		/// <summary>
 		/// Number of bytes read from socket

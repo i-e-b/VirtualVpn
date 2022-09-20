@@ -27,22 +27,32 @@ public class HttpListen
 
         var buffer = new byte[65536];
         tcpListener.Start();
+        
+        var authOptions = new SslServerAuthenticationOptions{
+            AllowRenegotiation = true,
+            EncryptionPolicy = EncryptionPolicy.RequireEncryption,
+            ServerCertificate = x509,
+            EnabledSslProtocols = SslProtocols.Tls12/*|SslProtocols.Tls13*/, // DO NOT use 1.3 on Windows: https://github.com/dotnet/runtime/issues/1720
+            CertificateRevocationCheckMode = X509RevocationMode.NoCheck
+        };
 
         // IEB: Continue from here. Get this SSL unwrapping working (call with real browser)
         // Then take the un-wrap logic over to VirtualVpn.VpnServer.MakeProxyCall
         while (Running)
         {
             Console.WriteLine("Waiting for a connection");
-            using var client = tcpListener.AcceptTcpClient();
+            //using var client = tcpListener.AcceptTcpClient();
+            using var socket = tcpListener.AcceptSocket();
             Console.WriteLine("Got a connection. Reading...");
 
-            using var stream = client.GetStream();
+            using var stream = new SocketStream(socket);
             Console.WriteLine("...got socket stream");
             
             using var sslStream = new SslStream(stream);
             Console.WriteLine("...got SSL stream");
         
-            sslStream.AuthenticateAsServer(x509, false, SslProtocols.Tls11|SslProtocols.Tls12|SslProtocols.Tls13, false);
+            //sslStream.AuthenticateAsServer(x509, true, SslProtocols.Tls11|SslProtocols.Tls12|SslProtocols.Tls13, false);
+            sslStream.AuthenticateAsServer(authOptions);
             Console.WriteLine("...TLS authentication complete");
 
             var read = sslStream.Read(buffer, 0, buffer.Length);
