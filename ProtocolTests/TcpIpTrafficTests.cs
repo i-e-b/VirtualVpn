@@ -89,7 +89,7 @@ public class TcpIpTrafficTests
         Assert.That(bob.State, Is.EqualTo(TcpSocketState.Listen), "state");
         Assert.That(bob.ErrorCode, Is.EqualTo(SocketError.Success), "err");
         
-        alice.StartConnect(IpV4Address.Localhost, 555);
+        alice.StartConnect(IpV4Address.Any, 1147, IpV4Address.Localhost, 555);
         
         // Outgoing SYN
         Assert.That(aliceAdaptor.SentSegments.Count, Is.EqualTo(1), "sent segments");
@@ -303,7 +303,7 @@ public class TcpIpTrafficTests
         // This should stop at the receive window size, as we aren't pulling any data back out
         
         // Check message is received and ACKd client->server
-        Assert.That(server.BytesOfReadDataWaiting, Is.EqualTo(65535), "server did not receive all data"); // BUG: This is getting stuck at 65535
+        Assert.That(server.BytesOfReadDataWaiting, Is.EqualTo(65535), "server did not receive all data");
         Assert.That(client.BytesOfSendDataWaiting, Is.EqualTo(bytesIn.Length - 65535 - 512), "not all sent data was acknowledged by server");
         
         // Read all the data out (and ditch it)
@@ -580,7 +580,7 @@ public class TcpIpTrafficTests
         
         clientAdaptor = new TestAdaptor("client");
         client = new TcpSocket(clientAdaptor);
-        client.StartConnect(IpV4Address.Localhost, 46781);
+        client.StartConnect(IpV4Address.Any, 1066, IpV4Address.Localhost, 46781);
         
         // SYN, expect SYN+ACK back
         CheckAndRouteMostRecentMessage(from: clientAdaptor, to: server, TcpSegmentFlags.Syn);

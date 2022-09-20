@@ -92,7 +92,7 @@ public class TcpAdaptor : ITcpAdaptor
         RemoteAddress = remoteAddress.Value;
         RemotePort = remotePort;
         
-        VirtualSocket.StartConnect(remoteAddress, (ushort)remotePort);
+        VirtualSocket.StartConnect(localAddress, (ushort)localPort, remoteAddress, (ushort)remotePort);
 
         Log.Debug("TCP session initiation started:" +
                   $" remote={Bit.ToIpAddressString(RemoteAddress)}:{RemotePort}," +

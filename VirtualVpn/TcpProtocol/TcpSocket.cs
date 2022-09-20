@@ -122,10 +122,15 @@ public class TcpSocket
     /// success status, or the state to become
     /// established.
     /// </summary>
-    public void StartConnect(IpV4Address destinationAddress, ushort destinationPort) // lib/tcp/user.c:21
+    public void StartConnect(
+        IpV4Address sourceAddress, ushort sourcePort,
+        IpV4Address destinationAddress, ushort destinationPort) // lib/tcp/user.c:21
     {
         lock (_lock)
         {
+            // We will be the sender
+            _route.LocalAddress = sourceAddress.Copy();
+            _route.LocalPort = sourcePort;
             _route.RemoteAddress = destinationAddress.Copy();
             _route.RemotePort = destinationPort;
 
