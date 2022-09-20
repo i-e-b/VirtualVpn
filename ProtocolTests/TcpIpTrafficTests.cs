@@ -1,4 +1,6 @@
-﻿using System.Net.Sockets;
+﻿using System.Diagnostics;
+using System.Net;
+using System.Net.Sockets;
 using System.Text;
 using NUnit.Framework;
 using VirtualVpn;
@@ -605,6 +607,15 @@ public class TestAdaptor : ITcpAdaptor
 
     public TestAdaptor(string name="TestAdaptor")
     {
+        LastContact = new Stopwatch();
+        LocalAddress = IpV4Address.Localhost.Value;
+        VirtualSocket = new TcpSocket(this);
+        RemoteAddress = IpV4Address.Localhost.Value;
+        Gateway = IpV4Address.Localhost.MakeEndpoint(0);
+        LocalPort = 0;
+        RemotePort = 0;
+        
+        
         _name = name;
         SentRoutes = new List<TcpRoute>();
         SentSegments = new List<TcpSegment>();
@@ -624,6 +635,24 @@ public class TestAdaptor : ITcpAdaptor
         SentSegments.Add(seg);
         SentRoutes.Add(route);
     }
+
+    public void Accept(IpV4Packet ipv4)
+    {
+        throw new NotImplementedException();
+    }
+
+    public bool EventPump()
+    {
+        throw new NotImplementedException();
+    }
+
+    public Stopwatch LastContact { get; }
+    public byte[] LocalAddress { get; }
+    public TcpSocket VirtualSocket { get; }
+    public int LocalPort { get; }
+    public byte[] RemoteAddress { get; }
+    public int RemotePort { get; }
+    public IPEndPoint Gateway { get; }
 
     public void Clear()
     {

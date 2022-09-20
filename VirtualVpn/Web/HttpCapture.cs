@@ -128,13 +128,13 @@ public class HttpCapture
     /// <summary>
     /// Handler for testing. Do not call
     /// </summary>
-    public static byte[]? HandleProxyCallInternal(string keyGen, string keyHash, string timestamp, byte[] bodyCipherText, Func<ProxyRequest, ProxyResponse?> core)
+    public static byte[]? HandleProxyCallInternal(string keyGen, string keyHash, string timestamp, byte[] bodyCipherText, Func<HttpProxyRequest, HttpProxyResponse?> core)
     {
         var cipher = new ProxyCipher(keyGen, timestamp);
         if (!cipher.IsValidCall(keyHash)) return null;
 
         var bodyString = cipher.Decode(bodyCipherText);
-        var request = Json.Defrost<ProxyRequest>(bodyString);
+        var request = Json.Defrost<HttpProxyRequest>(bodyString);
 
         var response = core(request);
         if (response is null) return null;

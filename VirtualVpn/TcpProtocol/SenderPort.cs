@@ -11,35 +11,35 @@ public readonly struct SenderPort
     /// Address of the remote system as an internal representation.
     /// If zero, this is invalid.
     /// </summary>
-    public readonly ulong SenderAddress;
+    public readonly ulong Address;
     
     /// <summary>
     /// Port on local system being requested.
     /// If zero, this is invalid.
     /// </summary>
-    public readonly ushort DestinationPort;
+    public readonly ushort Port;
 
     public override bool Equals(object? obj)
     {
         if (obj is SenderPort other)
         {
-            return DestinationPort == other.DestinationPort
-                && SenderAddress   == other.SenderAddress;
+            return Port == other.Port
+                && Address   == other.Address;
         }
         return false;
     }
 
     public SenderPort(byte[] senderAddress, int destinationPort)
     {
-        SenderAddress = Bit.BytesToUInt64Msb(senderAddress);
-        DestinationPort = (ushort)destinationPort;
+        Address = Bit.BytesToUInt64Msb(senderAddress);
+        Port = (ushort)destinationPort;
     }
 
     public override int GetHashCode()
     {
-        var h = DestinationPort + (DestinationPort << 16);
-        h ^= (int)(SenderAddress >>  0);
-        h ^= (int)(SenderAddress >> 32);
+        var h = Port + (Port << 16);
+        h ^= (int)(Address >>  0);
+        h ^= (int)(Address >> 32);
         return h;
     }
 

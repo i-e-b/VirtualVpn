@@ -7,6 +7,7 @@ using VirtualVpn.Enums;
 using VirtualVpn.EspProtocol;
 using VirtualVpn.Helpers;
 using VirtualVpn.InternetProtocol;
+using VirtualVpn.TcpProtocol;
 using VirtualVpn.Web;
 
 // ReSharper disable BuiltInTypeReferenceStyle
@@ -725,10 +726,41 @@ public class VpnServer : ISessionHost, IDisposable
         }
     }
 
-    public ProxyResponse MakeProxyCall(ProxyRequest request)
+    public HttpProxyResponse MakeProxyCall(HttpProxyRequest request)
     {
-        // IEB: continue here
-        // We probably need to wrap/unwrap HTTPS crypto
-        throw new NotImplementedException();
+        try
+        {
+            var target = IpV4Address.FromString(request.TargetMachineIp);
+            var proxyAddress = IpV4Address.FromString(request.ProxyLocalAddress);
+            var tunnel = FindTunnelTo(target);
+            
+            var response = new HttpProxyResponse();
+            
+            ISocketAdaptor apiSide = new ProxyCallAdaptor(request, response);
+            var channel = tunnel.OpenTcpSession(target, request.Port, proxyAddress, apiSide);
+
+            while (apiSide.Connected)
+            {
+                channel.EventPump();
+            }
+
+            return response;
+        }
+        catch (Exception ex)
+        {
+            return new HttpProxyResponse{
+                Success = false,
+                ErrorMessage = ex.ToString()
+            };
+        }
+    }
+
+    private ChildSa FindTunnelTo(IpV4Address target)
+    {
+        foreach (var childSa in _childSessions.Values)
+        {
+            if (childSa.ContainsIp(target)) return childSa;
+        }
+        throw new Exception($"No open SA to '{target.AsString}' exists.");
     }
 }

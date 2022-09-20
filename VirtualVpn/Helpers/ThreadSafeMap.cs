@@ -1,4 +1,6 @@
-﻿namespace VirtualVpn.Helpers;
+﻿using VirtualVpn.TcpProtocol;
+
+namespace VirtualVpn.Helpers;
 
 /// <summary>
 /// Wrapper around dictionary that make inserts cleaner,
@@ -50,6 +52,14 @@ public class ThreadSafeMap<TKey, TValue> where TKey : notnull
                 if (!_dict.ContainsKey(key)) _dict.Add(key, value);
                 else _dict[key] = value;
             }
+        }
+    }
+
+    public bool ContainsKey(TKey key)
+    {
+        lock (_lock)
+        {
+            return _dict.ContainsKey(key);
         }
     }
 }

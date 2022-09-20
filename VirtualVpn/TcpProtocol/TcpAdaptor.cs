@@ -51,15 +51,25 @@ public class TcpAdaptor : ITcpAdaptor
     public TcpSocket VirtualSocket { get; set; }
 
     /// <summary> Operating system socket connected to the web app </summary>
-    private Socket? _realSocketToWebApp;
+    private ISocketAdaptor? _realSocketToWebApp;
 
-    public TcpAdaptor(ChildSa transport, IPEndPoint gateway, SenderPort selfKey)
+    /// <summary>
+    /// Create a new adaptor to manage a TCP conversation.
+    /// You can supply your own adaptor for the non-tunnelled part,
+    /// or have a socket established
+    /// </summary>
+    /// <param name="transport">ChildSa that represents an open VPN tunnel</param>
+    /// <param name="gateway">Remote gateway for the tunnel</param>
+    /// <param name="selfKey">IP + port that is being used to key this conversation</param>
+    /// <param name="socketAdaptor">Either an adaptor for the local data stream, or <c>null</c>.
+    /// If null, a new TCP/IP socket will be opened.</param>
+    public TcpAdaptor(ChildSa transport, IPEndPoint gateway, SenderPort selfKey, ISocketAdaptor? socketAdaptor)
     {
         _transport = transport;
         _selfKey = selfKey;
         _closeCalled = false;
 
-        _realSocketToWebApp = null;
+        _realSocketToWebApp = socketAdaptor;
 
         Gateway = gateway;
         VirtualSocket = new TcpSocket(this);
@@ -67,11 +77,37 @@ public class TcpAdaptor : ITcpAdaptor
     }
 
     /// <summary>
-    /// Initiate a connection from a first incoming packet
+    /// Initiate a connection with client on local side.
+    /// Socket adaptor must be open and ready.
     /// </summary>
-    public bool Start(IpV4Packet ipv4)
+    public bool StartOutgoing(IpV4Address localAddress, int localPort, IpV4Address remoteAddress, int remotePort)
     {
-        Log.Debug("TCP session initiation");
+        Log.Debug("TCP session initiation, from outgoing packet (we are client)");
+        
+        LastContact.Start(); // start counting. This gets reset every time we get another message
+
+        // capture identity
+        LocalAddress = localAddress.Value;
+        LocalPort = localPort;
+        RemoteAddress = remoteAddress.Value;
+        RemotePort = remotePort;
+        
+        VirtualSocket.StartConnect(remoteAddress, (ushort)remotePort);
+
+        Log.Debug("TCP session initiation completed:" +
+                  $" remote={Bit.ToIpAddressString(RemoteAddress)}:{RemotePort}," +
+                  $" local={Bit.ToIpAddressString(LocalAddress)}:{LocalPort}");
+
+        return true;
+    }
+
+    /// <summary>
+    /// Initiate a connection from a first incoming packet from client on far side of tunnel.
+    /// This will try to route to a local-side delegate.
+    /// </summary>
+    public bool StartIncoming(IpV4Packet ipv4)
+    {
+        Log.Debug("TCP session initiation, from incoming packet (we are server)");
 
         VirtualSocket.Listen(); // must be in this state, or it will try to close the connection
 
@@ -242,7 +278,7 @@ public class TcpAdaptor : ITcpAdaptor
                    && _realSocketToWebApp.Available > 0)
             {
                 Log.Debug("~~~~~~~~~~~~~~~~~~~~~Trying to receive~~~~~~~~~~~~~~~~~~~~");
-                var received = _realSocketToWebApp.Receive(_receiveBuffer);
+                var received = _realSocketToWebApp.OutgoingFromLocal(_receiveBuffer);
                 if (received > 0) finalBytes.AddRange(_receiveBuffer.Take(received));
 
                 Log.Debug($"Got {received} bytes from socket");
@@ -292,7 +328,7 @@ public class TcpAdaptor : ITcpAdaptor
             if (actual < 1) return false;
             
             // Send data to web app
-            var sent = _realSocketToWebApp?.Send(buffer, 0, actual, SocketFlags.None) ?? -1;
+            var sent = _realSocketToWebApp?.IncomingFromTunnel(buffer, 0, actual) ?? -1;
             if (sent != actual)
             {
                 Log.Warn($"Unexpected send length. Tried to send {actual} bytes, but transmitted {sent} bytes.");
@@ -310,14 +346,14 @@ public class TcpAdaptor : ITcpAdaptor
         }
     }
 
-    private Socket ConnectToWebApp()
+    private ISocketAdaptor ConnectToWebApp()
     {
         // Connect to web app
         Log.Debug("Connecting to web app");
         var webApiSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
         webApiSocket.Connect(IpV4Address.FromString(Settings.WebAppIpAddress).MakeEndpoint(Settings.WebAppPort));
         Log.Debug("connection up");
-        return webApiSocket;
+        return new AdaptorForRealSocket(webApiSocket);
     }
     #endregion
 

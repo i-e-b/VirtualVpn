@@ -81,8 +81,8 @@ namespace ManualTlsTest;
 				throw new SocketException((int) err);
 			}
 			Console.WriteLine($"    {nameof(Read)} got {len} bytes; err={err.ToString()}");
-			Console.WriteLine(string.Join(" ", buffer.Take(512).Select(b=>b.ToString("x2"))));
-			Console.WriteLine(Encoding.UTF8.GetString(buffer, offset, len));
+			//Console.WriteLine(string.Join(" ", buffer.Take(512).Select(b=>b.ToString("x2"))));
+			//Console.WriteLine(Encoding.UTF8.GetString(buffer, offset, len));
 			
 			Position += len;
 			return len;

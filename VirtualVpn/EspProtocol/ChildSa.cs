@@ -36,8 +36,8 @@ public class ChildSa : ITransportTunnel
     private long _msgIdOut;
     private long _captureNumber;
     
-    private readonly ThreadSafeMap<SenderPort, TcpAdaptor> _tcpSessions = new();
-    private readonly ThreadSafeMap<SenderPort, TcpAdaptor> _parkedSessions = new();
+    private readonly ThreadSafeMap<SenderPort, ITcpAdaptor> _tcpSessions = new();
+    private readonly ThreadSafeMap<SenderPort, ITcpAdaptor> _parkedSessions = new();
     private readonly EspTimedEvent _keepAliveTrigger;
     private readonly Stopwatch _pingTimer; // for pings we send
 
@@ -300,7 +300,7 @@ public class ChildSa : ITransportTunnel
         try
         {
             var key = TcpAdaptor.ReadSenderAndPort(incomingIpv4Message);
-            if (key.DestinationPort == 0 || key.SenderAddress == 0)
+            if (key.Port == 0 || key.Address == 0)
             {
                 Log.Info("Invalid TCP/IP request: address or port not recognised");
                 return;
@@ -323,8 +323,8 @@ public class ChildSa : ITransportTunnel
             else
             {
                 // start new session
-                var newSession = new TcpAdaptor(this, sender, key);
-                var sessionOk = newSession.Start(incomingIpv4Message);
+                var newSession = new TcpAdaptor(this, sender, key, null);
+                var sessionOk = newSession.StartIncoming(incomingIpv4Message);
                 if (sessionOk) _tcpSessions[key] = newSession;
             }
         }
@@ -332,6 +332,36 @@ public class ChildSa : ITransportTunnel
         {
             Log.Error("Error in TCP path", ex);
         }
+    }
+    
+    /// <summary>
+    /// Open a new TCP session with local side as the client,
+    /// and far side of tunnel as server.
+    /// </summary>
+    public ITcpAdaptor OpenTcpSession(IpV4Address targetAddress, int targetPort, IpV4Address proxyLocalAddress, ISocketAdaptor apiSide)
+    {
+        var key = GetAvailableKey(targetAddress);
+        var newSession = new TcpAdaptor(this, Gateway.MakeEndpoint(4500), key, apiSide);
+        var sessionOk = newSession.StartOutgoing(proxyLocalAddress, key.Port, targetAddress, targetPort);
+        if (sessionOk) _tcpSessions[key] = newSession;
+        return newSession;
+    }
+
+    /// <summary>
+    /// Find an ephemeral port that is not in use
+    /// </summary>
+    private SenderPort GetAvailableKey(IpV4Address target)
+    {
+        var port = 1060;
+        var key = new SenderPort(target.Value, port);
+        while (_tcpSessions.ContainsKey(key))
+        {
+            port++;
+            if (port > 65535) throw new Exception("Ephemeral ports exhausted");
+            key = new SenderPort(target.Value, port);
+        }
+
+        return key;
     }
 
     private void HandleIcmp(IPEndPoint sender, IpV4Packet incomingIpv4Message)
@@ -495,4 +525,5 @@ public class ChildSa : ITransportTunnel
         Reply(encryptedData, Gateway.MakeEndpoint(4500));
         _pingTimer.Restart();
     }
+
 }

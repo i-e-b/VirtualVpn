@@ -97,7 +97,7 @@ public class ProxyTests
         var timestamp = ProxyCipher.TimestampNow;
         var cipher = new ProxyCipher(keyGen, timestamp);
         
-        var proxyRequest = new ProxyRequest
+        var proxyRequest = new HttpProxyRequest
         {
             Headers = { { "Accept", "application/json" }, {"Context-Type", "application/json"} },
             HttpMethod = "POST",
@@ -108,7 +108,7 @@ public class ProxyTests
         
         var resultBytes = HttpCapture.HandleProxyCallInternal(keyGen,
             cipher.MakeKey(), timestamp, proxyRequestBytes,
-            rq => new ProxyResponse
+            rq => new HttpProxyResponse
             {
                 Headers = { {"Context-Type", "application/json"} },
                 StatusCode = 200,
@@ -121,7 +121,7 @@ public class ProxyTests
         var resultString = cipher.Decode(resultBytes);
         Console.WriteLine(resultString);
         
-        var result = Json.Defrost<ProxyResponse>(resultString);
+        var result = Json.Defrost<HttpProxyResponse>(resultString);
         Assert.That(result, Is.Not.Null, "final result");
     }
 }
