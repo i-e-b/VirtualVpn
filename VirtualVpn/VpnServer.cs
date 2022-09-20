@@ -775,6 +775,11 @@ public class VpnServer : ISessionHost, IDisposable
             {
                 Thread.Sleep(250);
                 channel.EventPump();
+                var outgoingDataReady = channel.VirtualSocket.BytesOfSendDataWaiting;
+                if (outgoingDataReady > 0)
+                {
+                    Log.Trace($"Virtual socket has {outgoingDataReady} bytes waiting");
+                }
             }
 
             return response;

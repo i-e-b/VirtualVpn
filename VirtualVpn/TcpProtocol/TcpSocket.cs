@@ -149,7 +149,7 @@ public class TcpSocket
                 case TcpSocketState.Closed:
                 case TcpSocketState.Listen:
                 case TcpSocketState.TimeWait:
-                    Log.Trace("Starting connection process");
+                    Log.Trace($"Starting connection process. Target={destinationAddress.AsString}:{destinationPort}");
                     break;
 
                 default:
@@ -741,6 +741,7 @@ public class TcpSocket
         
         seg.UpdateChecksum(_route.LocalAddress.Value, _route.RemoteAddress.Value);
 
+        Log.Trace("Virtual TcpSocket sending a segment");
         _adaptor.Reply(seg, route);
     }
 

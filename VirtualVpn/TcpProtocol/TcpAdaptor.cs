@@ -84,7 +84,6 @@ public class TcpAdaptor : ITcpAdaptor
     {
         Log.Debug("TCP session initiation, from outgoing packet (we are client)");
         
-        VirtualSocket.StartConnect(remoteAddress, (ushort)remotePort);
         LastContact.Start(); // start counting. This gets reset every time we get another message
 
         // capture identity
@@ -92,8 +91,10 @@ public class TcpAdaptor : ITcpAdaptor
         LocalPort = localPort;
         RemoteAddress = remoteAddress.Value;
         RemotePort = remotePort;
+        
+        VirtualSocket.StartConnect(remoteAddress, (ushort)remotePort);
 
-        Log.Debug("TCP session initiation completed:" +
+        Log.Debug("TCP session initiation started:" +
                   $" remote={Bit.ToIpAddressString(RemoteAddress)}:{RemotePort}," +
                   $" local={Bit.ToIpAddressString(LocalAddress)}:{LocalPort}");
 
@@ -273,6 +274,12 @@ public class TcpAdaptor : ITcpAdaptor
                 return false;
             }
 
+            if (VirtualSocket.State != TcpSocketState.Established)
+            {
+                Log.Trace("Virtual socket not ready yet");
+                return false;
+            }
+
             while (_realSocketToWebApp is not null
                    && _realSocketToWebApp.Available > 0)
             {
@@ -419,6 +426,7 @@ public class TcpAdaptor : ITcpAdaptor
 
         var acted = RunDataTransfer();
         acted |= VirtualSocket.EventPump();
+        Log.Trace($"Virtual socket state={VirtualSocket.State}");
 
         switch (VirtualSocket.ErrorCode)
         {
