@@ -37,16 +37,22 @@ public class HttpListen
             Console.WriteLine("Got a connection. Reading...");
 
             using var stream = client.GetStream();
+            Console.WriteLine("...got socket stream");
             
             using var sslStream = new SslStream(stream);
+            Console.WriteLine("...got SSL stream");
         
-            sslStream.AuthenticateAsServer(x509, false, SslProtocols.Tls11|SslProtocols.Tls12, false);
+            sslStream.AuthenticateAsServer(x509, false, SslProtocols.Tls11|SslProtocols.Tls12|SslProtocols.Tls13, false);
+            Console.WriteLine("...TLS authentication complete");
 
             var read = sslStream.Read(buffer, 0, buffer.Length);
+            Console.WriteLine("...read request");
 
             Console.WriteLine(Bit.SafeString(buffer.Take(read)));
 
+            Console.WriteLine("...writing response");
             sslStream.Write(Encoding.UTF8.GetBytes("HTTP/1.1 200 OK\r\nContent-Length: 6\r\n\r\nHello!"));
+            Console.WriteLine("...done!");
         }
     }
 
