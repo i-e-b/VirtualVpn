@@ -223,6 +223,35 @@ public class VpnServer : ISessionHost, IDisposable
                 catch (Exception ex) { Log.Error("Failed to load settings", ex); }
                 break;
             }
+            case "wget":
+            {
+                var parts = prefix[1].Split(' ', StringSplitOptions.TrimEntries);
+                if (parts.Length != 2)
+                {
+                    Console.WriteLine($"Expected IP and URL. Got {parts.Length} parts (should be 2)");
+                    break;
+                }
+
+                // Kick off a proxy call as if the external API was hit.
+                var request= new HttpProxyRequest
+                {
+                    TargetMachineIp = parts[0],
+                    Headers = {
+                        {"Host",parts[0]},
+                        {"Accept", "*/*"},
+                        {"Content-Length", "0"}
+                    },
+                    HttpMethod = "GET",
+                    Body = null,
+                    Url = parts[1],
+                    Port = 80,
+                    ProxyLocalAddress = "55.55.55.55" // Temp for testing. TODO: should pick this, or request it?
+                };
+                var response = MakeProxyCall(request);
+                
+                Console.WriteLine(response.Describe());
+                break;
+            }
             default:
                 Console.WriteLine("Known commands:");
                 Console.WriteLine("    Logging:");
@@ -231,8 +260,11 @@ public class VpnServer : ISessionHost, IDisposable
                 Console.WriteLine("        list, kill [sa-id],");
                 Console.WriteLine("        start [gateway], always [gateway],");
                 Console.WriteLine("        psk [psk-string]");
+                Console.WriteLine("    Testing:");
+                Console.WriteLine("        ping [ip-address],");
+                Console.WriteLine("        wget [ip-address] [url]");
                 Console.WriteLine("    General:");
-                Console.WriteLine("        quit, capture, ping [ip-address]");
+                Console.WriteLine("        quit, capture,");
                 Console.WriteLine("        load [file-name], save [file-name]");
                 return;
         }

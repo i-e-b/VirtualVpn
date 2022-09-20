@@ -615,7 +615,6 @@ public class TestAdaptor : ITcpAdaptor
         LocalPort = 0;
         RemotePort = 0;
         
-        
         _name = name;
         SentRoutes = new List<TcpRoute>();
         SentSegments = new List<TcpSegment>();
