@@ -773,6 +773,7 @@ public class VpnServer : ISessionHost, IDisposable
 
             while (apiSide.Connected)
             {
+                Thread.Sleep(250);
                 channel.EventPump();
             }
 
