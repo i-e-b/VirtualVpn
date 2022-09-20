@@ -1,4 +1,5 @@
 ﻿using System.Net.Sockets;
+using System.Text;
 
 namespace ManualTlsTest;
 
@@ -71,6 +72,7 @@ namespace ManualTlsTest;
 			Console.WriteLine($"{nameof(Read)}(buffer[{buffer.Length}], offset={offset}, count={count})");
             if (_socket == null) throw new InvalidOperationException("Attempted to read from a disconnected socket");
             
+            Thread.Sleep(250);
             var len = _socket.Receive(buffer, offset, count, SocketFlags.None, out var err);
 			if (err != SocketError.Success && err != SocketError.WouldBlock)
 			{
@@ -79,6 +81,9 @@ namespace ManualTlsTest;
 				throw new SocketException((int) err);
 			}
 			Console.WriteLine($"    {nameof(Read)} got {len} bytes; err={err.ToString()}");
+			Console.WriteLine(string.Join(" ", buffer.Take(512).Select(b=>b.ToString("x2"))));
+			Console.WriteLine(Encoding.UTF8.GetString(buffer, offset, len));
+			
 			Position += len;
 			return len;
 		}
@@ -111,6 +116,8 @@ namespace ManualTlsTest;
 		}
 
 		long _writtenLength;
+		private long _position;
+
 		/// <summary>
 		/// Number of bytes written to socket
 		/// </summary>
@@ -122,17 +129,54 @@ namespace ManualTlsTest;
 		/// <summary>
 		/// Number of bytes read from socket
 		/// </summary>
-		public override long Position { get; set; }
+		public override long Position
+		{
+			get { 
+				Console.WriteLine("get "+nameof(Position));
+				return _position;
+			}
+			set { 
+				Console.WriteLine("set "+nameof(Position));
+				_position = value;
+			}
+		}
 
 		/// <summary> No action </summary>
-		public override long Seek(long offset, SeekOrigin origin) { return 0; }
+		public override long Seek(long offset, SeekOrigin origin) {
+			
+			Console.WriteLine(nameof(Seek));
+			return 0;
+		}
         /// <summary> No action </summary>
 		public override void SetLength(long value) {  }
-        
+
         /// <summary> No action </summary>
-		public override bool CanRead { get { return true; } }
+        public override bool CanRead
+        {
+	        get
+	        {
+		        Console.WriteLine(nameof(CanRead));
+		        return true;
+	        }
+        }
+
         /// <summary> No action </summary>
-		public override bool CanSeek { get { return false; } }
+        public override bool CanSeek
+        {
+	        get
+	        {
+		        Console.WriteLine(nameof(CanSeek));
+		        return false;
+	        }
+        }
+
         /// <summary> No action </summary>
-		public override bool CanWrite { get { return true; } } 
+        public override bool CanWrite
+        {
+	        get
+	        {
+		        Console.WriteLine(nameof(CanWrite));
+		        return true;
+	        }
+        }
 	}
