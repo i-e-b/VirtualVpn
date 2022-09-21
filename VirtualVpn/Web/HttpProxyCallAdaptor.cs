@@ -81,12 +81,19 @@ public class HttpProxyCallAdaptor : ISocketAdaptor
 
         // Read headers until we hit a blank line
         string line;
+        var expectedLength = 0;
         while ((line = ReadLine(ref cursor)) != "")
         {
             var sp = line.IndexOf(": ", StringComparison.Ordinal);
             if (sp < 1) break; // invalid
             var key = line.Substring(0, sp);
             var value = line.Substring(sp + 2).Trim(); // should have "\r\n" at end, which we remove.
+
+            if (key == "Content-Length")
+            {
+                int.TryParse(value, out expectedLength);
+            }
+
             if (_response.Headers.ContainsKey(key))
             {
                 _response.Headers[key] += ", " + value;
@@ -98,12 +105,29 @@ public class HttpProxyCallAdaptor : ISocketAdaptor
         }
 
         // Now we should have enough details to read the body correctly.
-        // Until it becomes needed, we just copy all the remains across.
-        // TODO: decode chunked transfer
-
+        var endedCorrectly = false;
         if (cursor < _incomingBuffer.Count)
         {
-            _response.Body = _incomingBuffer.Skip(cursor).ToArray();
+            if (_response.Headers.ContainsKey("Transfer-Encoding")
+                && _response.Headers["Transfer-Encoding"].Contains("chunked"))
+            {
+                _response.Body = DecodeChunked(cursor, ref endedCorrectly);
+            }
+            else
+            {
+                _response.Body = _incomingBuffer.Skip(cursor).ToArray();
+                endedCorrectly = _response.Body.Length == expectedLength;
+            }
+        }
+        else
+        { 
+            endedCorrectly = _response.Headers.ContainsKey("Content-Length") && _response.Headers["Content-Length"] == "0";
+        }
+
+        if (!endedCorrectly)
+        {
+            _response.Success = false;
+            _response.ErrorMessage = "Body was truncated";
         }
     }
 
@@ -235,6 +259,43 @@ public class HttpProxyCallAdaptor : ISocketAdaptor
         }
 
         // Not end of document. Do nothing.
+    }
+
+    /// <summary>
+    /// Decode a chunked body into a plain byte array
+    /// </summary>
+    private byte[] DecodeChunked(int start, ref bool endedCorrectly)
+    {
+        var cursor = start;
+        var body = new List<byte>();
+        while (true)
+        {
+            var line = ReadLine(ref cursor);
+            var length = ReadChunkLength(line);
+            if (length < 0)
+            {
+                endedCorrectly = false;
+                break; // could not read line. Maybe truncated
+            }
+
+            // prevent truncation causing an error
+            if (cursor + length > _incomingBuffer.Count)
+            {
+                endedCorrectly = false;
+                length = _incomingBuffer.Count - cursor;
+            }
+            
+            if (length == 0) // marker for end of document
+            {
+                endedCorrectly = true;
+                break; // note, we do not support "trailing" headers
+            }
+
+            // We have a non-zero length. Copy and move forward
+            body.AddRange(_incomingBuffer.GetRange(cursor, length));
+            cursor += length + 2; // Chunk data should have "\r\n" terminator
+        }
+        return body.ToArray();
     }
 
     private int ReadChunkLength(string line)
