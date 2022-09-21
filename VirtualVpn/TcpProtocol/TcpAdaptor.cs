@@ -221,7 +221,17 @@ public class TcpAdaptor : ITcpAdaptor
         
         // If we are ready to talk to web app, make sure we have a real socket
         if (_realSocketToWebApp is null) Log.Trace("Connecting to web app");
-        _realSocketToWebApp ??= ConnectToWebApp();
+        try
+        {
+            _realSocketToWebApp ??= ConnectToWebApp();
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Can't connect to web app", ex);
+            VirtualSocket.StartClose();
+            _transport.TerminateConnection(SelfKey);
+            return false;
+        }
 
         if (_realSocketToWebApp is null)
         {
@@ -360,7 +370,34 @@ public class TcpAdaptor : ITcpAdaptor
         // Connect to web app
         Log.Debug("Connecting to web app");
         var webApiSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-        webApiSocket.Connect(IpV4Address.FromString(Settings.WebAppIpAddress).MakeEndpoint(Settings.WebAppPort));
+        try
+        {
+            webApiSocket.Connect(IpV4Address.FromString(Settings.WebAppIpAddress).MakeEndpoint(Settings.WebAppPort));
+        }
+        catch (SocketException ex)
+        {
+            switch (ex.SocketErrorCode)
+            {
+                case SocketError.AccessDenied:
+                case SocketError.NetworkDown:
+                case SocketError.NetworkUnreachable:
+                case SocketError.ConnectionRefused:
+                case SocketError.HostDown:
+                case SocketError.HostUnreachable:
+                    Log.Critical("Web App not available: can't respond to traffic.\r\nCheck web app is up and settings are correct");
+                    throw;
+
+                default:
+                    throw;
+            }
+        }
+        catch (Exception ex2)
+        {
+            if (ex2.Message.Contains("Connection refused"))
+                Log.Critical("Web App not available: can't respond to traffic.\r\nCheck web app is up and settings are correct");
+            throw;
+        }
+
         Log.Debug("connection up");
         return new AdaptorForRealSocket(webApiSocket);
     }
