@@ -767,6 +767,8 @@ public class VpnServer : ISessionHost, IDisposable
             var proxyAddress = IpV4Address.FromString(request.ProxyLocalAddress);
             var tunnel = FindTunnelTo(target);
             
+            Log.Trace($"State BEFORE:\r\n\r\n{string.Join("\r\n",tunnel.ListTcpSessions())}");
+            
             var response = new HttpProxyResponse();
             
             ISocketAdaptor apiSide = new HttpProxyCallAdaptor(request, response);
@@ -774,6 +776,8 @@ public class VpnServer : ISessionHost, IDisposable
             
             var timeout = new Stopwatch();
             timeout.Start();
+            
+            Log.Trace($"State DURING:\r\n\r\n{string.Join("\r\n",tunnel.ListTcpSessions())}");
 
             while (
                 apiSide.Connected // this will be flipped when the Tcp connection is over
@@ -794,6 +798,8 @@ public class VpnServer : ISessionHost, IDisposable
 
             // make sure we stop pumping the connection
             tunnel.ReleaseConnection(channel.SelfKey);
+            
+            Log.Trace($"State AFTER:\r\n\r\n{string.Join("\r\n",tunnel.ListTcpSessions())}");
             
             return response;
         }

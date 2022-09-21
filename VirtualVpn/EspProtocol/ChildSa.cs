@@ -43,7 +43,7 @@ public class ChildSa : ITransportTunnel
 
     private static readonly Random _rnd = new();
     private static int RandomPacketId() => _rnd.Next();
-
+    
 
     // pvpn/server.py:18
     public ChildSa(IpV4Address gateway, byte[] spiIn, byte[] spiOut, IkeCrypto cryptoIn, IkeCrypto cryptoOut,
@@ -68,6 +68,43 @@ public class ChildSa : ITransportTunnel
         SpiIn = Bit.ReadUInt32(spiIn, ref idx);
         idx = 0;
         SpiOut = Bit.ReadUInt32(spiOut, ref idx);
+    }
+
+    /// <summary>
+    /// Provide a description of each known TCP session
+    /// in this ChildSa
+    /// </summary>
+    public List<string> ListTcpSessions()
+    {
+        var result = new List<string>();
+
+        foreach (var session in _tcpSessions.Keys)
+        {
+            var tcp = _tcpSessions[session];
+            if (tcp is null)
+            {
+                result.Add($"INVALID SESSION: {session.Address}:{session.Port}");
+            }
+            else
+            {
+                result.Add($"ACTIVE: {session.Address}:{session.Port} - {tcp.VirtualSocket.State.ToString()} ( {IpV4Address.Describe(tcp.LocalAddress)}:{tcp.LocalPort}->{IpV4Address.Describe(tcp.RemoteAddress)}:{tcp.RemotePort} )");
+            }
+        }
+        
+        foreach (var session in _parkedSessions.Keys)
+        {
+            var tcp = _parkedSessions[session];
+            if (tcp is null)
+            {
+                result.Add($"INVALID PARKED SESSION: {session.Address}:{session.Port}");
+            }
+            else
+            {
+                result.Add($"PARKED: {session.Address}:{session.Port} - {tcp.VirtualSocket.State.ToString()} ( {IpV4Address.Describe(tcp.LocalAddress)}:{tcp.LocalPort}->{IpV4Address.Describe(tcp.RemoteAddress)}:{tcp.RemotePort} )");
+            }
+        }
+        
+        return result;
     }
 
     private void KeepAliveEvent(EspTimedEvent obj)
@@ -218,9 +255,9 @@ public class ChildSa : ITransportTunnel
     /// </summary>
     public void Send(IpV4Packet reply, IPEndPoint gateway)
     {
-        Log.Info("ChildSa - Sending reply packet through gateway");
+        Log.Info("ChildSa - Sending packet through gateway");
         var raw = WriteSpe(reply);
-        Reply(raw, gateway);
+        UdpDataSend(raw, gateway);
     }
     
     /// <summary>
@@ -425,10 +462,10 @@ public class ChildSa : ITransportTunnel
         ipv4Reply.UpdateChecksum();
 
         var encryptedData = WriteSpe(ipv4Reply);
-        Reply(encryptedData, sender);
+        UdpDataSend(encryptedData, sender);
     }
     
-    private void Reply(byte[] message, IPEndPoint to)
+    private void UdpDataSend(byte[] message, IPEndPoint to)
     {
         if (_server is null)
         {
@@ -527,7 +564,7 @@ public class ChildSa : ITransportTunnel
 
         Log.Info("    Sending ping...");
         var encryptedData = WriteSpe(ipv4Reply);
-        Reply(encryptedData, Gateway.MakeEndpoint(4500));
+        UdpDataSend(encryptedData, Gateway.MakeEndpoint(4500));
         _pingTimer.Restart();
     }
 

@@ -113,4 +113,10 @@ public class IpV4Address: IEquatable<IpV4Address>
     public IPEndPoint MakeEndpoint(int port) => new(ToIpAddress(), port);
 
     public IPAddress ToIpAddress() => new(Value);
+
+    public static string Describe(byte[] bytes)
+    {
+        if (bytes.Length < 4) return "<empty>";
+        return $"{bytes[0]}.{bytes[1]}.{bytes[2]}.{bytes[3]}";
+    }
 }
