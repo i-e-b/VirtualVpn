@@ -173,7 +173,8 @@ public class ChildSa : ITransportTunnel
                 continue;
             }
 
-            if (oldSession.VirtualSocket.State == TcpSocketState.Closed) _parkedSessions.Remove(oldKey);
+            if (oldSession.VirtualSocket.State == TcpSocketState.Closed
+                || oldSession.VirtualSocket.State == TcpSocketState.Listen) _parkedSessions.Remove(oldKey);
             else oldSession.EventPump();
         }
         return acted;
@@ -271,9 +272,18 @@ public class ChildSa : ITransportTunnel
         try
         {
             var session = _tcpSessions.Remove(key);
-            session?.Close();
+            if (session is not null)
+            {
+                Log.Info($"Terminating {IpV4Address.Describe(session.LocalAddress)}:{session.LocalPort} -> {IpV4Address.Describe(session.RemoteAddress)}:{session.RemotePort}");
+            }
+
+
+            session = _parkedSessions.Remove(key);
+            if (session is not null)
+            {
+                Log.Info($"Terminating {IpV4Address.Describe(session.LocalAddress)}:{session.LocalPort} -> {IpV4Address.Describe(session.RemoteAddress)}:{session.RemotePort}");
+            }
             
-            _parkedSessions.Remove(key);
         }
         catch (Exception ex)
         {
