@@ -22,7 +22,10 @@ public class TcpAdaptor : ITcpAdaptor
     /// <summary> The tunnel session we are connected to (used for sending replies) </summary>
     private readonly ChildSa _transport;
 
-    private readonly SenderPort _selfKey;
+    /// <summary>
+    /// The sender IP and Port number that uniquely identifies an active connection
+    /// </summary>
+    public SenderPort SelfKey { get; }
 
     // Transaction state triggers
     private volatile bool _closeCalled;
@@ -66,7 +69,7 @@ public class TcpAdaptor : ITcpAdaptor
     public TcpAdaptor(ChildSa transport, IPEndPoint gateway, SenderPort selfKey, ISocketAdaptor? socketAdaptor)
     {
         _transport = transport;
-        _selfKey = selfKey;
+        SelfKey = selfKey;
         _closeCalled = false;
 
         _realSocketToWebApp = socketAdaptor;
@@ -164,7 +167,7 @@ public class TcpAdaptor : ITcpAdaptor
         if (_closeCalled)
         {
             _realSocketToWebApp?.Dispose();
-            _transport.TerminateConnection(_selfKey);
+            _transport.TerminateConnection(SelfKey);
             Log.Trace("Repeated call to TcpAdaptor.Close()");
             return;
         }
@@ -173,14 +176,14 @@ public class TcpAdaptor : ITcpAdaptor
 
         Log.Info("Ending connection");
         VirtualSocket.StartClose();
-        _transport.TerminateConnection(_selfKey);
+        _transport.TerminateConnection(SelfKey);
     }
 
     public void Closing()
     {
         Log.Trace("Started to close connection");
         _realSocketToWebApp?.Close();
-        _transport.ReleaseConnection(_selfKey);
+        _transport.ReleaseConnection(SelfKey);
     }
 
     /// <summary>
@@ -436,7 +439,7 @@ public class TcpAdaptor : ITcpAdaptor
 
             case SocketError.Disconnecting:
                 Log.Info($"Tcp virtual socket is closing: code={VirtualSocket.ErrorCode.ToString()}, state={VirtualSocket.State.ToString()}");
-                _transport.ReleaseConnection(_selfKey);
+                _transport.ReleaseConnection(SelfKey);
                 return acted;
 
             case SocketError.NotConnected:
@@ -444,18 +447,18 @@ public class TcpAdaptor : ITcpAdaptor
                 Log.Info($"Tcp virtual socket is closed: code={VirtualSocket.ErrorCode.ToString()}, state={VirtualSocket.State.ToString()}");
                 if (VirtualSocket.State == TcpSocketState.Closing)
                 {
-                    _transport.TerminateConnection(_selfKey);
+                    _transport.TerminateConnection(SelfKey);
                 }
                 else
                 {
-                    _transport.ReleaseConnection(_selfKey);
+                    _transport.ReleaseConnection(SelfKey);
                 }
 
                 return acted;
 
             default:
                 Log.Error($"Tcp virtual socket is in errored state: code={VirtualSocket.ErrorCode.ToString()}, state={VirtualSocket.State.ToString()}");
-                _transport.ReleaseConnection(_selfKey);
+                _transport.ReleaseConnection(SelfKey);
                 return false;
         }
     }

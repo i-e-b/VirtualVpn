@@ -771,7 +771,7 @@ public class VpnServer : ISessionHost, IDisposable
             ISocketAdaptor apiSide = new ProxyCallAdaptor(request, response);
             var channel = tunnel.OpenTcpSession(target, request.Port, proxyAddress, apiSide);
 
-            while (apiSide.Connected)
+            while (apiSide.Connected) // this will be flipped when the Tcp connection is over
             {
                 Thread.Sleep(250);
                 channel.EventPump();
@@ -781,7 +781,9 @@ public class VpnServer : ISessionHost, IDisposable
                     Log.Trace($"Virtual socket has {outgoingDataReady} bytes waiting");
                 }
             }
-
+            
+            tunnel.ReleaseConnection(channel.SelfKey);
+            
             return response;
         }
         catch (Exception ex)

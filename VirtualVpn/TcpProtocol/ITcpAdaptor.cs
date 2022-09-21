@@ -37,6 +37,11 @@ public interface ITcpAdaptor
     bool EventPump();
 
     /// <summary>
+    /// The sender IP and Port number that uniquely identifies an active connection
+    /// </summary>
+    SenderPort SelfKey { get; }
+    
+    /// <summary>
     /// Time since last packets send or received.
     /// Only starts ticking when first packets transmitted.
     /// </summary>

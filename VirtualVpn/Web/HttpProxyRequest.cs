@@ -7,6 +7,8 @@ namespace VirtualVpn.Web;
 /// </summary>
 public class HttpProxyRequest
 {
+    // TODO: change IP and port to a url
+    
     /// <summary>
     /// IP address of server at the far side of the VPN tunnel
     /// that we are trying to contact.

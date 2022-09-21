@@ -645,6 +645,8 @@ public class TestAdaptor : ITcpAdaptor
         throw new NotImplementedException();
     }
 
+    public SenderPort SelfKey => new();
+
     public Stopwatch LastContact { get; }
     public byte[] LocalAddress { get; }
     public TcpSocket VirtualSocket { get; }
