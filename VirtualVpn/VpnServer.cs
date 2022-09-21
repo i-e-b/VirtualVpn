@@ -237,21 +237,20 @@ public class VpnServer : ISessionHost, IDisposable
                     Console.WriteLine($"Expected IP and URL. Got {parts.Length} parts (should be 2)");
                     break;
                 }
+                
+                var uri = new Uri(parts[1], UriKind.Absolute);
 
                 // Kick off a proxy call as if the external API was hit.
                 var request= new HttpProxyRequest
                 {
-                    TargetMachineIp = parts[0],
+                    Url = parts[1],
                     Headers = {
-                        {"Host",parts[0]},
+                        { "Host", uri.Host },
                         {"Accept", "*/*"},
                         {"Content-Length", "0"}
                     },
                     HttpMethod = "GET",
-                    Body = null,
-                    Url = parts[1],
-                    Port = 80,
-                    ProxyLocalAddress = "55.55.55.55" // Temp for testing. TODO: should pick this, or request it?
+                    ProxyLocalAddress = parts[0]
                 };
                 var response = MakeProxyCall(request);
                 
@@ -268,7 +267,7 @@ public class VpnServer : ISessionHost, IDisposable
                 Console.WriteLine("        psk [psk-string]");
                 Console.WriteLine("    Testing:");
                 Console.WriteLine("        ping [ip-address],");
-                Console.WriteLine("        wget [ip-address] [url]");
+                Console.WriteLine("        wget [fake-ip] [target-url]");
                 Console.WriteLine("    General:");
                 Console.WriteLine("        quit, capture,");
                 Console.WriteLine("        load [file-name], save [file-name]");
@@ -769,14 +768,16 @@ public class VpnServer : ISessionHost, IDisposable
     {
         try
         {
-            var target = IpV4Address.FromString(request.TargetMachineIp);
+            var uri = new Uri(request.Url, UriKind.Absolute);
+            
+            var target = IpV4Address.FromString(uri.Host);
             var proxyAddress = IpV4Address.FromString(request.ProxyLocalAddress);
             var tunnel = FindTunnelTo(target);
             
             var response = new HttpProxyResponse();
             
             ISocketAdaptor apiSide = new HttpProxyCallAdaptor(request, response);
-            var channel = tunnel.OpenTcpSession(target, request.Port, proxyAddress, apiSide);
+            var channel = tunnel.OpenTcpSession(target, uri.Port, proxyAddress, apiSide);
             
             var timeout = new Stopwatch();
             timeout.Start();

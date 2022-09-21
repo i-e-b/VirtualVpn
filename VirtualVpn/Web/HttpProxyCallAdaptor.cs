@@ -29,7 +29,8 @@ public class HttpProxyCallAdaptor : ISocketAdaptor
         _outgoingBuffer.AddRange(Encoding.ASCII.GetBytes($"{request.HttpMethod} {request.Url} HTTP/1.1\r\n"));
         if (!request.Headers.ContainsKey("Host"))
         {
-            _outgoingBuffer.AddRange(Encoding.ASCII.GetBytes($"Host: {request.TargetMachineIp}\r\n"));
+            var uri = new Uri(request.Url, UriKind.Absolute);
+            _outgoingBuffer.AddRange(Encoding.ASCII.GetBytes($"Host: {uri.Host}\r\n"));
         }
 
         foreach (var header in request.Headers)
@@ -264,6 +265,7 @@ public class HttpProxyCallAdaptor : ISocketAdaptor
     /// <summary>
     /// Decode a chunked body into a plain byte array
     /// </summary>
+    // ReSharper disable once RedundantAssignment
     private byte[] DecodeChunked(int start, ref bool endedCorrectly)
     {
         var cursor = start;

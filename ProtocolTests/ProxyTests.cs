@@ -132,7 +132,9 @@ public class ProxyTests
     [Test]
     public void proxy_call_adaptor_handles_complete_documents()
     {
-        var request = new HttpProxyRequest();
+        var request = new HttpProxyRequest{
+            Url = "https://192.168.0.1/what"
+        };
         var response = new HttpProxyResponse();
         var subject = new HttpProxyCallAdaptor(request, response);
 
@@ -162,7 +164,9 @@ public class ProxyTests
     [Test]
     public void proxy_call_adaptor_handles_fragmented_documents()
     {
-        var request = new HttpProxyRequest();
+        var request = new HttpProxyRequest{
+            Url = "https://192.168.0.1/what"
+        };
         var response = new HttpProxyResponse();
         var subject = new HttpProxyCallAdaptor(request, response);
 
@@ -206,7 +210,9 @@ public class ProxyTests
     [Test]
     public void proxy_call_adaptor_handles_fragmented_chunked_documents()
     {
-        var request = new HttpProxyRequest();
+        var request = new HttpProxyRequest{
+            Url = "https://192.168.0.1/what"
+        };
         var response = new HttpProxyResponse();
         var subject = new HttpProxyCallAdaptor(request, response);
 
@@ -251,7 +257,9 @@ public class ProxyTests
     [Test]
     public void proxy_call_adaptor_handles_truncated_chunked_documents()
     {
-        var request = new HttpProxyRequest();
+        var request = new HttpProxyRequest{
+            Url = "https://192.168.0.1/what"
+        };
         var response = new HttpProxyResponse();
         var subject = new HttpProxyCallAdaptor(request, response);
 

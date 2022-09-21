@@ -1,19 +1,28 @@
 
+using System.Diagnostics.CodeAnalysis;
+
 namespace VirtualVpn.Web;
 
 /// <summary>
 /// Wrapper for a remote machine to make a HTTP call
 /// as if it were in the VirtualVPN encryption domain.
 /// </summary>
+[SuppressMessage("ReSharper", "AutoPropertyCanBeMadeGetOnly.Global")]
+[SuppressMessage("ReSharper", "PropertyCanBeMadeInitOnly.Global")]
 public class HttpProxyRequest
 {
-    // TODO: change IP and port to a url
+    /// <summary>
+    /// HTTP request Url.
+    /// <p></p>
+    /// MUST include scheme and host (i.e. https://192.168.0.40 )<br/>
+    /// SHOULD include port and path (i.e. :443/my/path)
+    /// </summary>
+    public string Url { get; set; } = "";
     
     /// <summary>
-    /// IP address of server at the far side of the VPN tunnel
-    /// that we are trying to contact.
+    /// HTTP request method (e.g. "POST", "GET", "PUT", etc)
     /// </summary>
-    public string TargetMachineIp { get; set; } = "";
+    public string HttpMethod { get; set; } = "GET";
     
     /// <summary>
     /// HTTP request headers (must be complete and correct)
@@ -21,27 +30,15 @@ public class HttpProxyRequest
     public IDictionary<string,string> Headers { get; set; } = new Dictionary<string, string>();
     
     /// <summary>
-    /// HTTP request method (e.g. POST, GET, etc)
-    /// </summary>
-    public string HttpMethod { get; set; } = "GET";
-    
-    /// <summary>
-    /// HTTP body (or null)
+    /// HTTP body to send (or null).
+    /// Should only be included in PUT/POST calls
     /// </summary>
     public byte[]? Body { get; set; }
     
     /// <summary>
-    /// HTTP request Url
-    /// </summary>
-    public string Url { get; set; } = "";
-    
-    /// <summary>
-    /// Port on the remote server we will query
-    /// </summary>
-    public int Port { get; set; } = 80;
-    
-    /// <summary>
-    /// Address in the VirtualVPN range that we will pretend to be
+    /// Single address in the VirtualVPN range that this call will pretend to come from.
+    /// <p></p>
+    /// MUST be formatted as a dotted ip v4 string (e.g. "55.55.50.10")
     /// </summary>
     public string ProxyLocalAddress { get; set; } = "";
 }
