@@ -1,5 +1,3 @@
-using System.Net.Sockets;
-
 namespace VirtualVpn.TcpProtocol;
 
 public interface ISocketAdaptor:IDisposable

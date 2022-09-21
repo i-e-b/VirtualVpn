@@ -789,8 +789,14 @@ public class VpnServer : ISessionHost, IDisposable
                 }
             }
             
-            channel.Close();
-            apiSide.Close();
+            // kill if timed-out
+            if (apiSide.Connected)
+            {
+                apiSide.Close();
+                channel.Close();
+            }
+
+            // make sure we stop pumping the connection
             tunnel.ReleaseConnection(channel.SelfKey);
             
             return response;
