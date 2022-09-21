@@ -363,6 +363,7 @@ public class ChildSa : ITransportTunnel
 
             // Is it a known session?
             var session = _tcpSessions[key];
+            var parked = _parkedSessions[key];
             if (session is not null)
             {
                 // check that this session is still coming through the original tunnel
@@ -375,8 +376,29 @@ public class ChildSa : ITransportTunnel
                 // continue existing session
                 session.Accept(incomingIpv4Message);
             }
+            else if (parked is not null)
+            {
+                // kick a parked session? This should be FIN etc.
+                parked.Accept(incomingIpv4Message);
+            }
             else
             {
+                // check this is valid as the start of a new session
+                var ok = ByteSerialiser.FromBytes<TcpSegment>(incomingIpv4Message.Payload, out var tcp);
+                if (!ok)
+                {
+                    Log.Info($"Rejecting invalid TCP/IP request: {incomingIpv4Message.Destination.AsString}:{tcp.DestinationPort} ({tcp.Flags.ToString()})");
+                    return;
+                }
+
+                if (!tcp.Flags.FlagsSet(TcpSegmentFlags.Syn))
+                {
+                    // Looks ok, but it's not the start of a TCP stream.
+                    // This might happen if we get FIN messages for sessions we've already abandoned
+                    Log.Warn($"Rejecting TCP/IP request due to invalid flags: {incomingIpv4Message.Destination.AsString}:{tcp.DestinationPort} ({tcp.Flags.ToString()})");
+                    return;
+                }
+
                 // start new session
                 var newSession = new TcpAdaptor(this, sender, key, null);
                 var sessionOk = newSession.StartIncoming(incomingIpv4Message);
