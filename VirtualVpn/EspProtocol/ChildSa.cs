@@ -391,6 +391,14 @@ public class ChildSa : ITransportTunnel
                     return;
                 }
 
+                // Check for shut-down messages
+                if (tcp.Flags.FlagsSet(TcpSegmentFlags.FinAck))
+                {
+                    Log.Info($"Got FIN/ACK from {incomingIpv4Message.Source.AsString}. Sending final ACK");
+                    ReplyToFinAck(incomingIpv4Message, tcp, sender);
+                    return;
+                }
+
                 if (!tcp.Flags.FlagsSet(TcpSegmentFlags.Syn))
                 {
                     // Looks ok, but it's not the start of a TCP stream.
@@ -410,7 +418,49 @@ public class ChildSa : ITransportTunnel
             Log.Error("Error in TCP path", ex);
         }
     }
-    
+
+    /// <summary>
+    /// Send a final close message back, without caring about the actual TCP session
+    /// </summary>
+    private void ReplyToFinAck(IpV4Packet ipv4, TcpSegment tcp, IPEndPoint sender)
+    {
+        var replyTcp = new TcpSegment
+        {
+            SourcePort = tcp.DestinationPort,
+            DestinationPort = tcp.SourcePort,
+            SequenceNumber = tcp.SequenceNumber,
+            AcknowledgmentNumber = tcp.AcknowledgmentNumber,
+            DataOffset = 5,
+            Reserved = 0,
+            Flags = TcpSegmentFlags.Ack,
+            WindowSize = 0,
+            Checksum = 0,
+            UrgentPointer = 0,
+        };
+        var replyIpv4 = new IpV4Packet
+        {
+            Version = IpV4Version.Version4,
+            HeaderLength = 5,
+            PacketId = 101,
+            Flags = IpV4HeaderFlags.None,
+            FragmentIndex = 0,
+            Ttl = 64,
+            Protocol = IpV4Protocol.TCP,
+            Checksum = 0,
+            Source = ipv4.Destination,
+            Destination = ipv4.Source,
+        };
+        
+        replyTcp.UpdateChecksum(replyIpv4.Source.Value, replyIpv4.Destination.Value);
+        replyIpv4.Payload = ByteSerialiser.ToBytes(replyTcp);
+        replyIpv4.TotalLength = 20 + replyIpv4.Payload.Length;
+        
+        replyIpv4.UpdateChecksum();
+        
+        var encryptedData = WriteSpe(replyIpv4);
+        UdpDataSend(encryptedData, sender);
+    }
+
     /// <summary>
     /// Open a new TCP session with local side as the client,
     /// and far side of tunnel as server.

@@ -15,10 +15,10 @@ public static class TcpDefaults
     
     /// <summary>
     /// Time to wait after a close state is entered.
-    /// We have this deliberately shorter than normal
-    /// due to VPN oddities
+    /// We have this deliberately shorter than normal due to VPN oddities,
+    /// and handle any dangling FIN/ACK messages separately (see <see cref="VirtualVpn.EspProtocol.ChildSa.HandleTcp"/>)
     /// </summary>
-    public static readonly TimeSpan CloseWaitLifetime = TimeSpan.FromSeconds(5);
+    public static readonly TimeSpan CloseWaitLifetime = TimeSpan.FromSeconds(60);
     
     /// <summary>
     /// Initial connect timeout.

@@ -16,6 +16,11 @@ public enum TcpSegmentFlags
     /// </summary>
     SynAck = Syn | Ack,
     
+    /// <summary>
+    /// Both Fin and Ack flags
+    /// </summary>
+    FinAck = Fin | Ack,
+    
     /// <summary> FIN: Last packet from sender. Assume session is closed after this. </summary>
     Fin = 1 << 0,
     
