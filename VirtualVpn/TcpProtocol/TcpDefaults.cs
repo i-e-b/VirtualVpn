@@ -14,6 +14,13 @@ public static class TcpDefaults
     public static readonly TimeSpan MaxSegmentLifetime = TimeSpan.FromSeconds(60);
     
     /// <summary>
+    /// Time to wait after a close state is entered.
+    /// We have this deliberately shorter than normal
+    /// due to VPN oddities
+    /// </summary>
+    public static readonly TimeSpan CloseWaitLifetime = TimeSpan.FromSeconds(5);
+    
+    /// <summary>
     /// Initial connect timeout.
     /// This is doubled on each retry
     /// </summary>

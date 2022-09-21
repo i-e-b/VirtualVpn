@@ -68,6 +68,8 @@ public class TcpSocket
 
         _rtoEvent = null;
         _timeWait = new TcpTimedEvent(TimeWaitExpired, TcpDefaults.MaxSegmentLifetime.Multiply(2));
+        _closeWait = new TcpTimedEvent(CloseWaitExpired, TcpDefaults.CloseWaitLifetime);
+        _closeWait.Clear(); // don't run closeWait until we reset it
 
         _tcb = new TransmissionControlBlock();
         _route = new TcpRoute();
@@ -82,13 +84,16 @@ public class TcpSocket
     public bool EventPump()
     {
         // check for any timers or queues that need driving through this socket
-
         if (_state == TcpSocketState.Closed && _stateTransitions > 0)
         {
             Log.Trace($"Event pump called, but this socket is closed after {_stateTransitions} states. Calling adaptor to release.");
             _adaptor.Close();
         }
+        
+        // If shutting down?
+        if (_closeWait.TriggerIfExpired()) return false;
 
+        // Normal event triggers
         Log.Trace("TcpSocket.EventPump");
         var acted = SendIfPossible();
         acted |= _rtoEvent?.TriggerIfExpired() ?? false;
@@ -368,9 +373,14 @@ public class TcpSocket
     private TcpTimedEvent? _rtoEvent; // most recent retransmit timeout, if any
 
     /// <summary>
-    /// Monotonic TCP waiting timer. Null if nothing is waiting.
+    /// Monotonic TCP waiting timer
     /// </summary>
     private readonly TcpTimedEvent _timeWait;
+    
+    /// <summary>
+    /// Shutdown timer
+    /// </summary>
+    private readonly TcpTimedEvent _closeWait;
 
     /// <summary> Number of times we've changed state </summary>
     private int _stateTransitions;
@@ -399,7 +409,9 @@ public class TcpSocket
             return; // drop the packet and await a retry.
         }
 
-        var frame = new TcpFrame(segment, wrapper); // store this? lib/tcp/tcp.c:152
+        _closeWait.Clear();
+        
+        var frame = new TcpFrame(segment, wrapper); // lib/tcp/tcp.c:152
         lock (_lock)
         {
             if (_state == TcpSocketState.Closed)
@@ -628,6 +640,14 @@ public class TcpSocket
 
             switch (newState)
             {
+                case TcpSocketState.FinWait1:
+                case TcpSocketState.FinWait2:
+                case TcpSocketState.TimeWait:
+                case TcpSocketState.LastAck:
+                    // after a short delay, consider this socket closed.
+                    _closeWait.Reset();
+                    break;
+                
                 case TcpSocketState.Closing:
                 case TcpSocketState.CloseWait:
                     // Should end any blocking calls to Receive
@@ -1199,12 +1219,14 @@ public class TcpSocket
                 case TcpSocketState.Established:
                     Log.Info("Timer expired from Established state. Beginning close process.");
                     _timeWait.Reset();
+                    _closeWait.Reset();
                     StartClose();
                     break;
                 
                 case TcpSocketState.CloseWait:
                     Log.Info("Timer expired from Established state. Beginning close process.");
                     _timeWait.Reset();
+                    _closeWait.Reset();
                     SetState(TcpSocketState.LastAck);
                     SendFin();
                     break;
@@ -1212,9 +1234,22 @@ public class TcpSocket
                 default:
                     Log.Info($"Tcp socket life-timer expired in state {_state.ToString()}. Session is terminated.");
                     SetState(TcpSocketState.Closed);
+                    _closeWait.Reset();
                     KillSession();
                     break;
             }
+        }
+    }
+
+    /// <summary>
+    /// Socket has been closed for a few seconds without any new traffic
+    /// </summary>
+    private void CloseWaitExpired(TcpTimedEvent obj)
+    {
+        lock (_lock)
+        {
+            _state = TcpSocketState.Closed;
+            _adaptor.Close();
         }
     }
 

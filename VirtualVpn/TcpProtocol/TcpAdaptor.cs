@@ -168,7 +168,7 @@ public class TcpAdaptor : ITcpAdaptor
         {
             _realSocketToWebApp?.Dispose();
             _transport.TerminateConnection(SelfKey);
-            Log.Warn("Repeated call to TcpAdaptor.Close()");
+            Log.Info("Repeated call to TcpAdaptor.Close()");
             return;
         }
 

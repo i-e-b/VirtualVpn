@@ -123,11 +123,16 @@ public class ChildSa : ITransportTunnel
 
         // Old sessions that are shutting down.
         // They are no longer keyed.
-        foreach (var oldKey in _parkedSessions.Keys)
+        var parkedKeys = _parkedSessions.Keys.ToArray();
+        foreach (var oldKey in parkedKeys)
         {
             var oldSession = _parkedSessions[oldKey];
-            if (oldSession is null) continue;
-            
+            if (oldSession is null)
+            {
+                _parkedSessions.Remove(oldKey);
+                continue;
+            }
+
             if (oldSession.VirtualSocket.State == TcpSocketState.Closed) _parkedSessions.Remove(oldKey);
             else oldSession.EventPump();
         }
