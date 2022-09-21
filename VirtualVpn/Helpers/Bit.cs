@@ -339,9 +339,16 @@ public static class Bit
             {
                 sb.AppendLine();
                 sb.Append($"{idx:d4}: ");
+                var x = idx;
                 for (int b = 0; (b < 16) && (idx < bytes.Length); b++)
                 {
                     sb.Append($"{bytes[idx++]:X2} ");
+                }
+                for (int b = 0; (b < 16) && (x < bytes.Length); b++)
+                {
+                    var ch = bytes[x++];
+                    if (ch >= ' ' && ch <= '~') sb.Append((char)ch);
+                    else sb.Append('.');
                 }
             }
 
