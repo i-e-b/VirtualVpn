@@ -40,7 +40,7 @@ public class VpnServer : ISessionHost, IDisposable
     // Stats stuff
     private readonly EspTimedEvent _statsTimer;
     private ulong _sessionsStarted;
-    private ISet<IpV4Address> _alwaysConnections = new HashSet<IpV4Address>();
+    private readonly ISet<IpV4Address> _alwaysConnections = new HashSet<IpV4Address>();
 
 
     public VpnServer()
@@ -138,6 +138,11 @@ public class VpnServer : ISessionHost, IDisposable
             case "info": // informational logging
             {
                 Log.SetLevel(LogLevel.Info);
+                return;
+            }
+            case "warn": // informational logging
+            {
+                Log.SetLevel(LogLevel.Warning);
                 return;
             }
 
@@ -256,7 +261,7 @@ public class VpnServer : ISessionHost, IDisposable
             default:
                 Console.WriteLine("Known commands:");
                 Console.WriteLine("    Logging:");
-                Console.WriteLine("        trace, loud, less ... crypto (INSECURE)");
+                Console.WriteLine("        warn, info, debug, trace ... crypto (INSECURE)");
                 Console.WriteLine("    Connection:");
                 Console.WriteLine("        list, kill [sa-id],");
                 Console.WriteLine("        start [gateway], always [gateway],");

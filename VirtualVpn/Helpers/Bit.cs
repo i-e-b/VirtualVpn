@@ -344,6 +344,11 @@ public static class Bit
                 {
                     sb.Append($"{bytes[idx++]:X2} ");
                 }
+                var gap = 16 - (idx - x);
+                for (int i = 0; i < gap; i++)
+                {
+                    sb.Append("   ");
+                }
                 for (int b = 0; (b < 16) && (x < bytes.Length); b++)
                 {
                     var ch = bytes[x++];
