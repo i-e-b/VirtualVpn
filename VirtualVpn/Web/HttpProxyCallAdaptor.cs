@@ -6,8 +6,7 @@ namespace VirtualVpn.Web;
 
 /// <summary>
 /// Pretend that an API proxy call is a HTTP over TCP socket client
-/// This does unsecured calls only at the moment.
-/// TODO: support HTTPS (SslSocketStream)
+/// This class does unsecured calls. For SSL/TLS, see <see cref="HttpsProxyCallAdaptor"/>.
 /// </summary>
 public class HttpProxyCallAdaptor : ISocketAdaptor
 {
@@ -131,7 +130,6 @@ public class HttpProxyCallAdaptor : ISocketAdaptor
             _response.ErrorMessage = "Body was truncated";
         }
     }
-
 
     public void Dispose() => EndConnection();
 

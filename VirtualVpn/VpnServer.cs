@@ -776,7 +776,9 @@ public class VpnServer : ISessionHost, IDisposable
             
             var response = new HttpProxyResponse();
             
-            ISocketAdaptor apiSide = new HttpProxyCallAdaptor(request, response);
+            ISocketAdaptor apiSide = uri.Scheme == "http"
+                ? new HttpProxyCallAdaptor(request, response)
+                : new HttpsProxyCallAdaptor(request, response);
             var channel = tunnel.OpenTcpSession(target, uri.Port, proxyAddress, apiSide);
             
             var timeout = new Stopwatch();
