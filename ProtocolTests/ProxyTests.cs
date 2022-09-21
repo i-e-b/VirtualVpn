@@ -124,4 +124,123 @@ public class ProxyTests
         var result = Json.Defrost<HttpProxyResponse>(resultString);
         Assert.That(result, Is.Not.Null, "final result");
     }
+
+    [Test]
+    public void proxy_call_adaptor_handles_complete_documents()
+    {
+        var request = new HttpProxyRequest();
+        var response = new HttpProxyResponse();
+        var subject = new HttpProxyCallAdaptor(request, response);
+        
+        Assert.That(subject.Connected, Is.True, "Initial state");
+        
+        const string doc = "HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: 13\r\n\r\nHello, world!";
+        
+        // feed some data in fragments
+        var buffer = Encoding.UTF8.GetBytes(doc);
+        var read = subject.IncomingFromTunnel(buffer, 0, buffer.Length);
+        
+        Assert.That(read, Is.EqualTo(buffer.Length), "frag 1 length");
+        Assert.That(subject.Connected, Is.False, "should finish at end of document");
+        
+        Assert.That(response.Success, Is.True, "success flag");
+        Assert.That(response.ErrorMessage, Is.Null, "error");
+        Assert.That(response.StatusCode, Is.EqualTo(200), "status code");
+        Assert.That(response.StatusDescription, Is.EqualTo("OK"), "status message");
+        Assert.That(response.Body, Is.Not.Null, "body present");
+        Assert.That(response.Headers["Content-Type"], Is.EqualTo("text/plain; charset=utf-8"), "content type");
+        Assert.That(response.Headers["Content-Length"], Is.EqualTo("13"), "content length header");
+        
+        var bodyString = Encoding.UTF8.GetString(response.Body);
+        Assert.That(bodyString, Is.EqualTo("Hello, world!"), "body");
+    }
+    
+    [Test]
+    public void proxy_call_adaptor_handles_fragmented_documents()
+    {
+        var request = new HttpProxyRequest();
+        var response = new HttpProxyResponse();
+        var subject = new HttpProxyCallAdaptor(request, response);
+        
+        Assert.That(subject.Connected, Is.True, "Initial state");
+        
+        const string frag1 = "HTTP/1.1 200 OK\r\nContent-Type: ";
+        const string frag2 = "text/plain; charset=utf-8\r\nContent-Length: 13\r\n\r\nHel";
+        const string frag3 = "lo, world!";
+        
+        // feed first fragment
+        var buffer = Encoding.UTF8.GetBytes(frag1);
+        var read = subject.IncomingFromTunnel(buffer, 0, buffer.Length);
+        Assert.That(read, Is.EqualTo(buffer.Length), "frag 1 length");
+        Assert.That(subject.Connected, Is.True, "should not finish after frag 1");
+        
+        // feed second fragment
+        buffer = Encoding.UTF8.GetBytes(frag2);
+        read = subject.IncomingFromTunnel(buffer, 0, buffer.Length);
+        Assert.That(read, Is.EqualTo(buffer.Length), "frag 2 length");
+        Assert.That(subject.Connected, Is.True, "should not finish after frag 2");
+        
+        // feed third and final fragment
+        buffer = Encoding.UTF8.GetBytes(frag3);
+        read = subject.IncomingFromTunnel(buffer, 0, buffer.Length);
+        Assert.That(read, Is.EqualTo(buffer.Length), "frag 3 length");
+        Assert.That(subject.Connected, Is.False, "should finish after frag 3");
+        
+        // Check that the final output was read correctly
+        Assert.That(response.Success, Is.True, "success flag");
+        Assert.That(response.ErrorMessage, Is.Null, "error");
+        Assert.That(response.StatusCode, Is.EqualTo(200), "status code");
+        Assert.That(response.StatusDescription, Is.EqualTo("OK"), "status message");
+        Assert.That(response.Body, Is.Not.Null, "body present");
+        Assert.That(response.Headers["Content-Type"], Is.EqualTo("text/plain; charset=utf-8"), "content type");
+        Assert.That(response.Headers["Content-Length"], Is.EqualTo("13"), "content length header");
+        
+        var bodyString = Encoding.UTF8.GetString(response.Body);
+        Assert.That(bodyString, Is.EqualTo("Hello, world!"), "body");
+    }
+
+    [Test]
+    public void proxy_call_adaptor_handled_fragmented_chunked_documents()
+    {
+        var request = new HttpProxyRequest();
+        var response = new HttpProxyResponse();
+        var subject = new HttpProxyCallAdaptor(request, response);
+        
+        Assert.That(subject.Connected, Is.True, "Initial state");
+        
+        const string frag1 = "HTTP/1.1 200 OK\r\nContent-Type: ";
+        const string frag2 = "text/plain; charset=utf-8\r\nTransfer-Encoding: chunked\r\nPragma:";
+        const string frag3 = " no-cache\r\n\r\n5;meta=true\r\nHello\r\n8\r\n, world!\r\n0\r\n\r\n";
+        
+        // feed first fragment
+        var buffer = Encoding.UTF8.GetBytes(frag1);
+        var read = subject.IncomingFromTunnel(buffer, 0, buffer.Length);
+        Assert.That(read, Is.EqualTo(buffer.Length), "frag 1 length");
+        Assert.That(subject.Connected, Is.True, "should not finish after frag 1");
+        
+        // feed second fragment
+        buffer = Encoding.UTF8.GetBytes(frag2);
+        read = subject.IncomingFromTunnel(buffer, 0, buffer.Length);
+        Assert.That(read, Is.EqualTo(buffer.Length), "frag 2 length");
+        Assert.That(subject.Connected, Is.True, "should not finish after frag 2");
+        
+        // feed third and final fragment
+        buffer = Encoding.UTF8.GetBytes(frag3);
+        read = subject.IncomingFromTunnel(buffer, 0, buffer.Length);
+        Assert.That(read, Is.EqualTo(buffer.Length), "frag 3 length");
+        Assert.That(subject.Connected, Is.False, "should finish after frag 3");
+        
+        // Check that the final output was read correctly
+        Assert.That(response.Success, Is.True, "success flag");
+        Assert.That(response.ErrorMessage, Is.Null, "error");
+        Assert.That(response.StatusCode, Is.EqualTo(200), "status code");
+        Assert.That(response.StatusDescription, Is.EqualTo("OK"), "status message");
+        Assert.That(response.Body, Is.Not.Null, "body present");
+        Assert.That(response.Headers["Content-Type"], Is.EqualTo("text/plain; charset=utf-8"), "content type");
+        Assert.That(response.Headers["Transfer-Encoding"], Is.EqualTo("chunked"), "transfer encoding header");
+        Assert.That(response.Headers["Pragma"], Is.EqualTo("no-cache"), "other header");
+        
+        var bodyString = Encoding.UTF8.GetString(response.Body);
+        Assert.That(bodyString, Is.EqualTo("Hello, world!"), "body");
+    }
 }

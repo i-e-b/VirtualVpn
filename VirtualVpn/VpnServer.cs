@@ -1,4 +1,5 @@
-﻿using System.Globalization;
+﻿using System.Diagnostics;
+using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -768,10 +769,16 @@ public class VpnServer : ISessionHost, IDisposable
             
             var response = new HttpProxyResponse();
             
-            ISocketAdaptor apiSide = new ProxyCallAdaptor(request, response);
+            ISocketAdaptor apiSide = new HttpProxyCallAdaptor(request, response);
             var channel = tunnel.OpenTcpSession(target, request.Port, proxyAddress, apiSide);
+            
+            var timeout = new Stopwatch();
+            timeout.Start();
 
-            while (apiSide.Connected) // this will be flipped when the Tcp connection is over
+            while (
+                apiSide.Connected // this will be flipped when the Tcp connection is over
+                && timeout.Elapsed < TimeSpan.FromSeconds(5)
+                )
             {
                 Thread.Sleep(250);
                 channel.EventPump();
@@ -782,6 +789,8 @@ public class VpnServer : ISessionHost, IDisposable
                 }
             }
             
+            channel.Close();
+            apiSide.Close();
             tunnel.ReleaseConnection(channel.SelfKey);
             
             return response;
