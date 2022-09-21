@@ -130,12 +130,12 @@ public class VpnServer : ISessionHost, IDisposable
                 Log.SetLevel(LogLevel.Trace);
                 return;
             }
-            case "loud": // detailed logging
+            case "debug": // detailed logging
             {
                 Log.SetLevel(LogLevel.Debug);
                 return;
             }
-            case "less": // informational logging
+            case "info": // informational logging
             {
                 Log.SetLevel(LogLevel.Info);
                 return;
@@ -372,6 +372,7 @@ public class VpnServer : ISessionHost, IDisposable
                 ? "(orphaned)"
                 : $"from session {p.LocalSpi:x}. State={p.State.ToString()}, Last touch={p.LastTouchTimer.Elapsed}. Initiated={(p.WeStarted ? "here" : "remotely")}";
             Console.WriteLine($"    {session.Value.Gateway} [{session.Key:x}] {ikeDesc}");
+            Console.WriteLine("        "+string.Join("\r\n        ",session.Value.ListTcpSessions()));
         }
     }
 
@@ -767,8 +768,6 @@ public class VpnServer : ISessionHost, IDisposable
             var proxyAddress = IpV4Address.FromString(request.ProxyLocalAddress);
             var tunnel = FindTunnelTo(target);
             
-            Log.Trace($"State BEFORE:\r\n\r\n{string.Join("\r\n",tunnel.ListTcpSessions())}");
-            
             var response = new HttpProxyResponse();
             
             ISocketAdaptor apiSide = new HttpProxyCallAdaptor(request, response);
@@ -776,8 +775,6 @@ public class VpnServer : ISessionHost, IDisposable
             
             var timeout = new Stopwatch();
             timeout.Start();
-            
-            Log.Trace($"State DURING:\r\n\r\n{string.Join("\r\n",tunnel.ListTcpSessions())}");
 
             while (
                 apiSide.Connected // this will be flipped when the Tcp connection is over
@@ -798,8 +795,6 @@ public class VpnServer : ISessionHost, IDisposable
 
             // make sure we stop pumping the connection
             tunnel.ReleaseConnection(channel.SelfKey);
-            
-            Log.Trace($"State AFTER:\r\n\r\n{string.Join("\r\n",tunnel.ListTcpSessions())}");
             
             return response;
         }

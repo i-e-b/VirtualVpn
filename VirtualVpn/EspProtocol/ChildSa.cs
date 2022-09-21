@@ -13,6 +13,9 @@ namespace VirtualVpn.EspProtocol;
 
 public class ChildSa : ITransportTunnel
 {
+    // Static port rotator
+    private static ushort _portIncrement;
+    
     // Keys
     public UInt32 SpiIn { get; }
     public UInt32 SpiOut { get; }
@@ -394,9 +397,12 @@ public class ChildSa : ITransportTunnel
     /// </summary>
     private SenderPort GetAvailableKey(IpV4Address target)
     {
-        var port = 1060;
+        // rotate ports, because if we re-use them too soon the other VPN can get confused
+        var port = 1060 + (_portIncrement & 0x7FFF);
+        _portIncrement++;
+        
         var key = new SenderPort(target.Value, port);
-        while (_tcpSessions.ContainsKey(key))
+        while (_tcpSessions.ContainsKey(key) || _parkedSessions.ContainsKey(key))
         {
             port++;
             if (port > 65535) throw new Exception("Ephemeral ports exhausted");
