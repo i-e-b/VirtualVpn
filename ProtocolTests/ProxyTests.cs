@@ -136,11 +136,11 @@ public class ProxyTests
     [Test]
     public void proxy_call_adaptor_handles_complete_documents()
     {
+        Log.SetLevel(LogLevel.Everything);
         var request = new HttpProxyRequest{
             Url = "https://192.168.0.1/what"
         };
-        var response = new HttpProxyResponse();
-        var subject = new HttpProxyCallAdaptor(request, response, false);
+        var subject = new HttpProxyCallAdaptor(request, false);
 
         Assert.That(subject.Connected, Is.True, "Initial state");
 
@@ -149,10 +149,14 @@ public class ProxyTests
         // feed some data in fragments
         var buffer = Encoding.UTF8.GetBytes(doc);
         var read = subject.IncomingFromTunnel(buffer, 0, buffer.Length);
+        
+        var endedOk = subject.WaitForFinish(TimeSpan.FromSeconds(1));
+        Assert.That(endedOk, Is.True, "clean ending");
 
         Assert.That(read, Is.EqualTo(buffer.Length), "frag 1 length");
         Assert.That(subject.Connected, Is.False, "should finish at end of document");
 
+        var response = subject.GetResponse();
         Assert.That(response.Success, Is.True, "success flag");
         Assert.That(response.ErrorMessage, Is.Null, "error");
         Assert.That(response.StatusCode, Is.EqualTo(200), "status code");
@@ -171,8 +175,7 @@ public class ProxyTests
         var request = new HttpProxyRequest{
             Url = "https://192.168.0.1/what"
         };
-        var response = new HttpProxyResponse();
-        var subject = new HttpProxyCallAdaptor(request, response, false);
+        var subject = new HttpProxyCallAdaptor(request, false);
 
         Assert.That(subject.Connected, Is.True, "Initial state");
 
@@ -199,6 +202,7 @@ public class ProxyTests
         Assert.That(subject.Connected, Is.False, "should finish after frag 3");
 
         // Check that the final output was read correctly
+        var response = subject.GetResponse();
         Assert.That(response.Success, Is.True, "success flag");
         Assert.That(response.ErrorMessage, Is.Null, "error");
         Assert.That(response.StatusCode, Is.EqualTo(200), "status code");
@@ -217,8 +221,7 @@ public class ProxyTests
         var request = new HttpProxyRequest{
             Url = "https://192.168.0.1/what"
         };
-        var response = new HttpProxyResponse();
-        var subject = new HttpProxyCallAdaptor(request, response, false);
+        var subject = new HttpProxyCallAdaptor(request, false);
 
         Assert.That(subject.Connected, Is.True, "Initial state");
 
@@ -245,6 +248,7 @@ public class ProxyTests
         Assert.That(subject.Connected, Is.False, "should finish after frag 3");
 
         // Check that the final output was read correctly
+        var response = subject.GetResponse();
         Assert.That(response.Success, Is.True, "success flag");
         Assert.That(response.ErrorMessage, Is.Null, "error");
         Assert.That(response.StatusCode, Is.EqualTo(200), "status code");
@@ -264,8 +268,7 @@ public class ProxyTests
         var request = new HttpProxyRequest{
             Url = "https://192.168.0.1/what"
         };
-        var response = new HttpProxyResponse();
-        var subject = new HttpProxyCallAdaptor(request, response, false);
+        var subject = new HttpProxyCallAdaptor(request, false);
 
         Assert.That(subject.Connected, Is.True, "Initial state");
 
@@ -295,6 +298,7 @@ public class ProxyTests
         subject.Close();
 
         // Check that the final output was read correctly
+        var response = subject.GetResponse();
         Assert.That(response.Success, Is.False, "success flag");
         Assert.That(response.ErrorMessage, Is.EqualTo("Body was truncated"), "error");
         Assert.That(response.StatusCode, Is.EqualTo(200), "status code");

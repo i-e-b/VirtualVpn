@@ -1,4 +1,5 @@
-﻿using System.Net.Security;
+﻿using System.Diagnostics;
+using System.Net.Security;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using VirtualVpn.TcpProtocol;
@@ -27,6 +28,7 @@ public class HttpProxyCallAdaptor : Stream, ISocketAdaptor
     private readonly Thread _messagePumpThread;
     private volatile bool _messagePumpRunning;
     private SslStream? _sslStream;
+    private readonly AutoResetEvent _incomingDataLatch;
 
     /// <summary>
     /// Prepare a HTTP(S) call from a proxy request.
@@ -47,20 +49,11 @@ public class HttpProxyCallAdaptor : Stream, ISocketAdaptor
         _httpRequestBuffer = new List<byte>((request.Body?.Length ?? 0) + 100);
         _httpResponseBuffer = new HttpBuffer();
 
-        if (useTls)
-        {
-            _messagePumpRunning = true;
-            _messagePumpThread = new Thread(RunSslAdaptor){
-                IsBackground = true
-            };
-        }
-        else
-        {
-            _messagePumpRunning = true;
-            _messagePumpThread = new Thread(RunDirectAdaptor){
-                IsBackground = true
-            };
-        }
+        _messagePumpRunning = true;
+        _messagePumpThread = new Thread(useTls ? RunSslAdaptor : RunDirectAdaptor) { IsBackground = true };
+        _messagePumpThread.Start();
+        
+        _incomingDataLatch = new AutoResetEvent(false);
 
         // Convert the request into a byte buffer
         _httpRequestBuffer.AddRange(Encoding.ASCII.GetBytes($"{request.HttpMethod} {request.Url} HTTP/1.1\r\n"));
@@ -89,6 +82,7 @@ public class HttpProxyCallAdaptor : Stream, ISocketAdaptor
     /// </summary>
     private void RunSslAdaptor()
     {
+        Log.Trace(nameof(RunSslAdaptor));
         _sslStream = new SslStream(this, true, AnyCertificate);
         
         // This will call our object's 'Write' and 'Read' methods
@@ -102,6 +96,7 @@ public class HttpProxyCallAdaptor : Stream, ISocketAdaptor
         // and try to read back the response
         _sslStream.Write(_httpRequestBuffer.ToArray());
         
+        Log.Trace(nameof(RunSslAdaptor)+" authenticated and written");
         var buffer = new byte[8192];
         while (_messagePumpRunning)
         {
@@ -111,6 +106,8 @@ public class HttpProxyCallAdaptor : Stream, ISocketAdaptor
             Log.Trace($"Proxy received {final} bytes of a potential {actual} through SSL/TLS");
         }
         _sslStream.Close();
+        
+        Log.Trace(nameof(RunSslAdaptor)+" ended");
     }
     
     /// <summary>
@@ -119,30 +116,49 @@ public class HttpProxyCallAdaptor : Stream, ISocketAdaptor
     /// </summary>
     private void RunDirectAdaptor()
     {
+        Log.Trace($"Direct adaptor. request buffer={_httpRequestBuffer.Count} bytes, outgoingQueue={_outgoingQueue.Count} bytes");
+        
         // Add everything to the outgoing queue
         lock (_transferLock)
         {
             _outgoingQueue.AddRange(_httpRequestBuffer);
+            _httpRequestBuffer.Clear();
         }
 
         // Read back the incoming queue until the buffer is filled
         while (_messagePumpRunning)
         {
-            if (_incomingQueue.Count < 1)
-            {
-                Thread.Sleep(50);
-                continue;
-            }
+            Log.Trace("Proxy direct (wait)");
+            _incomingDataLatch.WaitOne();
 
             byte[] buf;
             lock (_transferLock)
             {
+                Log.Trace($"Proxy direct: transferring {_incomingQueue.Count} bytes");
                 buf = _incomingQueue.ToArray();
                 _incomingQueue.Clear();
             }
 
             _httpResponseBuffer.FeedData(buf, 0, buf.Length);
         }
+        Log.Trace("Proxy direct: ended");
+    }
+    
+    /// <summary>
+    /// A helper that waits for either a timeout
+    /// or the connection to complete.
+    /// Returns true if the connection completed.
+    /// </summary>
+    public bool WaitForFinish(TimeSpan timeout)
+    {
+        var sw = new Stopwatch();
+        sw.Start();
+        while (sw.Elapsed < timeout)
+        {
+            if (!Connected) return true;
+            Thread.Sleep(10);
+        }
+        return !Connected;
     }
 
     /// <summary>
@@ -182,6 +198,7 @@ public class HttpProxyCallAdaptor : Stream, ISocketAdaptor
                 _incomingQueue.Add(buffer[bi++]);
             }
 
+            _incomingDataLatch.Set();
             return sent;
         }
     }
@@ -232,6 +249,7 @@ public class HttpProxyCallAdaptor : Stream, ISocketAdaptor
     /// </summary>
     private void EndConnection()
     {
+        Log.Trace("HttpProxyCallAdaptor: EndConnection");
         if (_messagePumpRunning) _sslStream?.Close();
         
         Connected = false;
@@ -242,6 +260,7 @@ public class HttpProxyCallAdaptor : Stream, ISocketAdaptor
         {
             Log.Warn("Proxy call SSL/TLS adaptor did not end correctly");
         }
+        Log.Trace("HttpProxyCallAdaptor: Connection closed");
     }
     
     /// <summary>
@@ -270,20 +289,19 @@ public class HttpProxyCallAdaptor : Stream, ISocketAdaptor
     public override int Read(byte[] buffer, int offset, int count)
     {
         Log.Trace("Proxy: Read (wait)");
-        while (true)
-        {
-            lock (_transferLock)
-            {
-                if (_incomingQueue.Count > _incomingQueueRead) break;
-            }
-        }
-
+        _incomingDataLatch.WaitOne();
 
         lock (_transferLock)
         {
             var available = _incomingQueue.Count - _incomingQueueRead;
             var bytesToCopy = available > count ? count : available;
-            
+
+            if (bytesToCopy < 1)
+            {
+                Log.Trace("Proxy: Read, triggered with zero bytes");
+                return 0;
+            }
+
             Log.Trace($"Proxy: Read (copying {bytesToCopy} bytes)");
             for (int i = 0; i < bytesToCopy; i++)
             {
