@@ -774,11 +774,7 @@ public class VpnServer : ISessionHost, IDisposable
             var proxyAddress = IpV4Address.FromString(request.ProxyLocalAddress);
             var tunnel = FindTunnelTo(target);
             
-            var response = new HttpProxyResponse();
-            
-            ISocketAdaptor apiSide = uri.Scheme == "http"
-                ? new HttpProxyCallAdaptor(request, response)
-                : new HttpsProxyCallAdaptor(request, response);
+            var apiSide = new HttpProxyCallAdaptor(request, uri.Scheme == "http");
             var channel = tunnel.OpenTcpSession(target, uri.Port, proxyAddress, apiSide);
             
             var timeout = new Stopwatch();
@@ -804,7 +800,7 @@ public class VpnServer : ISessionHost, IDisposable
             // make sure we stop pumping the connection
             tunnel.ReleaseConnection(channel.SelfKey);
             
-            return response;
+            return apiSide.GetResponse();
         }
         catch (Exception ex)
         {

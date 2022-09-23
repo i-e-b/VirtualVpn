@@ -1,6 +1,10 @@
+using System.Net.Security;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using NUnit.Framework;
 using SkinnyJson;
+using VirtualVpn;
+using VirtualVpn.TlsWrappers;
 using VirtualVpn.Web;
 
 #pragma warning disable CS8604
@@ -136,7 +140,7 @@ public class ProxyTests
             Url = "https://192.168.0.1/what"
         };
         var response = new HttpProxyResponse();
-        var subject = new HttpProxyCallAdaptor(request, response);
+        var subject = new HttpProxyCallAdaptor(request, response, false);
 
         Assert.That(subject.Connected, Is.True, "Initial state");
 
@@ -168,7 +172,7 @@ public class ProxyTests
             Url = "https://192.168.0.1/what"
         };
         var response = new HttpProxyResponse();
-        var subject = new HttpProxyCallAdaptor(request, response);
+        var subject = new HttpProxyCallAdaptor(request, response, false);
 
         Assert.That(subject.Connected, Is.True, "Initial state");
 
@@ -214,7 +218,7 @@ public class ProxyTests
             Url = "https://192.168.0.1/what"
         };
         var response = new HttpProxyResponse();
-        var subject = new HttpProxyCallAdaptor(request, response);
+        var subject = new HttpProxyCallAdaptor(request, response, false);
 
         Assert.That(subject.Connected, Is.True, "Initial state");
 
@@ -261,7 +265,7 @@ public class ProxyTests
             Url = "https://192.168.0.1/what"
         };
         var response = new HttpProxyResponse();
-        var subject = new HttpProxyCallAdaptor(request, response);
+        var subject = new HttpProxyCallAdaptor(request, response, false);
 
         Assert.That(subject.Connected, Is.True, "Initial state");
 
@@ -303,4 +307,81 @@ public class ProxyTests
         var bodyString = Encoding.UTF8.GetString(response.Body);
         Assert.That(bodyString, Is.EqualTo("Hello"), "body");
     }
+
+    [Test]
+    public void can_detect_incoming_tls_handshake()
+    {
+        using var ms = new MemoryStream();
+        using var stream = new SslStream(ms, leaveInnerStreamOpen: false, AnyCertificate);
+        try
+        {
+            stream.AuthenticateAsClient("example.com");
+        }
+        catch (Exception)
+        {
+            // Ignore-- will fail due to being disconnected
+        }
+        
+        ms.Seek(0, SeekOrigin.Begin);
+        var clientHelloMessage = ms.ToArray();
+        
+        var probablyTls = TlsDetector.IsTlsHandshake(clientHelloMessage, out var acceptableTls);
+
+        Assert.True(probablyTls, "TLS/SSL detection");
+        Assert.True(acceptableTls, "version detection");
+    }
+
+    [Test]
+    public void incoming_tls_handshake_for_pre_tls_protocols_is_flagged_as_unacceptable()
+    {
+        Log.SetLevel(LogLevel.Everything);
+        using var ms = new MemoryStream();
+        using var stream = new SslStream(ms, leaveInnerStreamOpen: false, AnyCertificate);
+        try
+        {
+            stream.AuthenticateAsClient("example.com");
+        }
+        catch (Exception)
+        {
+            // Ignore-- will fail due to being disconnected
+        }
+        
+        ms.Seek(0, SeekOrigin.Begin);
+        var clientHelloMessage = ms.ToArray();
+        // dotnet won't allow us to create an obsolete request, so we will hack one in
+        clientHelloMessage[2] = 0;
+        clientHelloMessage[10] = 0;
+        
+        var probablyTls = TlsDetector.IsTlsHandshake(clientHelloMessage, out var acceptableTls);
+
+        Assert.True(probablyTls, "TLS/SSL detection");
+        Assert.False(acceptableTls, "version detection");
+    }
+    
+    [Test]
+    public void tls_check_gives_false_for_incoming_HTTP_message()
+    {
+        using var ms = new MemoryStream();
+        ms.Write(Encoding.UTF8.GetBytes("GET /some/url HTTP/1.1\r\n"));
+        
+        ms.Seek(0, SeekOrigin.Begin);
+        var clientHelloMessage = ms.ToArray();
+        
+        var probablyTls = TlsDetector.IsTlsHandshake(clientHelloMessage, out var acceptableTls);
+
+        Assert.False(probablyTls, "TLS/SSL detection");
+        Assert.False(acceptableTls, "version detection");
+    }
+    
+    [Test]
+    public void tls_check_gives_false_for_an_empty_message()
+    {
+        var probablyTls = TlsDetector.IsTlsHandshake(Array.Empty<byte>(), out var acceptableTls);
+
+        Assert.False(probablyTls, "TLS/SSL detection");
+        Assert.False(acceptableTls, "version detection");
+    }
+
+
+    private static bool AnyCertificate(object a, X509Certificate? b, X509Chain? c, SslPolicyErrors d) => true;
 }

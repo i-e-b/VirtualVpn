@@ -1,3 +1,5 @@
+using VirtualVpn.Web;
+
 namespace VirtualVpn.TcpProtocol;
 
 public interface ISocketAdaptor:IDisposable
