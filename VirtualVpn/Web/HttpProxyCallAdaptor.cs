@@ -84,7 +84,14 @@ public class HttpProxyCallAdaptor : Stream, ISocketAdaptor
     {
         Log.Trace(nameof(RunSslAdaptor));
         _sslStream = new SslStream(this, true, AnyCertificate);
-        
+
+        if (_sslStream.CanTimeout)
+        {
+            Log.Info("Proxy: Setting 30 second timeout on SSL/TLS connection");
+            _sslStream.WriteTimeout = (int)TimeSpan.FromSeconds(30).TotalMilliseconds;
+            _sslStream.ReadTimeout = (int)TimeSpan.FromSeconds(30).TotalMilliseconds;
+        }
+
         // This will call our object's 'Write' and 'Read' methods
         // and this call will block until either the handshake is
         // complete, or it fails. If either the 'Read' or 'Write'
@@ -100,7 +107,6 @@ public class HttpProxyCallAdaptor : Stream, ISocketAdaptor
         var buffer = new byte[8192];
         while (_messagePumpRunning)
         {
-            // TODO: a time-out here?
             var actual = _sslStream.Read(buffer, 0, buffer.Length);
             var final = _httpResponseBuffer.FeedData(buffer, 0, actual);
             Log.Trace($"Proxy received {final} bytes of a potential {actual} through SSL/TLS");
@@ -189,29 +195,33 @@ public class HttpProxyCallAdaptor : Stream, ISocketAdaptor
     /// INTERFACE TO VPN TUNNEL
     /// <p></p>
     /// Data incoming from the tunnel, to write to local side
-    /// This could be plain or encrypted.
+    /// This could be plain or encrypted. The message pump
+    /// thread should deal with interpreting it.
     /// </summary>
     public int IncomingFromTunnel(byte[] buffer, int offset, int length)
     {
+        Log.Trace("Proxy: IncomingFromTunnel");
         lock (_transferLock)
         {
             if (length <= 0) return 0;
 
-            var bytesToSend = length;
+            var bytesToStore = length;
             var available = buffer.Length - offset;
-            if (bytesToSend > available) bytesToSend = available;
+            if (bytesToStore > available) bytesToStore = available;
 
-            if (offset == 0 && bytesToSend == buffer.Length)
+            Log.Trace($"Proxy: IncomingFromTunnel, adding {bytesToStore} bytes");
+            if (offset == 0 && bytesToStore == buffer.Length)
             {
                 _incomingQueue.AddRange(buffer);
             }
             else
             {
-                _incomingQueue.AddRange(buffer.Skip(offset).Take(bytesToSend));
+                _incomingQueue.AddRange(buffer.Skip(offset).Take(bytesToStore));
             }
 
+            Log.Trace("Proxy: Releasing lock on incoming data");
             _incomingDataLatch.Set();
-            return bytesToSend;
+            return bytesToStore;
         }
     }
 
