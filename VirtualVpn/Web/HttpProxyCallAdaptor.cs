@@ -104,6 +104,12 @@ public class HttpProxyCallAdaptor : Stream, ISocketAdaptor
             var actual = _sslStream.Read(buffer, 0, buffer.Length);
             var final = _httpResponseBuffer.FeedData(buffer, 0, actual);
             Log.Trace($"Proxy received {final} bytes of a potential {actual} through SSL/TLS");
+
+            if (_httpResponseBuffer.IsComplete())
+            {
+                Log.Trace($"Proxy: SSL/TLS HTTP message complete");
+                EndConnection();
+            }
         }
         _sslStream.Close();
         
@@ -130,6 +136,7 @@ public class HttpProxyCallAdaptor : Stream, ISocketAdaptor
         {
             Log.Trace("Proxy direct (wait)");
             _incomingDataLatch.WaitOne();
+            Log.Trace("Proxy direct (release)");
 
             byte[] buf;
             lock (_transferLock)
@@ -140,6 +147,8 @@ public class HttpProxyCallAdaptor : Stream, ISocketAdaptor
             }
 
             _httpResponseBuffer.FeedData(buf, 0, buf.Length);
+            
+            if (_httpResponseBuffer.IsComplete()) EndConnection();
         }
         Log.Trace("Proxy direct: ended");
     }
@@ -188,18 +197,21 @@ public class HttpProxyCallAdaptor : Stream, ISocketAdaptor
         {
             if (length <= 0) return 0;
 
-            var sent = length;
+            var bytesToSend = length;
             var available = buffer.Length - offset;
-            if (sent > available) sent = available;
+            if (bytesToSend > available) bytesToSend = available;
 
-            var bi = offset;
-            for (int i = 0; i < sent; i++)
+            if (offset == 0 && bytesToSend == buffer.Length)
             {
-                _incomingQueue.Add(buffer[bi++]);
+                _incomingQueue.AddRange(buffer);
+            }
+            else
+            {
+                _incomingQueue.AddRange(buffer.Skip(offset).Take(bytesToSend));
             }
 
             _incomingDataLatch.Set();
-            return sent;
+            return bytesToSend;
         }
     }
 
@@ -290,6 +302,7 @@ public class HttpProxyCallAdaptor : Stream, ISocketAdaptor
     {
         Log.Trace("Proxy: Read (wait)");
         _incomingDataLatch.WaitOne();
+        Log.Trace("Proxy: Read (release)");
 
         lock (_transferLock)
         {

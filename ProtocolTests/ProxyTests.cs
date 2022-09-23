@@ -198,9 +198,13 @@ public class ProxyTests
         // feed third and final fragment
         buffer = Encoding.UTF8.GetBytes(frag3);
         read = subject.IncomingFromTunnel(buffer, 0, buffer.Length);
+        
+        var endedOk = subject.WaitForFinish(TimeSpan.FromSeconds(1));
+        Assert.That(endedOk, Is.True, "clean ending");
+
         Assert.That(read, Is.EqualTo(buffer.Length), "frag 3 length");
         Assert.That(subject.Connected, Is.False, "should finish after frag 3");
-
+        
         // Check that the final output was read correctly
         var response = subject.GetResponse();
         Assert.That(response.Success, Is.True, "success flag");
@@ -244,9 +248,13 @@ public class ProxyTests
         // feed third and final fragment
         buffer = Encoding.UTF8.GetBytes(frag3);
         read = subject.IncomingFromTunnel(buffer, 0, buffer.Length);
+        
+        var endedOk = subject.WaitForFinish(TimeSpan.FromSeconds(1));
+        Assert.That(endedOk, Is.True, "clean ending");
+
         Assert.That(read, Is.EqualTo(buffer.Length), "frag 3 length");
         Assert.That(subject.Connected, Is.False, "should finish after frag 3");
-
+        
         // Check that the final output was read correctly
         var response = subject.GetResponse();
         Assert.That(response.Success, Is.True, "success flag");
