@@ -82,7 +82,7 @@ public class HttpProxyCallAdaptor : Stream, ISocketAdaptor
     /// </summary>
     private void RunSslAdaptor()
     {
-        Log.Trace(nameof(RunSslAdaptor));
+        Log.Trace($"Proxy: {nameof(RunSslAdaptor)}");
         _sslStream = new SslStream(this, true, AnyCertificate);
 
         if (_sslStream.CanTimeout)
@@ -103,7 +103,7 @@ public class HttpProxyCallAdaptor : Stream, ISocketAdaptor
         // and try to read back the response
         _sslStream.Write(_httpRequestBuffer.ToArray());
         
-        Log.Trace(nameof(RunSslAdaptor)+" authenticated and written");
+        Log.Trace($"Proxy: {nameof(RunSslAdaptor)}, authenticated and written");
         var buffer = new byte[8192];
         while (_messagePumpRunning)
         {
@@ -111,15 +111,14 @@ public class HttpProxyCallAdaptor : Stream, ISocketAdaptor
             var final = _httpResponseBuffer.FeedData(buffer, 0, actual);
             Log.Trace($"Proxy received {final} bytes of a potential {actual} through SSL/TLS");
 
-            if (_httpResponseBuffer.IsComplete())
-            {
-                Log.Trace($"Proxy: SSL/TLS HTTP message complete");
-                EndConnection();
-            }
+            if (!_httpResponseBuffer.IsComplete()) continue;
+            
+            Log.Trace("Proxy: SSL/TLS HTTP message complete");
+            EndConnection();
         }
         _sslStream.Close();
         
-        Log.Trace(nameof(RunSslAdaptor)+" ended");
+        Log.Trace($"Proxy: {nameof(RunSslAdaptor)} ended");
     }
     
     /// <summary>
@@ -128,7 +127,7 @@ public class HttpProxyCallAdaptor : Stream, ISocketAdaptor
     /// </summary>
     private void RunDirectAdaptor()
     {
-        Log.Trace($"Direct adaptor. request buffer={_httpRequestBuffer.Count} bytes, outgoingQueue={_outgoingQueue.Count} bytes");
+        Log.Trace($"Proxy: Direct adaptor, request buffer={_httpRequestBuffer.Count} bytes, outgoingQueue={_outgoingQueue.Count} bytes");
         
         // Add everything to the outgoing queue
         lock (_transferLock)
