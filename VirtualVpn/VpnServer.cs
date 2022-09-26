@@ -794,8 +794,10 @@ public class VpnServer : ISessionHost, IDisposable
                     Log.Trace($"Virtual socket has {outgoingDataReady} bytes waiting");
                 }
             }
-            
-            Log.Trace($"Ending Proxy call due to {(apiSide.Connected ? "TIMEOUT" : "end of document")}");
+
+            if (apiSide.Connected) Log.Warn("Proxy call ended due to TIMEOUT");
+            else Log.Trace("Ending Proxy call at end of document");
+
             apiSide.Close();
             channel.Close();
 
