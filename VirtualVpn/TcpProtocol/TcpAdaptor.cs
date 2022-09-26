@@ -1,7 +1,6 @@
 ﻿using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
-using System.Text;
 using VirtualVpn.Enums;
 using VirtualVpn.EspProtocol;
 using VirtualVpn.Helpers;
@@ -309,7 +308,7 @@ public class TcpAdaptor : ITcpAdaptor
             if (outgoingBuffer.Length > 0)
             {
                 _totalRealRead += outgoingBuffer.Length;
-                Log.Trace("OUTGOING:\r\n", () => Encoding.UTF8.GetString(outgoingBuffer));
+                Log.Trace("OUTGOING:\r\n", () => Bit.Describe("", outgoingBuffer));
 
                 // Send reply back to virtual socket. The event pump will continue to send connection and state.
                 VirtualSocket.SendData(outgoingBuffer);
@@ -342,7 +341,7 @@ public class TcpAdaptor : ITcpAdaptor
             var actual = VirtualSocket.ReadData(buffer);
             _totalVirtualRead += actual;
             Log.Info($"Message received from tunnel, {actual} bytes of an expected {buffer.Length}.");
-            Log.Trace("INCOMING:\r\n", () => Encoding.UTF8.GetString(buffer, 0, actual));
+            Log.Trace("INCOMING:\r\n", () => Bit.Describe("", buffer, 0, actual));
 
             if (actual < 1) return false;
             
