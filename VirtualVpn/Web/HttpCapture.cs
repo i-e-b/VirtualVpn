@@ -91,12 +91,11 @@ public class HttpCapture
                 return;
             
             default:
-                ctx.Response.AddHeader("Content-Type", "text/html");
-                ctx.Response.StatusCode = 200;
                 Log.Warn($"Unknown command '{cmd}'");
                 var bytes = ShowApiInfoPage();
                 ctx.Response.StatusCode = 450;
                 ctx.Response.StatusDescription = "Blocked by Windows Parental Controls";
+                ctx.Response.AddHeader("Content-Type", "text/html");
                 ctx.Response.OutputStream.Write(bytes);
                 ctx.Response.OutputStream.Flush();
                 return;
@@ -141,7 +140,7 @@ public class HttpCapture
         ctx.Response.StatusCode = 200;
         ctx.Response.StatusDescription = "Processed";
         ctx.Response.ContentType = "application/octet-stream";
-        ctx.Response.SendChunked = false;
+        ctx.Response.ContentLength64 = finalOutput.Length;
         ctx.Response.OutputStream.Write(finalOutput);
         ctx.Response.OutputStream.Flush();
         

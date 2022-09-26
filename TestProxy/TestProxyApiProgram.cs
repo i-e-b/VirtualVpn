@@ -46,7 +46,7 @@ class TestProxyApiProgram
 
         if (response.IsSuccessStatusCode)
         {
-            Console.WriteLine("Proxy call returned");
+            Console.WriteLine($"Proxy call returned {response.StatusCode} {response.ReasonPhrase}; {response.Content.Headers.ContentLength??-1} bytes");
             try
             {
                 var encrypted = Sync.Run(()=>response.Content.ReadAsByteArrayAsync());
