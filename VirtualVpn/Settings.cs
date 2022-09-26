@@ -61,14 +61,19 @@ public static class Settings
     public static string LocalIpAddress = "185.81.252.44"; // Behind NAT
     
     /// <summary>
-    /// TCP port of the app we're tunnelling to
+    /// TCP port to use when client is using HTTP
     /// </summary>
-    public static int WebAppPort = 5223;
+    public static int WebAppHttpPort = 5223;
+    
+    /// <summary>
+    /// TCP port to use when client is using HTTPS
+    /// </summary>
+    public static int WebAppHttpsPort = 7169;
     
     /// <summary>
     /// IPv4 address of the app we're tunnelling to. If on the same machine, use 127.0.0.1
     /// </summary>
-    public static string WebAppIpAddress = "127.0.0.1";
+    public static string WebAppIpAddress = "127.0.0.1"; // TODO: support DNS names?
     
     /// <summary>
     /// The SECRET api key for sending proxy messages.

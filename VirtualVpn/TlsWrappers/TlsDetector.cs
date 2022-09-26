@@ -8,8 +8,16 @@ namespace VirtualVpn.TlsWrappers;
 public static class TlsDetector
 {
     /// <summary>
+    /// Number of bytes that must be available
+    /// before a TLS 'hello' message can be detected
+    /// </summary>
+    public const int RequiredBytes = 11;
+
+    /// <summary>
     /// Returns true if the incoming data looks like a TLS/SSL client handshake.
     /// Gives an additional flag that is true only if it is a TLS version (SSL 3.1+)
+    /// <p></p>
+    /// This only needs 11 bytes from the start of the client's TCP/IP stream.
     /// </summary>
     public static bool IsTlsHandshake(IEnumerable<byte> incoming, out bool acceptableVersion)
     {

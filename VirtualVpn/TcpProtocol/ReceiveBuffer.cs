@@ -176,6 +176,10 @@ public class ReceiveBuffer
         var y = b > c ? c : b;
         return x > y ? y : x;
     }
+    public static int Min(int a, int b)
+    {
+        return a > b ? b : a;
+    }
 
     /// <summary>
     /// Returns count of bytes that can be read.
@@ -185,5 +189,44 @@ public class ReceiveBuffer
     {
         if (_segments.Count < 1) return 0;
         return ContiguousSequence(_readHead) - _readHead;
+    }
+
+    public IEnumerable<byte> Peek(int requiredBytes)
+    {
+        var result = new List<byte>(requiredBytes);
+        if (requiredBytes < 1) return result;
+        
+        var total = 0;
+        lock (_lock)
+        {
+            if (_segments.Count < 1) return result;
+            
+            var endOfData = ContiguousSequence(_readHead); // this is next sequence position after the data we have
+            var available = endOfData - _readHead;
+            
+            var end = Min((int)available, requiredBytes);
+
+            // read data out of segments
+            foreach (var segment in _segments)
+            {
+                var segStart = segment.SequenceNumber;
+                var segData = segment.Payload;
+                var segEnd = segStart + segData.Length;
+
+                if (_readHead + total >= segEnd) continue;
+                var segOffset = (_readHead+total) - segStart;
+                if (segOffset < 0) throw new Exception($"Unexpected hole in data. Expected segment starting at or before {_readHead}, but it was {segStart}");
+                if (segOffset >= segData.Length) throw new Exception($"Unexpected segment length. Expected it to end after {segOffset}, but it ends at {segData.Length}");
+
+                for (var i = segOffset; i < segData.Length; i++)
+                {
+                    result.Add(segData[i]);
+                    total++;
+                    if (total >= end) break;
+                }
+                if (total >= end) break;
+            }
+        }
+        return result;
     }
 }

@@ -273,6 +273,10 @@ public class TcpSocket
     /// Read data from the incoming data buffer.
     /// This does not block, and may not return all data
     /// if transmission is not complete.
+    /// <p></p>
+    /// This will 'consume' the data copied, so the next call
+    /// will continue from the first data not yet copied.
+    /// The socket receive window is increased when data is read.
     /// </summary>
     /// <returns>Actual bytes copied</returns>
     public int ReadData(byte[] buffer, int offset=0, int length=-1)
@@ -288,6 +292,17 @@ public class TcpSocket
             
             return actual;
         }
+    }
+    
+    /// <summary>
+    /// Read a limited number of bytes from the incoming buffer
+    /// WITHOUT consuming it. This can be used for protocol detection, etc.
+    /// This will not affect the receive window.
+    /// </summary>
+    /// <param name="requiredBytes">Max number of bytes to provide</param>
+    public IEnumerable<byte> PeekWaitingData(int requiredBytes)
+    {
+        return _receiveQueue.Peek(requiredBytes);
     }
 
     /// <summary>

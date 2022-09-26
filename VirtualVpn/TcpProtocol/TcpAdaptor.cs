@@ -5,6 +5,7 @@ using VirtualVpn.Enums;
 using VirtualVpn.EspProtocol;
 using VirtualVpn.Helpers;
 using VirtualVpn.InternetProtocol;
+using VirtualVpn.TlsWrappers;
 
 namespace VirtualVpn.TcpProtocol;
 
@@ -112,7 +113,7 @@ public class TcpAdaptor : ITcpAdaptor
         Log.Debug("TCP session initiation, from incoming packet (we are server)");
 
         VirtualSocket.Listen(); // must be in this state, or it will try to close the connection
-
+        
         var ok = HandleMessage(ipv4, out var tcp);
         if (!ok)
         {
@@ -222,7 +223,13 @@ public class TcpAdaptor : ITcpAdaptor
         if (_realSocketToWebApp is null) Log.Trace("Connecting to web app");
         try
         {
-            _realSocketToWebApp ??= ConnectToWebApp();
+            // To determine if we should use TLS, we need
+            // to peek at the tunneled request data
+            if (VirtualSocket.BytesOfReadDataWaiting >= TlsDetector.RequiredBytes) {
+                var useTls = TlsDetector.IsTlsHandshake(VirtualSocket.PeekWaitingData(TlsDetector.RequiredBytes), out var isAcceptable);
+                if (useTls && !isAcceptable) throw new Exception("Client requested an SSL/TLS version that is unacceptably old.");
+                _realSocketToWebApp ??= ConnectToWebApp(useTls);
+            }
         }
         catch (Exception ex)
         {
@@ -364,14 +371,16 @@ public class TcpAdaptor : ITcpAdaptor
         }
     }
 
-    private ISocketAdaptor ConnectToWebApp()
+    private ISocketAdaptor ConnectToWebApp(bool useTls)
     {
         // Connect to web app
-        Log.Debug("Connecting to web app");
+        var port = useTls ? Settings.WebAppHttpsPort : Settings.WebAppHttpPort;
+        Log.Debug($"Connecting to web app at {Settings.WebAppIpAddress}:{port}");
+        
         var webApiSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
         try
         {
-            webApiSocket.Connect(IpV4Address.FromString(Settings.WebAppIpAddress).MakeEndpoint(Settings.WebAppPort));
+            webApiSocket.Connect(IpV4Address.FromString(Settings.WebAppIpAddress).MakeEndpoint(port));
         }
         catch (SocketException ex)
         {
