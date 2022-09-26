@@ -9,6 +9,7 @@ public class HttpCapture
 {
     private readonly HttpListener _listener;
     private readonly Thread _listenThread;
+    private volatile bool _running;
 
     public HttpCapture()
     {
@@ -23,14 +24,22 @@ public class HttpCapture
     public void Start()
     {
         Log.Info("Starting API");
+        _running = true;
         _listener.Start();
         _listenThread.Start();
+    }
+    
+
+    public void Stop()
+    {
+        _running = false;
+        _listener.Stop();
     }
 
     private void ListenThreadLoop()
     {
         Log.Info($"API Listening on {string.Join(" | ", _listener.Prefixes.Select(p => p))}");
-        while (_listenThread.ThreadState == ThreadState.Background || _listenThread.ThreadState == ThreadState.Running)
+        while (_running)
         {
             
             HttpListenerContext? ctx = null;

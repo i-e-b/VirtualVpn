@@ -343,6 +343,7 @@ public class VpnServer : ISessionHost, IDisposable
         Json.DefrostInto(typeof(Settings), json);
         
         Log.Info($"Loaded: {json}");
+        Program.RestartHttpServer();
     }
 
     private void SaveSettings(string[] prefix)

@@ -36,7 +36,7 @@ class TestProxyApiProgram
         var proxyRequestBytes = cipher.Encode(Json.Freeze(proxyRequest));
         
         using var httpClient = new HttpClient();
-        using var request = new HttpRequestMessage(HttpMethod.Post, "http://94.130.108.249/api/send");
+        using var request = new HttpRequestMessage(HttpMethod.Post, "http://94.130.108.249:8011/api/send");
         request.Content = new ByteArrayContent(proxyRequestBytes);
 
         request.Headers.Add("X-Api-Key", cipher.MakeKey()); // Hash output of timestamp + ApiKey
