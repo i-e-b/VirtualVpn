@@ -14,6 +14,8 @@ namespace ProtocolTests;
 [TestFixture]
 public class ProxyTests
 {
+    #region proxy call (API encryption)
+
     [Test]
     public void generate_a_proxy_cipher()
     {
@@ -133,6 +135,10 @@ public class ProxyTests
         Assert.That(result, Is.Not.Null, "final result");
     }
 
+    #endregion
+    
+    #region adaptor message reading
+    
     [Test]
     public void proxy_call_adaptor_handles_complete_documents()
     {
@@ -394,6 +400,17 @@ public class ProxyTests
         Assert.False(acceptableTls, "version detection");
     }
 
+    #endregion
 
+    #region ssl testing
+
+    [Test]
+    public void can_I_connect_a_server_and_client_ssl_stream()
+    {
+        var serverMs = new MemoryStream();
+        var clientMs = new MemoryStream();
+    }
+
+    #endregion
     private static bool AnyCertificate(object a, X509Certificate? b, X509Chain? c, SslPolicyErrors d) => true;
 }

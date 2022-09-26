@@ -8,7 +8,6 @@ using VirtualVpn.Enums;
 using VirtualVpn.EspProtocol;
 using VirtualVpn.Helpers;
 using VirtualVpn.InternetProtocol;
-using VirtualVpn.TcpProtocol;
 using VirtualVpn.Web;
 
 // ReSharper disable BuiltInTypeReferenceStyle
@@ -774,7 +773,7 @@ public class VpnServer : ISessionHost, IDisposable
             var proxyAddress = IpV4Address.FromString(request.ProxyLocalAddress);
             var tunnel = FindTunnelTo(target);
             
-            var apiSide = new HttpProxyCallAdaptor(request, uri.Scheme == "http");
+            var apiSide = new HttpProxyCallAdaptor(request, uri.Scheme == "https");
             var channel = tunnel.OpenTcpSession(target, uri.Port, proxyAddress, apiSide);
             
             var timeout = new Stopwatch();
