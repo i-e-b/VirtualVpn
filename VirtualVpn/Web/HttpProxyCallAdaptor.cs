@@ -58,7 +58,7 @@ public class HttpProxyCallAdaptor : Stream, ISocketAdaptor
         _incomingDataLatch = new AutoResetEvent(false);
 
         // Convert the request into a byte buffer
-        _httpRequestBuffer.AddRange(Encoding.ASCII.GetBytes($"{request.HttpMethod} {request.Url} HTTP/1.1\r\n"));
+        _httpRequestBuffer.AddRange(Encoding.ASCII.GetBytes($"{request.HttpMethod} {_targetUri.PathAndQuery} HTTP/1.1\r\n"));
         if (!request.Headers.ContainsKey("Host"))
         {
             _httpRequestBuffer.AddRange(Encoding.ASCII.GetBytes($"Host: {_targetUri.Host}\r\n"));
