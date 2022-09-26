@@ -143,7 +143,7 @@ public class HttpCapture
         ctx.Response.SendChunked = false;
         ctx.Response.OutputStream.Write(finalOutput);
         
-        Log.Trace("Proxy request complete");
+        Log.Trace($"Proxy request complete: {finalOutput.Length} bytes");
         return true;
     }
 

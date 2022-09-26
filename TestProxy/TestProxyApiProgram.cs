@@ -8,8 +8,8 @@ class TestProxyApiProgram
 {
     public static void Main(string[] args)
     {
-        Console.Write("KeyGen: ");
-        var keyGen = Console.ReadLine();
+        //Console.Write("KeyGen: "); // niceshortapikey
+        var keyGen = "niceshortapikey";
         Console.WriteLine();
 
         if (string.IsNullOrEmpty(keyGen))
@@ -26,7 +26,7 @@ class TestProxyApiProgram
 
         var proxyRequest = new HttpProxyRequest
         {
-            Url = "https://192.168.0.40/test/secure/remote", // who we want to talk to
+            Url = "https://192.168.0.40:7169/test/secure/remote", // who we want to talk to
             ProxyLocalAddress = "55.55.55.55", // who we are pretending to be
             Headers = { { "Accept", "*/*" } },
             HttpMethod = "GET",
@@ -49,7 +49,13 @@ class TestProxyApiProgram
             Console.WriteLine("Proxy call returned");
             try
             {
-                var outcome = Json.Defrost<HttpProxyResponse>(cipher.Decode(Sync.Run(()=>response.Content.ReadAsByteArrayAsync())));
+                var encrypted = Sync.Run(()=>response.Content.ReadAsByteArrayAsync());
+                Console.WriteLine(Bit.Describe("encrypted", encrypted));
+                
+                var plain = cipher.Decode(encrypted);
+                Console.WriteLine(plain);
+                
+                var outcome = Json.Defrost<HttpProxyResponse>(plain);
                 Console.WriteLine($"Code={outcome.StatusCode}, Msg={outcome.StatusDescription}");
                 if (!string.IsNullOrEmpty(outcome.ErrorMessage))
                     Console.WriteLine($"ERROR: {outcome.ErrorMessage}");
