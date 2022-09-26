@@ -220,23 +220,28 @@ public class TcpAdaptor : ITcpAdaptor
         
         
         // If we are ready to talk to web app, make sure we have a real socket
-        if (_realSocketToWebApp is null) Log.Trace("Connecting to web app");
-        try
+        if (_realSocketToWebApp is null)
         {
-            // To determine if we should use TLS, we need
-            // to peek at the tunneled request data
-            if (VirtualSocket.BytesOfReadDataWaiting >= TlsDetector.RequiredBytes) {
-                var useTls = TlsDetector.IsTlsHandshake(VirtualSocket.PeekWaitingData(TlsDetector.RequiredBytes), out var isAcceptable);
-                if (useTls && !isAcceptable) throw new Exception("Client requested an SSL/TLS version that is unacceptably old.");
-                _realSocketToWebApp ??= ConnectToWebApp(useTls);
+            Log.Trace("Connecting to web app");
+            try
+            {
+                // To determine if we should use TLS, we need
+                // to peek at the tunneled request data
+                if (VirtualSocket.BytesOfReadDataWaiting >= TlsDetector.RequiredBytes)
+                {
+                    var useTls = TlsDetector.IsTlsHandshake(VirtualSocket.PeekWaitingData(TlsDetector.RequiredBytes), out var isAcceptable);
+                    if (useTls && !isAcceptable) throw new Exception("Client requested an SSL/TLS version that is unacceptably old.");
+                    _realSocketToWebApp = ConnectToWebApp(useTls);
+                }
+                else Log.Trace("Not enough data received to do SSL/TLS detection. Waiting for more.");
             }
-        }
-        catch (Exception ex)
-        {
-            Log.Error("Can't connect to web app", ex);
-            VirtualSocket.StartClose();
-            _transport.TerminateConnection(SelfKey);
-            return false;
+            catch (Exception ex)
+            {
+                Log.Error("Can't connect to web app", ex);
+                VirtualSocket.StartClose();
+                _transport.TerminateConnection(SelfKey);
+                return false;
+            }
         }
 
         if (_realSocketToWebApp is null)
