@@ -115,10 +115,16 @@ public class HttpCapture
     /// </summary>
     private static bool HandleProxyCall(HttpListenerContext ctx)
     {
+        Log.Trace("Reading proxy request");
         var keyHash = ctx.Request.Headers.Get("X-Api-Key"); // Hash output of timestamp + ApiKey
         var timestamp = ctx.Request.Headers.Get("X-Api-TS"); // Caller's claimed local time (UTC, in ticks, base64)
-        if (keyHash is null || timestamp is null) return false;
-        
+
+        if (keyHash is null || timestamp is null)
+        {
+            Log.Info("Proxy request with invalid headers");
+            return false;
+        }
+
         var ms = new MemoryStream();
         ctx.Request.InputStream.Seek(0, SeekOrigin.Begin);
         ctx.Request.InputStream.CopyTo(ms);
@@ -126,7 +132,11 @@ public class HttpCapture
         var bodyCipherText = ms.ToArray();
 
         var finalOutput = HandleProxyCallInternal(Settings.ApiKey, keyHash, timestamp, bodyCipherText, rq => Program.VpnServer?.MakeProxyCall(rq));
-        if (finalOutput is null) return false;
+        if (finalOutput is null)
+        {
+            Log.Trace("Proxy request internal handler rejected call");
+            return false;
+        }
 
         ctx.Response.StatusCode = 200;
         ctx.Response.StatusDescription = "Processed";
@@ -134,6 +144,7 @@ public class HttpCapture
         ctx.Response.SendChunked = false;
         ctx.Response.OutputStream.Write(finalOutput);
         
+        Log.Trace("Proxy request complete");
         return true;
     }
 
@@ -143,14 +154,24 @@ public class HttpCapture
     public static byte[]? HandleProxyCallInternal(string keyGen, string keyHash, string timestamp, byte[] bodyCipherText, Func<HttpProxyRequest, HttpProxyResponse?> core)
     {
         var cipher = new ProxyCipher(keyGen, timestamp);
-        if (!cipher.IsValidCall(keyHash)) return null;
+        if (!cipher.IsValidCall(keyHash))
+        {
+            Log.Debug("Proxy call: header keys invalid");
+            return null;
+        }
 
+        Log.Trace("Decrypting request");
         var bodyString = cipher.Decode(bodyCipherText);
         var request = Json.Defrost<HttpProxyRequest>(bodyString);
 
         var response = core(request);
-        if (response is null) return null;
+        if (response is null)
+        {
+            Log.Debug("Proxy call: core returned null");
+            return null;
+        }
 
+        Log.Trace("Encrypting response");
         var finalOutput = cipher.Encode(Json.Freeze(response));
         return finalOutput;
     }
