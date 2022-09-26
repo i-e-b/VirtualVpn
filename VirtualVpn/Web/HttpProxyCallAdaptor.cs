@@ -39,6 +39,7 @@ public class HttpProxyCallAdaptor : Stream, ISocketAdaptor
     /// <param name="useTls">If true, the message will be transmitted as HTTPS</param>
     public HttpProxyCallAdaptor(HttpProxyRequest request, bool useTls)
     {
+        _incomingDataLatch = new AutoResetEvent(false);
         _targetUri = new Uri(request.Url, UriKind.Absolute);
         _outgoingQueueSent = 0;
 
@@ -54,8 +55,6 @@ public class HttpProxyCallAdaptor : Stream, ISocketAdaptor
         _messagePumpRunning = true;
         _messagePumpThread = new Thread(useTls ? RunSslAdaptor : RunDirectAdaptor) { IsBackground = true };
         _messagePumpThread.Start();
-        
-        _incomingDataLatch = new AutoResetEvent(false);
 
         // Convert the request into a byte buffer
         _httpRequestBuffer.AddRange(Encoding.ASCII.GetBytes($"{request.HttpMethod} {_targetUri.PathAndQuery} HTTP/1.1\r\n"));
