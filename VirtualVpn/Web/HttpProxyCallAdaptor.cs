@@ -1,5 +1,6 @@
 ﻿using System.Diagnostics;
 using System.Net.Security;
+using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using VirtualVpn.TcpProtocol;
@@ -82,45 +83,61 @@ public class HttpProxyCallAdaptor : Stream, ISocketAdaptor
     /// </summary>
     private void RunSslAdaptor()
     {
-        Log.Trace($"Proxy: {nameof(RunSslAdaptor)}");
-        _sslStream = new SslStream(this, true, AnyCertificate);
-
-        if (_sslStream.CanTimeout)
+        try
         {
-            Log.Info("Proxy: Setting 30 second timeout on SSL/TLS connection");
-            _sslStream.WriteTimeout = (int)TimeSpan.FromSeconds(30).TotalMilliseconds;
-            _sslStream.ReadTimeout = (int)TimeSpan.FromSeconds(30).TotalMilliseconds;
-        }
+            Log.Trace($"Proxy: {nameof(RunSslAdaptor)}");
+            _sslStream = new SslStream(this, true);
 
-        // This will call our object's 'Write' and 'Read' methods
-        // and this call will block until either the handshake is
-        // complete, or it fails. If either the 'Read' or 'Write'
-        // methods return without any data, the authentication is
-        // immediately ended with an exception.
-        _sslStream.AuthenticateAsClient(_targetUri.Host);
+            if (_sslStream.CanTimeout)
+            {
+                Log.Info("Proxy: Setting 30 second timeout on SSL/TLS connection");
+                _sslStream.WriteTimeout = (int)TimeSpan.FromSeconds(30).TotalMilliseconds;
+                _sslStream.ReadTimeout = (int)TimeSpan.FromSeconds(30).TotalMilliseconds;
+            }
 
-        // we should be connected. Write the request
-        // and try to read back the response
-        _sslStream.Write(_httpRequestBuffer.ToArray());
-        
-        Log.Trace($"Proxy: {nameof(RunSslAdaptor)}, authenticated and written");
-        var buffer = new byte[8192];
-        while (_messagePumpRunning)
-        {
-            var actual = _sslStream.Read(buffer, 0, buffer.Length);
-            var final = _httpResponseBuffer.FeedData(buffer, 0, actual);
-            Log.Trace($"Proxy received {final} bytes of a potential {actual} through SSL/TLS");
-
-            if (!_httpResponseBuffer.IsComplete()) continue;
+            // This will call our object's 'Write' and 'Read' methods
+            // and this call will block until either the handshake is
+            // complete, or it fails. If either the 'Read' or 'Write'
+            // methods return without any data, the authentication is
+            // immediately ended with an exception.
+            var authOptions = new SslClientAuthenticationOptions{
+                TargetHost = _targetUri.Authority,
+                EnabledSslProtocols = SslProtocols.Tls12|SslProtocols.Tls13,
+                CertificateRevocationCheckMode = X509RevocationMode.NoCheck,
+                RemoteCertificateValidationCallback = AnyCertificate
+            };
             
-            Log.Trace("Proxy: SSL/TLS HTTP message complete");
+            _sslStream.AuthenticateAsClient(authOptions);
+
+            // we should be connected. Write the request
+            // and try to read back the response
+            _sslStream.Write(_httpRequestBuffer.ToArray());
+
+            Log.Trace($"Proxy: {nameof(RunSslAdaptor)}, authenticated and written");
+            var buffer = new byte[8192];
+            while (_messagePumpRunning)
+            {
+                var actual = _sslStream.Read(buffer, 0, buffer.Length);
+                var final = _httpResponseBuffer.FeedData(buffer, 0, actual);
+                Log.Trace($"Proxy received {final} bytes of a potential {actual} through SSL/TLS");
+
+                if (!_httpResponseBuffer.IsComplete()) continue;
+
+                Log.Trace("Proxy: SSL/TLS HTTP message complete");
+                EndConnection();
+            }
+
+            _sslStream.Close();
+
+            Log.Trace($"Proxy: {nameof(RunSslAdaptor)} ended");
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Failure in SSL Adaptor loop", ex);
             EndConnection();
         }
-        _sslStream.Close();
-        
-        Log.Trace($"Proxy: {nameof(RunSslAdaptor)} ended");
     }
-    
+
     /// <summary>
     /// Transfer data between queues and buffers
     /// without waiting or doing transformations.
@@ -271,11 +288,18 @@ public class HttpProxyCallAdaptor : Stream, ISocketAdaptor
     private void EndConnection()
     {
         Log.Trace("HttpProxyCallAdaptor: EndConnection");
-        if (_messagePumpRunning) _sslStream?.Close();
         
         Connected = false;
         _messagePumpRunning = false;
-        
+        try
+        {
+            if (_messagePumpRunning) _sslStream?.Close();
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Failure when trying to end connection", ex);
+        }
+
         var cleanEnd = _messagePumpThread.Join(250);
         if (!cleanEnd)
         {
