@@ -98,6 +98,7 @@ public class HttpCapture
                 ctx.Response.StatusCode = 450;
                 ctx.Response.StatusDescription = "Blocked by Windows Parental Controls";
                 ctx.Response.OutputStream.Write(bytes);
+                ctx.Response.OutputStream.Flush();
                 return;
         }
     }
@@ -142,6 +143,7 @@ public class HttpCapture
         ctx.Response.ContentType = "application/octet-stream";
         ctx.Response.SendChunked = false;
         ctx.Response.OutputStream.Write(finalOutput);
+        ctx.Response.OutputStream.Flush();
         
         Log.Trace($"Proxy request complete: {finalOutput.Length} bytes");
         return true;
