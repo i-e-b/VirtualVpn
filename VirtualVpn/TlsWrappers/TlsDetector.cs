@@ -38,13 +38,19 @@ public static class TlsDetector
         Log.Trace($"Record type={recordType.ToString()}, SSL version={sslVersion.ToString()}, record length={recordLength}");
         Log.Trace($"Handshake type={handshakeType.ToString()}, SSL version={sslVersionHandshake.ToString()}, handshake length={handshakeLength}");
 
+        // Some clients (including Curl) send a different version in the record header and handshake header.
         acceptableVersion = sslVersion == SslVersion.Tls1 || sslVersion == SslVersion.Tls2 || sslVersion == SslVersion.Tls3;
+        acceptableVersion &= sslVersionHandshake == SslVersion.Tls1 || sslVersionHandshake == SslVersion.Tls2 || sslVersionHandshake == SslVersion.Tls3;
         
-        return    recordType    == TlsRecordType.Handshake
+        var tls = recordType    == TlsRecordType.Handshake
                && handshakeType == TlsHandshakeType.ClientHello
-               && sslVersion    == sslVersionHandshake
                && recordLength  == (handshakeLength + 4);
+        
+        Log.Trace($"Guessing this is {(tls?"":"not ")}an SSL/TLS handshake. Version is {(acceptableVersion?"":"not ")}acceptable.");
+
+        return tls;
     }
+    
     
     [SuppressMessage("ReSharper", "UnusedMember.Local")]
     private enum TlsRecordType

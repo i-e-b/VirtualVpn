@@ -375,7 +375,7 @@ public class TcpAdaptor : ITcpAdaptor
     {
         // Connect to web app
         var port = useTls ? Settings.WebAppHttpsPort : Settings.WebAppHttpPort;
-        Log.Debug($"Connecting to web app at {Settings.WebAppIpAddress}:{port}");
+        Log.Debug($"Connecting to web app at {Settings.WebAppIpAddress}:{port} ({(useTls ? "SSL/TLS" : "plain")})");
         
         var webApiSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
         try
