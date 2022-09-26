@@ -1,4 +1,7 @@
-﻿using System.Diagnostics.CodeAnalysis;
+﻿using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
+
 // ReSharper disable UnusedMember.Global
 
 namespace VirtualVpn;
@@ -51,10 +54,10 @@ public static class Log
     {
         if (_level < LogLevel.Trace) return;
         
-        Console.Write("                       "); // same spacing as timestamp
+        BlankTimestamp();
         Console.WriteLine(msg);
     }
-    
+
     public static void Trace(string msg, Func<string> more)
     {
         if (_level < LogLevel.Trace) return;
@@ -101,6 +104,25 @@ public static class Log
         Console.WriteLine();
     }
 
+    /// <summary>
+    /// Log a debug message with a stack trace
+    /// </summary>
+    public static void DebugWithStack(string msg)
+    {
+        if (_level < LogLevel.Debug) return;
+        Timestamp();
+        
+        Console.WriteLine(msg);
+        var st = new StackTrace(1);
+        
+        var frames = st.GetFrames();
+        foreach (var frame in frames)
+        {
+            BlankTimestamp();
+            Console.WriteLine($"{(frame.GetMethod()?.Name ?? "unknown")}; {frame.GetFileName()??"?"}::{frame.GetFileLineNumber()}");
+        }
+    }
+    
     public static void Info(string msg)
     {
         if (_level < LogLevel.Info) return;
@@ -117,12 +139,18 @@ public static class Log
         Console.WriteLine(msg);
     }
     
-    public static void Error(string msg)
+    public static void Error(string msg,
+        [CallerMemberName] string memberName = "<unknown>",
+        [CallerFilePath] string sourceFilePath = "",
+        [CallerLineNumber] int sourceLineNumber = 0)
     {
         if (_level < LogLevel.Error) return;
-        Timestamp();
         
+        Timestamp();
         Console.WriteLine(msg);
+        
+        BlankTimestamp();
+        Console.WriteLine($"In {memberName}, {sourceFilePath}::{sourceLineNumber}");
     }
     
 
@@ -158,5 +186,11 @@ public static class Log
     {
         Console.Write(DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm"));
         Console.Write(" (utc) ");
+    }
+    
+
+    private static void BlankTimestamp()
+    {
+        Console.Write("                       "); // same spacing as timestamp
     }
 }

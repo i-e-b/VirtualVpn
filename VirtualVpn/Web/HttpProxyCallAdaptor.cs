@@ -434,7 +434,7 @@ public class HttpProxyCallAdaptor : Stream, ISocketAdaptor
     /// <see cref="Stream"/> steals 'Dispose' and gives us 'Close'
     /// </summary>
     public override void Close() {
-        Log.Trace($"{nameof(HttpProxyCallAdaptor)}: Close called. This is either from outer stream or from a call to Dispose()");
+        Log.DebugWithStack($"{nameof(HttpProxyCallAdaptor)}: Close called. This is either from outer stream or from a call to Dispose()");
         EndConnection();
     }
 
