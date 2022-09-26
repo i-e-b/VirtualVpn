@@ -16,6 +16,8 @@ builder.Services.AddMvc(options =>
 
 var app = builder.Build();
 
+app.UseMiddleware<LogEverythingMiddleware>();
+
 // Configure the HTTP request pipeline.
 app.UseSwagger();
 app.UseSwaggerUI();

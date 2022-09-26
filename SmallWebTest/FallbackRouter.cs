@@ -8,7 +8,6 @@ public class FallbackRouter : IRouter
     public Task RouteAsync(RouteContext context)
     {
         var url = context.HttpContext.Request.GetEncodedUrl().ToLowerInvariant();
-        Console.WriteLine($"Request: {url}");
         
         // if it's a known path, return without adding a request handler
         if (url.Contains("/swagger/")
