@@ -52,10 +52,6 @@ public class HttpProxyCallAdaptor : Stream, ISocketAdaptor
         _httpRequestBuffer = new List<byte>((request.Body?.Length ?? 0) + 100);
         _httpResponseBuffer = new HttpBuffer();
 
-        _messagePumpRunning = true;
-        _messagePumpThread = new Thread(useTls ? RunSslAdaptor : RunDirectAdaptor) { IsBackground = true };
-        _messagePumpThread.Start();
-
         // Convert the request into a byte buffer
         _httpRequestBuffer.AddRange(Encoding.ASCII.GetBytes($"{request.HttpMethod} {_targetUri.PathAndQuery} HTTP/1.1\r\n"));
         if (!request.Headers.ContainsKey("Host"))
@@ -75,6 +71,10 @@ public class HttpProxyCallAdaptor : Stream, ISocketAdaptor
             _httpRequestBuffer.AddRange(request.Body);
         }
 
+
+        _messagePumpRunning = true;
+        _messagePumpThread = new Thread(useTls ? RunSslAdaptor : RunDirectAdaptor) { IsBackground = true };
+        _messagePumpThread.Start();
     }
 
     /// <summary>
@@ -125,10 +125,12 @@ public class HttpProxyCallAdaptor : Stream, ISocketAdaptor
                 Log.Trace($"Proxy received {final} bytes of a potential {actual} through SSL/TLS");
                 Log.Trace("Proxy: SSL incoming response", () => Bit.Describe("Raw", buffer, 0, actual));
 
-                if (!_httpResponseBuffer.IsComplete()) continue;
 
-                Log.Trace("Proxy: SSL/TLS HTTP message complete");
-                EndConnection();
+                if (_httpResponseBuffer.IsComplete())
+                {
+                    Log.Trace("Proxy: SSL/TLS HTTP message complete");
+                    EndConnection();
+                }
             }
 
             _sslStream.Close();
@@ -173,8 +175,12 @@ public class HttpProxyCallAdaptor : Stream, ISocketAdaptor
             }
 
             _httpResponseBuffer.FeedData(buf, 0, buf.Length);
-            
-            if (_httpResponseBuffer.IsComplete()) EndConnection();
+
+            if (_httpResponseBuffer.IsComplete())
+            {
+                Log.Trace("Proxy direct: document complete");
+                EndConnection();
+            }
         }
         Log.Trace("Proxy direct: ended");
     }
@@ -427,6 +433,10 @@ public class HttpProxyCallAdaptor : Stream, ISocketAdaptor
     /// <summary>
     /// <see cref="Stream"/> steals 'Dispose' and gives us 'Close'
     /// </summary>
-    public override void Close() => EndConnection();
+    public override void Close() {
+        Log.Trace($"{nameof(HttpProxyCallAdaptor)}: Close called. This is either from outer stream or from a call to Dispose()");
+        EndConnection();
+    }
+
     #endregion
 }
