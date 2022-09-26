@@ -299,7 +299,11 @@ public class VpnServer : ISessionHost, IDisposable
             if (vpnSession.Key != spi) continue;
             
             Console.WriteLine($"Found session with {vpnSession.Value.Gateway}, ending now.");
-            vpnSession.Value.EndConnectionWithPeer();
+            var canCloseProperly = vpnSession.Value.EndConnectionWithPeer();
+            
+            // if it's a half-open or junk connection, just ditch it
+            if (!canCloseProperly) _sessions.Remove(vpnSession.Key);
+
             return;
         }
         
@@ -318,7 +322,10 @@ public class VpnServer : ISessionHost, IDisposable
             else
             {
                 Log.Info("Ending session");
-                parent.EndConnectionWithPeer();
+                var canCloseProperly = parent.EndConnectionWithPeer();
+                
+                // if it's a half-open or junk connection, just ditch it
+                if (!canCloseProperly) _childSessions.Remove(espSession.Key);
             }
 
             return;

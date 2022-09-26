@@ -157,13 +157,13 @@ public class VpnSession
         }
     }
 
-    public void EndConnectionWithPeer()
+    public bool EndConnectionWithPeer()
     {
         // Check we're in a fit state
         if (_lastContact is null)
         {
             Log.Error("Tried to cleanly end session, but can't send message -- I don't have a last contact address");
-            return;
+            return false;
         }
 
         // List SPIs for this session
@@ -182,6 +182,7 @@ public class VpnSession
         
         // Switch our mode
         State = SessionState.DELETED; // event pump should unbind the session and it's child soon.
+        return true;
     }
 
     // pvpn/server.py:253
