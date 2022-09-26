@@ -126,7 +126,6 @@ public class HttpCapture
         }
 
         var ms = new MemoryStream();
-        ctx.Request.InputStream.Seek(0, SeekOrigin.Begin);
         ctx.Request.InputStream.CopyTo(ms);
         ms.Seek(0, SeekOrigin.Begin);
         var bodyCipherText = ms.ToArray();
