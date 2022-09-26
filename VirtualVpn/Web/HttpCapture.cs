@@ -78,7 +78,7 @@ public class HttpCapture
     private void HandleApiRequest(string url, HttpListenerContext ctx)
     {
         
-        var cmd = url.Substring(4);
+        var cmd = url.Substring(5); // trim off '/api/'
         switch (cmd)
         {
             case "send":
