@@ -27,6 +27,7 @@ public class ProxyCipher
         if (tickBytes.Length != 8) throw new Exception("Invalid timestamp");
         _timeStamp = Bit.BytesToInt64Msb(tickBytes);
         
+        Timestamp = timeStamp;
         _keyGen = keyGen;
         _cipher = AesCipher(_keyGen + timeStamp);
         _blockSizeBytes = _cipher.BlockSize / 8;
@@ -38,6 +39,8 @@ public class ProxyCipher
     /// Generate and return a timestamp from the current system clock.
     /// </summary>
     public static string TimestampNow => Convert.ToBase64String(Bit.Int64ToBytes(DateTime.UtcNow.Ticks));
+
+    public string Timestamp { get; }
 
     /// <summary>
     /// Scramble source bytes to dest bytes, changing size as required.

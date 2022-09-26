@@ -68,10 +68,8 @@ public class HttpCapture
     /// </summary>
     private void HandleApiRequest(string url, HttpListenerContext ctx)
     {
-        ctx.Response.AddHeader("Content-Type", "text/html");
-        ctx.Response.StatusCode = 200;
         
-        var cmd = url.Substring(5);
+        var cmd = url.Substring(4);
         switch (cmd)
         {
             case "send":
@@ -84,6 +82,9 @@ public class HttpCapture
                 return;
             
             default:
+                ctx.Response.AddHeader("Content-Type", "text/html");
+                ctx.Response.StatusCode = 200;
+                Log.Warn($"Unknown command '{cmd}'");
                 var bytes = ShowApiInfoPage();
                 ctx.Response.StatusCode = 450;
                 ctx.Response.StatusDescription = "Blocked by Windows Parental Controls";
@@ -119,6 +120,8 @@ public class HttpCapture
         if (finalOutput is null) return false;
 
         ctx.Response.StatusCode = 200;
+        ctx.Response.StatusDescription = "Processed";
+        ctx.Response.ContentType = "application/octet-stream";
         ctx.Response.SendChunked = false;
         ctx.Response.OutputStream.Write(finalOutput);
         

@@ -402,15 +402,5 @@ public class ProxyTests
 
     #endregion
 
-    #region ssl testing
-
-    [Test]
-    public void can_I_connect_a_server_and_client_ssl_stream()
-    {
-        var serverMs = new MemoryStream();
-        var clientMs = new MemoryStream();
-    }
-
-    #endregion
     private static bool AnyCertificate(object a, X509Certificate? b, X509Chain? c, SslPolicyErrors d) => true;
 }
