@@ -781,11 +781,13 @@ public class VpnServer : ISessionHost, IDisposable
 
             while (
                 apiSide.Connected // this will be flipped when the Tcp connection is over
-                && timeout.Elapsed < TimeSpan.FromSeconds(5)
+                && timeout.Elapsed < TimeSpan.FromSeconds(30) // timeout -- needs to be quite long as our SSL/TLS is slow
                 )
             {
-                Thread.Sleep(250);
-                channel.EventPump();
+                if (!channel.EventPump())
+                {
+                    Thread.Sleep(50);
+                }
                 var outgoingDataReady = channel.VirtualSocket.BytesOfSendDataWaiting;
                 if (outgoingDataReady > 0)
                 {
@@ -793,6 +795,7 @@ public class VpnServer : ISessionHost, IDisposable
                 }
             }
             
+            Log.Trace($"Ending Proxy call due to {(apiSide.Connected ? "TIMEOUT" : "end of document")}");
             apiSide.Close();
             channel.Close();
 
