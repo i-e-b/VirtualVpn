@@ -3,6 +3,7 @@ using System.Net.Security;
 using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using VirtualVpn.Helpers;
 using VirtualVpn.TcpProtocol;
 
 namespace VirtualVpn.Web;
@@ -108,10 +109,13 @@ public class HttpProxyCallAdaptor : Stream, ISocketAdaptor
             };
             
             _sslStream.AuthenticateAsClient(authOptions);
+            Log.Trace("############ AUTHENTICATION EXCHANGE COMPLETE ############");
 
             // we should be connected. Write the request
             // and try to read back the response
-            _sslStream.Write(_httpRequestBuffer.ToArray());
+            var rawRequest = _httpRequestBuffer.ToArray();
+            Log.Trace("Proxy: SSL Outgoing request (plain)", () => Bit.Describe("Raw", rawRequest));
+            _sslStream.Write(rawRequest);
 
             Log.Trace($"Proxy: {nameof(RunSslAdaptor)}, authenticated and written");
             var buffer = new byte[8192];
@@ -120,6 +124,7 @@ public class HttpProxyCallAdaptor : Stream, ISocketAdaptor
                 var actual = _sslStream.Read(buffer, 0, buffer.Length);
                 var final = _httpResponseBuffer.FeedData(buffer, 0, actual);
                 Log.Trace($"Proxy received {final} bytes of a potential {actual} through SSL/TLS");
+                Log.Trace("Proxy: SSL incoming response", () => Bit.Describe("Raw", buffer, 0, actual));
 
                 if (!_httpResponseBuffer.IsComplete()) continue;
 
