@@ -24,9 +24,10 @@ public class TlsUnwrap : ISocketAdaptor
     private readonly SslServerAuthenticationOptions _authOptions;
     private readonly X509Certificate _certificate;
     private readonly ISocketAdaptor _socket;
+    private readonly SslStream _sslStream;
     
-    private readonly BlockingBidirectionalBuffer _encryptionSideBuffer;
-    private readonly BlockingBidirectionalBuffer _plainSideBuffer;
+    private readonly BlockingBidirectionalBuffer _tunnelSideBuffer;
+    private readonly BlockingBidirectionalBuffer _webAppSideBuffer; // we will need this once we're doing a secure connection.
     private readonly Thread _pumpThread;
     private volatile bool _running;
 
@@ -69,28 +70,34 @@ public class TlsUnwrap : ISocketAdaptor
         _certificate = GetX509Certificate(privatePath, publicPath);
 
         _socket = outgoingConnectionFunction();
+        
         _running = true;
-        _encryptionSideBuffer = new BlockingBidirectionalBuffer();
-        _plainSideBuffer = new BlockingBidirectionalBuffer();
+        _tunnelSideBuffer = new BlockingBidirectionalBuffer();
+        _webAppSideBuffer = new BlockingBidirectionalBuffer();
         
-        _pumpThread = new Thread(BufferPumpThread){IsBackground = true};
+        _sslStream = new SslStream(_tunnelSideBuffer);
+
+        _pumpThread = new Thread(BufferPumpThread) { IsBackground = true };
         _pumpThread.Start();
-        
-        using var sslStream = new SslStream(_encryptionSideBuffer);
-        
-        // TODO: do this stuff
-        //     - hook up double-direction buffered stream
-        //     - hook up buffer to 'Available'
-        //     - make 'auth as server' call
-        throw new NotImplementedException("Not ready yet!");
     }
 
     private void BufferPumpThread()
     {
+        var buffer = new byte[8192];
+        
+        // First, pick up the client's hello, and start doing the hand-shake
+        _sslStream.AuthenticateAsServer(_authOptions);
         while (_running)
         {
-            // TODO: keep trying to move data around between the plain and encrypted buffers.
+            // IEB: Continue from here
+            // Keep trying to move data around between the plain and encrypted buffers.
             // _socket <-> _plainSideBuffer | unwrap | _encryptionSideBuffer <-> ISocketAdaptor methods
+            
+            var read = _sslStream.Read(buffer, 0, buffer.Length);
+            _socket.IncomingFromTunnel(buffer, 0, read);
+
+            var toWrite = _socket.OutgoingFromLocal(buffer);
+            _sslStream.Write(buffer, 0, toWrite);
         }
     }
 
@@ -107,7 +114,12 @@ public class TlsUnwrap : ISocketAdaptor
     public void Close()
     {
         _running = false;
-        _socket.Dispose();
+        try { _socket.Dispose(); }
+        catch (Exception ex) { Log.Error("TLS unwrap: Failed to dispose socket", ex); }
+
+        try { _sslStream.Dispose(); }
+        catch (Exception ex) { Log.Error("TLS unwrap: Failed to dispose SSL stream", ex); }
+        
         var ok = _pumpThread.Join(TimeSpan.FromMilliseconds(256));
         if (!ok)
         {
@@ -123,7 +135,7 @@ public class TlsUnwrap : ISocketAdaptor
     /// <summary>
     /// Number of bytes available to be read from <see cref="OutgoingFromLocal"/>
     /// </summary>
-    public int Available => _encryptionSideBuffer.Available;
+    public int Available => _tunnelSideBuffer.Available;
     
     
     /// <summary>
@@ -137,7 +149,7 @@ public class TlsUnwrap : ISocketAdaptor
     public int IncomingFromTunnel(byte[] buffer, int offset, int length)
     {
         // Data incoming is what we should feed to our SslStream instance
-        throw new NotImplementedException();
+        return _tunnelSideBuffer.WriteIncomingNonBlocking(buffer, offset, length);
     }
 
     /// <summary>
@@ -153,7 +165,7 @@ public class TlsUnwrap : ISocketAdaptor
     public int OutgoingFromLocal(byte[] buffer)
     {
         // Data outgoing is what we read from our SslStream instance
-        throw new NotImplementedException();
+        return _tunnelSideBuffer.ReadNonBlocking(buffer);
     }
     
     #region Certificates

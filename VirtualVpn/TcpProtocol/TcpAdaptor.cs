@@ -256,8 +256,8 @@ public class TcpAdaptor : ITcpAdaptor
                         //
                         //  [WebApp] <-(socket)<-(TlsUnwrap)<- VirtualTcpSocket  <=tunnel=> [Remote Gateway]
                         
-                        var keyPaths = Settings.TlsKeyPaths[key];
-                        _socketToLocalSide = new TlsUnwrap(keyPaths, ()=>ConnectToWebApp(false)); // TODO: add a re-wrap.
+                        var keyPaths = Settings.TlsKeyPaths[key]; // IEB: continue in here...
+                        _socketToLocalSide = new TlsUnwrap(keyPaths, () => ConnectToWebApp(false)); // TODO: add a re-wrap.
                     }
                     else
                     {
@@ -295,10 +295,10 @@ public class TcpAdaptor : ITcpAdaptor
         var anyData = false;
         
         // check to see if there is virtual port data to pass to the web app
-        anyData |= MoveDataFromTunnelToWebApp(); // IEB: Add filtering (TlsUnwrap) here
+        anyData |= MoveDataFromTunnelToWebApp();
 
         // Read reply back from web app
-        anyData |= MoveDataFromWebAppBackToTunnel(); // IEB: Add filtering (TlsUnwrap) here
+        anyData |= MoveDataFromWebAppBackToTunnel();
 
         Log.Trace($"END Run Data Transfer anyMove={anyData}, vRead={_totalVirtualRead}, rSend={_totalRealSent}, rRead={_totalRealRead}, vSend={_totalVirtualSent}," +
                   $" vSocket={SocketThroughTunnel.State.ToString()}, webApp connected={_socketToLocalSide?.Connected ?? false}");

@@ -40,8 +40,6 @@ public class IkeV2Tests
     [Test]
     public void start_up_messages()
     {
-        // TODO: have 2 `VpnSession` instances, and start one against the other.
-        
         // Mostly the flip of HandleSaInit
         // To start with, display the StrongSwan 1st payload
         

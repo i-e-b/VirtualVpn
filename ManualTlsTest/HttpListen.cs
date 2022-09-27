@@ -32,7 +32,6 @@ public class HttpListen
             CertificateRevocationCheckMode = X509RevocationMode.NoCheck
         };
         
-        // TODO: take the un-wrap logic over to VirtualVpn.TlsWrappers.TlsRewrap
         while (Running)
         {
             Console.WriteLine("Waiting for a connection");
