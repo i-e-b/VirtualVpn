@@ -14,6 +14,10 @@ namespace VirtualVpn.TlsWrappers;
 /// <p></p>
 /// This class is the server version of <see cref="TlsHttpProxyCallAdaptor"/>.
 /// This class is agnostic of the underlying protocol.
+/// <p></p>
+/// The ISocketAdaptor interface is driver by <see cref="TcpAdaptor"/> as it it were the
+/// WebApp. We terminate that, act as the TlsServer, and pump decoded messages to the
+/// real socket that we own privately.
 /// </summary>
 public class TlsUnwrap : ISocketAdaptor
 {
@@ -86,6 +90,7 @@ public class TlsUnwrap : ISocketAdaptor
         while (_running)
         {
             // TODO: keep trying to move data around between the plain and encrypted buffers.
+            // _socket <-> _plainSideBuffer | unwrap | _encryptionSideBuffer <-> ISocketAdaptor methods
         }
     }
 
@@ -126,9 +131,12 @@ public class TlsUnwrap : ISocketAdaptor
     /// client. This is our 'hello' source, and will be encrypted.
     /// <p></p>
     /// Buffer is arbitrarily sized, and we return what we could read.
+    /// <p></p>
+    /// This is where we pretend to be a TLS Server
     /// </summary>
     public int IncomingFromTunnel(byte[] buffer, int offset, int length)
     {
+        // Data incoming is what we should feed to our SslStream instance
         throw new NotImplementedException();
     }
 
@@ -140,11 +148,11 @@ public class TlsUnwrap : ISocketAdaptor
     /// and we should try to entirely fill it, returning the number of bytes
     /// copied.
     /// <p></p>
-    /// Data is supplied unencrypted, it is up to the TcpAdaptor to
-    /// establish an encrypted tunnel where appropriate.
+    /// This is where we pretend to be a TLS Server
     /// </summary>
     public int OutgoingFromLocal(byte[] buffer)
     {
+        // Data outgoing is what we read from our SslStream instance
         throw new NotImplementedException();
     }
     

@@ -242,14 +242,29 @@ public class TcpAdaptor : ITcpAdaptor
                     var key = new IpV4Address(LocalAddress).AsString;
                     if (Settings.TlsKeyPaths.ContainsKey(key))
                     {
-                        // Rather than Remote<-[tunnel]->WebApp, we do Remote<->VirtualVPN, and VirtualVPN<->WebApp separately.
-                        //SocketThroughTunnel.AttachTlsUnwrap(Settings.TlsKeyPaths[key]);
-                        // IEB: Re-think. Hook this up through the data transfer methods below
-                        //      So we keep the TcpSocket logic as separate as possible (it' already complex enough!)
-                        useTlsPort = false; // TODO: Add a re-wrap on this side
+                        // Rather than Remote<-[tunnel]->WebApp
+                        //  we will do Remote<->VirtualVPN | VirtualVPN<->WebApp separately.
+                        // This means we need to decrypt the data, and do a whole lot
+                        // of buffering, but we can make the virtual endpoint have
+                        // a correct certificate.
+                        //
+                        //
+                        // We put the TlsUnwrap around the web app socket to keep
+                        // the TcpSocket logic as separate as possible (it' already complex enough!)
+                        //
+                        // So it looks like:
+                        //
+                        //  [WebApp] <-(socket)<-(TlsUnwrap)<- VirtualTcpSocket  <=tunnel=> [Remote Gateway]
+                        
+                        var keyPaths = Settings.TlsKeyPaths[key];
+                        _socketToLocalSide = new TlsUnwrap(keyPaths, ()=>ConnectToWebApp(false)); // TODO: add a re-wrap.
                     }
-
-                    _socketToLocalSide = ConnectToWebApp(useTlsPort); // using TLS currently means Remote<-[tunnel]->WebApp is encrypted as one stream
+                    else
+                    {
+                        // using TLS means Remote<-[tunnel]->WebApp is encrypted as one stream
+                        // and this TcpAdaptor doesn't try and understand the encrypted data.
+                        _socketToLocalSide = ConnectToWebApp(useTlsPort);
+                    }
                 }
                 else Log.Trace("Not enough data received to do SSL/TLS detection. Waiting for more.");
             }
