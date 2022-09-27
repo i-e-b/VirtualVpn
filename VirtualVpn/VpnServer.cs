@@ -8,6 +8,7 @@ using VirtualVpn.Enums;
 using VirtualVpn.EspProtocol;
 using VirtualVpn.Helpers;
 using VirtualVpn.InternetProtocol;
+using VirtualVpn.TlsWrappers;
 using VirtualVpn.Web;
 
 // ReSharper disable BuiltInTypeReferenceStyle
@@ -781,7 +782,7 @@ public class VpnServer : ISessionHost, IDisposable
             var proxyAddress = IpV4Address.FromString(request.ProxyLocalAddress);
             var tunnel = FindTunnelTo(target);
             
-            var apiSide = new HttpProxyCallAdaptor(request, uri.Scheme == "https");
+            var apiSide = new TlsHttpProxyCallAdaptor(request, uri.Scheme == "https");
             var channel = tunnel.OpenTcpSession(target, uri.Port, proxyAddress, apiSide);
             
             var timeout = new Stopwatch();
@@ -796,7 +797,7 @@ public class VpnServer : ISessionHost, IDisposable
                 {
                     Thread.Sleep(50);
                 }
-                var outgoingDataReady = channel.VirtualSocket.BytesOfSendDataWaiting;
+                var outgoingDataReady = channel.SocketThroughTunnel.BytesOfSendDataWaiting;
                 if (outgoingDataReady > 0)
                 {
                     Log.Trace($"Virtual socket has {outgoingDataReady} bytes waiting");

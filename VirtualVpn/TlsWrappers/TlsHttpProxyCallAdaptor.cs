@@ -5,13 +5,16 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using VirtualVpn.Helpers;
 using VirtualVpn.TcpProtocol;
+using VirtualVpn.Web;
 
-namespace VirtualVpn.Web;
+namespace VirtualVpn.TlsWrappers;
 
 /// <summary>
-/// Pretend that an API proxy call is a HTTP over TCP socket client
+/// Pretend that an API proxy call is a HTTP over TCP socket client.
+/// This is the client version of <see cref="TlsUnwrap"/>.
+/// This class specialises in HTTP protocol streams.
 /// </summary>
-public class HttpProxyCallAdaptor : Stream, ISocketAdaptor
+public class TlsHttpProxyCallAdaptor : Stream, ISocketAdaptor
 {
     private readonly object _transferLock = new();
     private readonly Uri _targetUri;
@@ -37,7 +40,7 @@ public class HttpProxyCallAdaptor : Stream, ISocketAdaptor
     /// </summary>
     /// <param name="request">HTTP request to make</param>
     /// <param name="useTls">If true, the message will be transmitted as HTTPS</param>
-    public HttpProxyCallAdaptor(HttpProxyRequest request, bool useTls)
+    public TlsHttpProxyCallAdaptor(HttpProxyRequest request, bool useTls)
     {
         _incomingDataLatch = new AutoResetEvent(false);
         _targetUri = new Uri(request.Url, UriKind.Absolute);
@@ -411,6 +414,7 @@ public class HttpProxyCallAdaptor : Stream, ISocketAdaptor
             {
                 if (_outgoingQueue.Count < 1) break;
             }
+            Thread.Sleep(1);
         }
 
         Log.Trace("Proxy: Write complete");
@@ -434,7 +438,7 @@ public class HttpProxyCallAdaptor : Stream, ISocketAdaptor
     /// <see cref="Stream"/> steals 'Dispose' and gives us 'Close'
     /// </summary>
     public override void Close() {
-        Log.DebugWithStack($"{nameof(HttpProxyCallAdaptor)}: Close called. This is either from outer stream or from a call to Dispose()");
+        Log.DebugWithStack($"{nameof(TlsHttpProxyCallAdaptor)}: Close called. This is either from outer stream or from a call to Dispose()");
         EndConnection();
     }
 

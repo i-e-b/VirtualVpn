@@ -80,7 +80,22 @@ public static class Settings
     /// Callers should NOT send this directly, but use
     /// a time-coded version.
     /// </summary>
-    public static string ApiKey = "lDnEsTrDuTnReToGoRlGnGnTeTlDtRgEyKgNyEdFoDtFtNpTgUgSuTdEo";
+    public static string ApiKey = "replace-me";
+    
+    /// <summary>
+    /// Target IP => Key paths (as <c>$"{privateKey};{fullCert}"</c>)
+    /// <p></p>
+    /// If an incoming TCP/IP stream has a TLS 'hello' message,
+    /// AND the destination IP address matches one of the keys
+    /// in this dictionary, then we will unwrap the TLS stream
+    /// using the certificate, and pass along to the web app.
+    /// <p></p>
+    /// This allows us to give correct certificates to callers
+    /// regardless of the final app.
+    /// </summary>
+    public static Dictionary<string,string> TlsKeyPaths = new(){
+        {"55.55.55.55","/root/vpnCerts/hans-privkey.pem;/root/vpnCerts/hans-fullchain.pem"}
+    };
     
     
     #region Debug tools and logging

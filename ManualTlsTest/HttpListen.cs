@@ -32,8 +32,7 @@ public class HttpListen
             CertificateRevocationCheckMode = X509RevocationMode.NoCheck
         };
         
-        // IEB: Continue from here. Get this SSL unwrapping working (call with real browser)
-        // Then take the un-wrap logic over to VirtualVpn.VpnServer.MakeProxyCall
+        // TODO: take the un-wrap logic over to VirtualVpn.TlsWrappers.TlsRewrap
         while (Running)
         {
             Console.WriteLine("Waiting for a connection");

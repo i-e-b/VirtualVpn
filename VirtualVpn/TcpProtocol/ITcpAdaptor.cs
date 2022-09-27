@@ -51,7 +51,7 @@ public interface ITcpAdaptor
     byte[] LocalAddress { get; }
     
     /// <summary> TcpSocket that represents the connection through the ChildSa tunnel </summary>
-    TcpSocket VirtualSocket { get; }
+    TcpSocket SocketThroughTunnel { get; }
 
     /// <summary> Local port requested for this session </summary>
     int LocalPort { get; }

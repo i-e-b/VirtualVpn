@@ -146,7 +146,7 @@ public class ProxyTests
         var request = new HttpProxyRequest{
             Url = "https://192.168.0.1/what"
         };
-        var subject = new HttpProxyCallAdaptor(request, false);
+        var subject = new TlsHttpProxyCallAdaptor(request, false);
 
         Assert.That(subject.Connected, Is.True, "Initial state");
 
@@ -181,7 +181,7 @@ public class ProxyTests
         var request = new HttpProxyRequest{
             Url = "https://192.168.0.1/what"
         };
-        var subject = new HttpProxyCallAdaptor(request, false);
+        var subject = new TlsHttpProxyCallAdaptor(request, false);
 
         Assert.That(subject.Connected, Is.True, "Initial state");
 
@@ -231,7 +231,7 @@ public class ProxyTests
         var request = new HttpProxyRequest{
             Url = "https://192.168.0.1/what"
         };
-        var subject = new HttpProxyCallAdaptor(request, false);
+        var subject = new TlsHttpProxyCallAdaptor(request, false);
 
         Assert.That(subject.Connected, Is.True, "Initial state");
 
@@ -282,7 +282,7 @@ public class ProxyTests
         var request = new HttpProxyRequest{
             Url = "https://192.168.0.1/what"
         };
-        var subject = new HttpProxyCallAdaptor(request, false);
+        var subject = new TlsHttpProxyCallAdaptor(request, false);
 
         Assert.That(subject.Connected, Is.True, "Initial state");
 

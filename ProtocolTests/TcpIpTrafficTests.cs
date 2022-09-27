@@ -609,7 +609,7 @@ public class TestAdaptor : ITcpAdaptor
     {
         LastContact = new Stopwatch();
         LocalAddress = IpV4Address.Localhost.Value;
-        VirtualSocket = new TcpSocket(this);
+        SocketThroughTunnel = new TcpSocket(this);
         RemoteAddress = IpV4Address.Localhost.Value;
         Gateway = IpV4Address.Localhost.MakeEndpoint(0);
         LocalPort = 0;
@@ -649,7 +649,7 @@ public class TestAdaptor : ITcpAdaptor
 
     public Stopwatch LastContact { get; }
     public byte[] LocalAddress { get; }
-    public TcpSocket VirtualSocket { get; }
+    public TcpSocket SocketThroughTunnel { get; }
     public int LocalPort { get; }
     public byte[] RemoteAddress { get; }
     public int RemotePort { get; }

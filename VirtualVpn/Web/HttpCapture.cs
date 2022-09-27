@@ -29,7 +29,6 @@ public class HttpCapture
         _listenThread.Start();
     }
     
-
     public void Stop()
     {
         _running = false;

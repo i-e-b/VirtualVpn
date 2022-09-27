@@ -90,7 +90,7 @@ public class ChildSa : ITransportTunnel
             }
             else
             {
-                result.Add($"ACTIVE: {session.Address}:{session.Port} - {tcp.VirtualSocket.State.ToString()} ( {IpV4Address.Describe(tcp.LocalAddress)}:{tcp.LocalPort}->{IpV4Address.Describe(tcp.RemoteAddress)}:{tcp.RemotePort} )");
+                result.Add($"ACTIVE: {session.Address}:{session.Port} - {tcp.SocketThroughTunnel.State.ToString()} ( {IpV4Address.Describe(tcp.LocalAddress)}:{tcp.LocalPort}->{IpV4Address.Describe(tcp.RemoteAddress)}:{tcp.RemotePort} )");
             }
         }
         
@@ -103,7 +103,7 @@ public class ChildSa : ITransportTunnel
             }
             else
             {
-                result.Add($"PARKED: {session.Address}:{session.Port} - {tcp.VirtualSocket.State.ToString()} ( {IpV4Address.Describe(tcp.LocalAddress)}:{tcp.LocalPort}->{IpV4Address.Describe(tcp.RemoteAddress)}:{tcp.RemotePort} )");
+                result.Add($"PARKED: {session.Address}:{session.Port} - {tcp.SocketThroughTunnel.State.ToString()} ( {IpV4Address.Describe(tcp.LocalAddress)}:{tcp.LocalPort}->{IpV4Address.Describe(tcp.RemoteAddress)}:{tcp.RemotePort} )");
             }
         }
         
@@ -150,7 +150,7 @@ public class ChildSa : ITransportTunnel
                           $" local={Bit.ToIpAddressString(tcp.LocalAddress)}:{tcp.LocalPort}. Closing");
                 TerminateConnection(tcpKey);
             }
-            else if (tcp.VirtualSocket.State == TcpSocketState.Closed)
+            else if (tcp.SocketThroughTunnel.State == TcpSocketState.Closed)
             {
                 Log.Debug($"Old session closed: {Bit.ToIpAddressString(tcp.RemoteAddress)}:{tcp.RemotePort} -> {Bit.ToIpAddressString(tcp.LocalAddress)}:{tcp.LocalPort}");
                 TerminateConnection(tcpKey);
@@ -173,8 +173,8 @@ public class ChildSa : ITransportTunnel
                 continue;
             }
 
-            if (oldSession.VirtualSocket.State == TcpSocketState.Closed
-                || oldSession.VirtualSocket.State == TcpSocketState.Listen) _parkedSessions.Remove(oldKey);
+            if (oldSession.SocketThroughTunnel.State == TcpSocketState.Closed
+                || oldSession.SocketThroughTunnel.State == TcpSocketState.Listen) _parkedSessions.Remove(oldKey);
             else oldSession.EventPump();
         }
         return acted;
