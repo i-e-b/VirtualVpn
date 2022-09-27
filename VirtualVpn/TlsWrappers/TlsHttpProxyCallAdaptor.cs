@@ -14,7 +14,7 @@ namespace VirtualVpn.TlsWrappers;
 /// This is the client version of <see cref="TlsUnwrap"/>.
 /// This class specialises in HTTP protocol streams.
 /// </summary>
-public class TlsHttpProxyCallAdaptor : Stream, ISocketAdaptor
+public class TlsHttpProxyCallAdaptor : ISocketAdaptor
 {
     private readonly object _transferLock = new();
     private readonly Uri _targetUri;
@@ -24,16 +24,12 @@ public class TlsHttpProxyCallAdaptor : Stream, ISocketAdaptor
     private readonly List<byte> _httpRequestBuffer;
     
     // Message buffers (may be plain or encrypted)
-    private readonly List<byte> _outgoingQueue;
-    private int _outgoingQueueSent;
-    private readonly List<byte> _incomingQueue;
-    private int _incomingQueueRead;
+    private readonly BlockingBidirectionalBuffer _blockingBuffer;
     
     // SSL/TLS helpers
     private readonly Thread _messagePumpThread;
     private volatile bool _messagePumpRunning;
     private SslStream? _sslStream;
-    private readonly AutoResetEvent _incomingDataLatch;
 
     /// <summary>
     /// Prepare a HTTP(S) call from a proxy request.
@@ -42,15 +38,12 @@ public class TlsHttpProxyCallAdaptor : Stream, ISocketAdaptor
     /// <param name="useTls">If true, the message will be transmitted as HTTPS</param>
     public TlsHttpProxyCallAdaptor(HttpProxyRequest request, bool useTls)
     {
-        _incomingDataLatch = new AutoResetEvent(false);
         _targetUri = new Uri(request.Url, UriKind.Absolute);
-        _outgoingQueueSent = 0;
 
         // We start in connected state, as we already have the proxy request
         Connected = true;
         
-        _outgoingQueue = new List<byte>();
-        _incomingQueue = new List<byte>();
+        _blockingBuffer = new BlockingBidirectionalBuffer();
         
         _httpRequestBuffer = new List<byte>((request.Body?.Length ?? 0) + 100);
         _httpResponseBuffer = new HttpBuffer();
@@ -89,7 +82,7 @@ public class TlsHttpProxyCallAdaptor : Stream, ISocketAdaptor
         try
         {
             Log.Trace($"Proxy: {nameof(RunSslAdaptor)}");
-            _sslStream = new SslStream(this, true);
+            _sslStream = new SslStream(_blockingBuffer, true);
 
             if (_sslStream.CanTimeout)
             {
@@ -153,31 +146,29 @@ public class TlsHttpProxyCallAdaptor : Stream, ISocketAdaptor
     /// </summary>
     private void RunDirectAdaptor()
     {
-        Log.Trace($"Proxy: Direct adaptor, request buffer={_httpRequestBuffer.Count} bytes, outgoingQueue={_outgoingQueue.Count} bytes");
+        Log.Trace($"Proxy: Direct adaptor, request buffer={_httpRequestBuffer.Count} bytes, outgoingQueue={_blockingBuffer.Available} bytes");
         
         // Add everything to the outgoing queue
         lock (_transferLock)
         {
-            _outgoingQueue.AddRange(_httpRequestBuffer);
+            _blockingBuffer.WriteOutgoingNonBlocking(_httpRequestBuffer.ToArray());
             _httpRequestBuffer.Clear();
         }
 
         // Read back the incoming queue until the buffer is filled
+        byte[] buf = new byte[8192];
         while (_messagePumpRunning)
         {
             Log.Trace("Proxy direct (wait)");
-            _incomingDataLatch.WaitOne();
-            Log.Trace("Proxy direct (release)");
-
-            byte[] buf;
+            int read;
+            
             lock (_transferLock)
             {
-                Log.Trace($"Proxy direct: transferring {_incomingQueue.Count} bytes");
-                buf = _incomingQueue.ToArray();
-                _incomingQueue.Clear();
+                read = _blockingBuffer.Read(buf, 0, buf.Length);
+                Log.Trace($"Proxy direct: transferring {read} bytes");
             }
 
-            _httpResponseBuffer.FeedData(buf, 0, buf.Length);
+            _httpResponseBuffer.FeedData(buf, 0, read);
 
             if (_httpResponseBuffer.IsComplete())
             {
@@ -218,7 +209,7 @@ public class TlsHttpProxyCallAdaptor : Stream, ISocketAdaptor
     /// How much data does the local side have ready
     /// to send through the tunnel?
     /// </summary>
-    public int Available => _outgoingQueueSent < _outgoingQueue.Count ? _outgoingQueue.Count - _outgoingQueueSent : 0;
+    public int Available => _blockingBuffer.Available;
 
     /// <summary>
     /// INTERFACE TO VPN TUNNEL
@@ -229,29 +220,7 @@ public class TlsHttpProxyCallAdaptor : Stream, ISocketAdaptor
     /// </summary>
     public int IncomingFromTunnel(byte[] buffer, int offset, int length)
     {
-        Log.Trace("Proxy: IncomingFromTunnel");
-        lock (_transferLock)
-        {
-            if (length <= 0) return 0;
-
-            var bytesToStore = length;
-            var available = buffer.Length - offset;
-            if (bytesToStore > available) bytesToStore = available;
-
-            Log.Trace($"Proxy: IncomingFromTunnel, adding {bytesToStore} bytes");
-            if (offset == 0 && bytesToStore == buffer.Length)
-            {
-                _incomingQueue.AddRange(buffer);
-            }
-            else
-            {
-                _incomingQueue.AddRange(buffer.Skip(offset).Take(bytesToStore));
-            }
-
-            Log.Trace("Proxy: Releasing lock on incoming data");
-            _incomingDataLatch.Set();
-            return bytesToStore;
-        }
+        return _blockingBuffer.WriteIncomingNonBlocking(buffer, offset, length);
     }
 
     /// <summary>
@@ -263,28 +232,7 @@ public class TlsHttpProxyCallAdaptor : Stream, ISocketAdaptor
     /// </summary>
     public int OutgoingFromLocal(byte[] buffer)
     {
-        lock (_transferLock)
-        {
-            var available = _outgoingQueue.Count - _outgoingQueueSent;
-
-            if (available < 1) return 0;
-
-            var end = buffer.Length;
-            if (end > available) end = available;
-
-            for (int i = 0; i < end; i++)
-            {
-                buffer[i] = _outgoingQueue[_outgoingQueueSent++];
-            }
-
-            if (_outgoingQueueSent >= _outgoingQueue.Count)
-            {
-                _outgoingQueueSent = 0;
-                _outgoingQueue.Clear();
-            }
-
-            return end;
-        }
+        return _blockingBuffer.ReadNonBlocking(buffer);
     }
 
     /// <summary>
@@ -325,122 +273,24 @@ public class TlsHttpProxyCallAdaptor : Stream, ISocketAdaptor
     /// Accept any server certificate
     /// </summary>
     private static bool AnyCertificate(object a, X509Certificate? b, X509Chain? c, SslPolicyErrors d) => true;
-    
-    #region Stream interface for SslStream
+
+
     /// <summary>
-    /// Waits for outgoing queue to empty
+    /// Close the adaptor and its source
     /// </summary>
-    public override void Flush()
+    public void Close()
     {
-        Log.Trace("Proxy: Flush (wait)");
-        while (_outgoingQueue.Count > 0)
-        {
-            Thread.Sleep(50);
-        }
-        Log.Trace("Proxy: Flush complete");
-    }
-
-    /// <summary>
-    /// Wait for data to be available in the incoming queue,
-    /// then feed as much as possible into the buffer.
-    /// </summary>
-    public override int Read(byte[] buffer, int offset, int count)
-    {
-        Log.Trace("Proxy: Read (wait)");
-        _incomingDataLatch.WaitOne();
-        Log.Trace("Proxy: Read (release)");
-
-        lock (_transferLock)
-        {
-            var available = _incomingQueue.Count - _incomingQueueRead;
-            var bytesToCopy = available > count ? count : available;
-
-            if (bytesToCopy < 1)
-            {
-                Log.Trace("Proxy: Read, triggered with zero bytes");
-                return 0;
-            }
-
-            Log.Trace($"Proxy: Read (copying {bytesToCopy} bytes)");
-            for (int i = 0; i < bytesToCopy; i++)
-            {
-                buffer[i+offset] = _incomingQueue[_incomingQueueRead++];
-            }
-
-            if (_incomingQueueRead >= _incomingQueue.Count)
-            {
-                _incomingQueue.Clear();
-                _incomingQueueRead = 0;
-            }
-            
-            Log.Trace("Proxy: Read complete");
-            return bytesToCopy;
-        }
-    }
-
-    /// <summary>
-    /// Not supported
-    /// </summary>
-    public override long Seek(long offset, SeekOrigin origin)
-    {
-        throw new NotSupportedException();
-    }
-
-    /// <summary>
-    /// Not supported
-    /// </summary>
-    public override void SetLength(long value)
-    {
-        throw new NotSupportedException();
-    }
-
-    /// <summary>
-    /// Push data to output queue, then wait for it to empty
-    /// </summary>
-    public override void Write(byte[] buffer, int offset, int count)
-    {
-        Log.Trace("Proxy: Write");
-
-        lock (_transferLock)
-        {
-            if (offset == 0 && count == buffer.Length) _outgoingQueue.AddRange(buffer);
-            else _outgoingQueue.AddRange(buffer.Skip(offset).Take(count));
-        }
-
-        Log.Trace("Proxy: Write (wait)");
-        while (true)
-        {
-            lock (_transferLock)
-            {
-                if (_outgoingQueue.Count < 1) break;
-            }
-            Thread.Sleep(1);
-        }
-
-        Log.Trace("Proxy: Write complete");
-    }
-
-    public override bool CanRead => true;
-    public override bool CanSeek => false;
-    public override bool CanWrite => true;
-    public override long Length => _httpResponseBuffer.Length;
-    
-    /// <summary>
-    /// Not supported
-    /// </summary>
-    public override long Position
-    {
-        get => throw new NotSupportedException();
-        set => throw new NotSupportedException();
-    }
-
-    /// <summary>
-    /// <see cref="Stream"/> steals 'Dispose' and gives us 'Close'
-    /// </summary>
-    public override void Close() {
-        Log.DebugWithStack($"{nameof(TlsHttpProxyCallAdaptor)}: Close called. This is either from outer stream or from a call to Dispose()");
+        Log.Trace($"{nameof(TlsHttpProxyCallAdaptor)}: Close called");
         EndConnection();
     }
+    
+    /// <summary>
+    /// Close the adaptor and its source
+    /// </summary>
+    public void Dispose() {
+        Log.DebugWithStack($"{nameof(TlsHttpProxyCallAdaptor)}: Dispose called");
+        Close();
+        GC.SuppressFinalize(this);
+    }
 
-    #endregion
 }

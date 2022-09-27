@@ -46,10 +46,11 @@ public class TlsUnwrap : ISocketAdaptor
         if (!File.Exists(publicPath)) throw new Exception($"Private key is not present, or this service does not have permissions to access it ({publicPath})");
         
         var enabledProtocols = (Platform.Current() == Platform.Kind.Windows)
-                ? SslProtocols.Tls11 | SslProtocols.Tls12 // DO NOT use 1.3 on Windows: https://github.com/dotnet/runtime/issues/1720
-                : SslProtocols.Tls11 | SslProtocols.Tls12 | SslProtocols.Tls13;
-        
-        _authOptions = new SslServerAuthenticationOptions{
+            ? SslProtocols.Tls11 | SslProtocols.Tls12 // DO NOT use 1.3 on Windows: https://github.com/dotnet/runtime/issues/1720
+            : SslProtocols.Tls11 | SslProtocols.Tls12 | SslProtocols.Tls13;
+
+        _authOptions = new SslServerAuthenticationOptions
+        {
             AllowRenegotiation = true,
             ClientCertificateRequired = false,
             EncryptionPolicy = EncryptionPolicy.RequireEncryption,
@@ -57,9 +58,9 @@ public class TlsUnwrap : ISocketAdaptor
             EnabledSslProtocols = enabledProtocols,
             CertificateRevocationCheckMode = X509RevocationMode.NoCheck
         };
-        
+
         _certificate = GetX509Certificate(privatePath, publicPath);
-        
+
         _socket = outgoingConnectionFunction();
         _buffer = new BlockingBidirectionalBuffer();
         
@@ -68,6 +69,7 @@ public class TlsUnwrap : ISocketAdaptor
         //     - hook up double-direction buffered stream
         //     - hook up buffer to 'Available'
         //     - make 'auth as server' call
+        throw new NotImplementedException("Not ready yet!");
     }
 
     /// <summary>Release the underlying socket</summary>

@@ -2,7 +2,7 @@
 
 /// <summary>
 /// A buffer with separate input/output, that is driven
-/// BOTH asynchronously (using <see cref="WriteNonBlocking"/> and <see cref="ReadNonBlocking"/> methods),
+/// BOTH asynchronously (using <see cref="WriteIncomingNonBlocking"/> and <see cref="ReadNonBlocking"/> methods),
 /// AND in a blocking synchronous manner using the Stream interface.
 /// </summary>
 public class BlockingBidirectionalBuffer : Stream
@@ -41,7 +41,7 @@ public class BlockingBidirectionalBuffer : Stream
     /// Write data to the 'incoming' queue, as read by the blocking
     /// <see cref="Read"/> method.
     /// </summary>
-    public int WriteNonBlocking(byte[] buffer, int offset, int length)
+    public int WriteIncomingNonBlocking(byte[] buffer, int offset, int length)
     {
         Log.Trace("BlockingBidirectionalBuffer: IncomingFromTunnel");
         lock (_transferLock)
@@ -65,6 +65,20 @@ public class BlockingBidirectionalBuffer : Stream
             Log.Trace("BlockingBidirectionalBuffer: Releasing lock on incoming data");
             _incomingDataLatch.Set();
             return bytesToStore;
+        }
+    }
+    
+    /// <summary>
+    /// Pre-fill data to the 'outgoing' queue, as read by the non-blocking
+    /// <see cref="ReadNonBlocking"/> method.
+    /// </summary>
+    public void WriteOutgoingNonBlocking(byte[] buffer)
+    {
+        Log.Trace("BlockingBidirectionalBuffer: WriteOutgoingNonBlocking");
+        lock (_transferLock)
+        {
+            Log.Trace($"BlockingBidirectionalBuffer: WriteOutgoingNonBlocking, adding {buffer.Length} bytes");
+            _outgoingQueue.AddRange(buffer);
         }
     }
 
@@ -114,7 +128,7 @@ public class BlockingBidirectionalBuffer : Stream
     /// <summary>
     /// BLOCKING: Wait for data to be available in the incoming queue,
     /// then feed as much as possible into the buffer.
-    /// This is written by the non-blocking <see cref="WriteNonBlocking"/> method.
+    /// This is written by the non-blocking <see cref="WriteIncomingNonBlocking"/> method.
     /// </summary>
     public override int Read(byte[] buffer, int offset, int count)
     {
