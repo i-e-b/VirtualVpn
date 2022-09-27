@@ -229,8 +229,8 @@ public class TcpAdaptor : ITcpAdaptor
                 // to peek at the tunneled request data
                 if (SocketThroughTunnel.BytesOfReadDataWaiting >= TlsDetector.RequiredBytes)
                 {
-                    var useTls = TlsDetector.IsTlsHandshake(SocketThroughTunnel.PeekWaitingData(TlsDetector.RequiredBytes), out var isAcceptable);
-                    if (useTls && !isAcceptable) throw new Exception("Client requested an SSL/TLS version that is unacceptably old.");
+                    var useTlsPort = TlsDetector.IsTlsHandshake(SocketThroughTunnel.PeekWaitingData(TlsDetector.RequiredBytes), out var isAcceptable);
+                    if (useTlsPort && !isAcceptable) throw new Exception("Client requested an SSL/TLS version that is unacceptably old.");
                     
                     // If this is a TLS session, AND we have a certificate
                     //       mapped to the target (local side), THEN we should
@@ -240,10 +240,16 @@ public class TcpAdaptor : ITcpAdaptor
                     //       We should still make a HTTPS call to our web app so
                     //       that we aren't exposing private data.
                     var key = new IpV4Address(LocalAddress).AsString;
-                    _socketToLocalSide =
-                        Settings.TlsKeyPaths.ContainsKey(key)
-                            ? new TlsUnwrap(Settings.TlsKeyPaths[key], () => ConnectToWebApp(useTls))
-                            : ConnectToWebApp(useTls);
+                    if (Settings.TlsKeyPaths.ContainsKey(key))
+                    {
+                        // Rather than Remote<-[tunnel]->WebApp, we do Remote<->VirtualVPN, and VirtualVPN<->WebApp separately.
+                        //SocketThroughTunnel.AttachTlsUnwrap(Settings.TlsKeyPaths[key]);
+                        // IEB: Re-think. Hook this up through the data transfer methods below
+                        //      So we keep the TcpSocket logic as separate as possible (it' already complex enough!)
+                        useTlsPort = false; // TODO: Add a re-wrap on this side
+                    }
+
+                    _socketToLocalSide = ConnectToWebApp(useTlsPort); // using TLS currently means Remote<-[tunnel]->WebApp is encrypted as one stream
                 }
                 else Log.Trace("Not enough data received to do SSL/TLS detection. Waiting for more.");
             }
@@ -272,24 +278,20 @@ public class TcpAdaptor : ITcpAdaptor
         Log.Trace($"Attempting tunnel<->webApp. Tunnel has {SocketThroughTunnel.BytesOfReadDataWaiting} bytes ready. Web app has {_socketToLocalSide?.Available ?? 0} bytes ready.");
 
         var anyData = false;
-
+        
         // check to see if there is virtual port data to pass to the web app
-        if (SocketThroughTunnel.BytesOfReadDataWaiting > 0)
-        {
-            anyData |= MoveDataFromTunnelToWebApp();
-        }
-        else Log.Trace("Virtual socket is empty");
+        anyData |= MoveDataFromTunnelToWebApp(); // IEB: Add filtering (TlsUnwrap) here
 
         // Read reply back from web app
-        anyData |= MoveDataFromWebAppBackToTunnel();
+        anyData |= MoveDataFromWebAppBackToTunnel(); // IEB: Add filtering (TlsUnwrap) here
 
         Log.Trace($"END Run Data Transfer anyMove={anyData}, vRead={_totalVirtualRead}, rSend={_totalRealSent}, rRead={_totalRealRead}, vSend={_totalVirtualSent}," +
                   $" vSocket={SocketThroughTunnel.State.ToString()}, webApp connected={_socketToLocalSide?.Connected ?? false}");
 
-        if (_socketToLocalSide?.Connected != true
-            && _totalVirtualRead > 0
-            && _totalVirtualSent > 0
-            && SocketThroughTunnel.BytesOfSendDataWaiting < 1)
+        if (_socketToLocalSide?.Connected != true              // not connected
+            && _totalVirtualRead > 0                           // but we transferred some data
+            && _totalVirtualSent > 0                           // both ways
+            && SocketThroughTunnel.BytesOfSendDataWaiting < 1) // and it's all gone
         {
             // Everything is finished. Close down
             _shutdownTransfer = true;

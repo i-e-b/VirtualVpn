@@ -21,7 +21,10 @@ public class TlsUnwrap : ISocketAdaptor
     private readonly X509Certificate _certificate;
     private readonly ISocketAdaptor _socket;
     
-    private readonly BlockingBidirectionalBuffer _buffer;
+    private readonly BlockingBidirectionalBuffer _encryptionSideBuffer;
+    private readonly BlockingBidirectionalBuffer _plainSideBuffer;
+    private readonly Thread _pumpThread;
+    private volatile bool _running;
 
     /// <summary>
     /// Try to create a TLS re-wrapper, given paths to certificates and a connection.
@@ -62,8 +65,14 @@ public class TlsUnwrap : ISocketAdaptor
         _certificate = GetX509Certificate(privatePath, publicPath);
 
         _socket = outgoingConnectionFunction();
-        _buffer = new BlockingBidirectionalBuffer();
+        _running = true;
+        _encryptionSideBuffer = new BlockingBidirectionalBuffer();
+        _plainSideBuffer = new BlockingBidirectionalBuffer();
         
+        _pumpThread = new Thread(BufferPumpThread){IsBackground = true};
+        _pumpThread.Start();
+        
+        using var sslStream = new SslStream(_encryptionSideBuffer);
         
         // TODO: do this stuff
         //     - hook up double-direction buffered stream
@@ -72,10 +81,19 @@ public class TlsUnwrap : ISocketAdaptor
         throw new NotImplementedException("Not ready yet!");
     }
 
+    private void BufferPumpThread()
+    {
+        while (_running)
+        {
+            // TODO: keep trying to move data around between the plain and encrypted buffers.
+        }
+    }
+
     /// <summary>Release the underlying socket</summary>
     public void Dispose()
     {
-        _socket.Dispose();
+        Close();
+        GC.SuppressFinalize(this);
     }
 
     /// <summary>
@@ -83,7 +101,13 @@ public class TlsUnwrap : ISocketAdaptor
     /// </summary>
     public void Close()
     {
-        _socket.Close();
+        _running = false;
+        _socket.Dispose();
+        var ok = _pumpThread.Join(TimeSpan.FromMilliseconds(256));
+        if (!ok)
+        {
+            Log.Warn("TLS unwrap: pump thread did not stop within time limit");
+        }
     }
 
     /// <summary>
@@ -94,7 +118,7 @@ public class TlsUnwrap : ISocketAdaptor
     /// <summary>
     /// Number of bytes available to be read from <see cref="OutgoingFromLocal"/>
     /// </summary>
-    public int Available { get; }
+    public int Available => _encryptionSideBuffer.Available;
     
     
     /// <summary>
