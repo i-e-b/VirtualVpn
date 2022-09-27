@@ -90,14 +90,26 @@ public class TlsUnwrap : ISocketAdaptor
         while (_running)
         {
             // IEB: Continue from here
+            // BUG: This is not moving all data
             // Keep trying to move data around between the plain and encrypted buffers.
             // _socket <-> _plainSideBuffer | unwrap | _encryptionSideBuffer <-> ISocketAdaptor methods
             
-            var read = _sslStream.Read(buffer, 0, buffer.Length);
-            _socket.IncomingFromTunnel(buffer, 0, read);
-
             var toWrite = _socket.OutgoingFromLocal(buffer);
-            _sslStream.Write(buffer, 0, toWrite);
+            if (toWrite > 0)
+            {
+                Log.Trace($"TlsUnwrap: Data from web app: {toWrite} bytes...");
+                _sslStream.Write(buffer, 0, toWrite);
+                Log.Trace("TlsUnwrap: written.");
+            } else Log.Trace("TlsUnwrap: no data from web app");
+
+            var read = _sslStream.Read(buffer, 0, buffer.Length);
+            if (read > 0)
+            {
+                _socket.IncomingFromTunnel(buffer, 0, read);
+                Log.Trace($"TlsUnwrap: Data from tunnel to web app: {toWrite} bytes");
+            } else Log.Trace("TlsUnwrap: no data from tunnel");
+
+            if (read < 1 && toWrite < 1) Thread.Sleep(50);
         }
     }
 
