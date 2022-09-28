@@ -73,6 +73,7 @@ public class TlsUnwrap : ISocketAdaptor
         _socket = outgoingConnectionFunction();
         
         _running = true;
+        
         _tunnelSideBuffer = new BlockingBidirectionalBuffer();
         _webAppSideBuffer = new BlockingBidirectionalBuffer();
         
@@ -83,14 +84,16 @@ public class TlsUnwrap : ISocketAdaptor
         
         _pumpThreadOutgoing = new Thread(BufferPumpOutgoing) { IsBackground = true };
         _pumpThreadOutgoing.Start();
+        
+        // Pick up the client's hello, and start doing the hand-shake
+        // The rest should happen as data is pumped around
+        _sslStream.AuthenticateAsServer(_authOptions);
     }
 
     private void BufferPumpIncoming()
     {
         var buffer = new byte[8192];
         
-        // First, pick up the client's hello, and start doing the hand-shake
-        _sslStream.AuthenticateAsServer(_authOptions);
         while (_running)
         {
             // IEB: Continue from here
@@ -182,6 +185,7 @@ public class TlsUnwrap : ISocketAdaptor
     public int IncomingFromTunnel(byte[] buffer, int offset, int length)
     {
         // Data incoming is what we should feed to our SslStream instance
+        Log.Trace($"TlsUnwrap: IncomingFromTunnel({buffer.Length} bytes, offset={offset}, length={length})");
         return _tunnelSideBuffer.WriteIncomingNonBlocking(buffer, offset, length);
     }
 
@@ -198,6 +202,7 @@ public class TlsUnwrap : ISocketAdaptor
     public int OutgoingFromLocal(byte[] buffer)
     {
         // Data outgoing is what we read from our SslStream instance
+        Log.Trace($"TlsUnwrap: OutgoingFromLocal({buffer.Length} bytes)");
         return _tunnelSideBuffer.ReadNonBlocking(buffer);
     }
     
