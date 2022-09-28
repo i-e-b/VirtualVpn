@@ -383,6 +383,12 @@ public class ChildSa : ITransportTunnel
                     return;
                 }
 
+                if (session.WebAppConnectionIsFaulted()
+                    || session.TunnelConnectionIsClosedOrFaulted())
+                {
+                    Log.Critical("Data still incoming to broken connection!");
+                }
+
                 // continue existing session
                 session.Accept(incomingIpv4Message);
             }
