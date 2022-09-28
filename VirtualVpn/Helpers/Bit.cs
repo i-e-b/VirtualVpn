@@ -330,6 +330,7 @@ public static class Bit
                 foreach(var b in chunk)
                 {
                     sb.Append($"{b:X2} ");
+                    idx++;
                 }
                 var gap = 16 - (idx - x);
                 for (int i = 0; i < gap; i++)
@@ -342,8 +343,6 @@ public static class Bit
                     if (ch >= ' ' && ch <= '~') sb.Append((char)ch);
                     else sb.Append('.');
                 }
-
-                idx += chunk.Length;
             }
 
             sb.AppendLine();

@@ -28,7 +28,8 @@ public class TlsUnwrap : ISocketAdaptor
     
     private readonly BlockingBidirectionalBuffer _tunnelSideBuffer;
     private readonly BlockingBidirectionalBuffer _webAppSideBuffer; // we will need this once we're doing a secure connection.
-    private readonly Thread _pumpThread;
+    private readonly Thread _pumpThreadIncoming;
+    private readonly Thread _pumpThreadOutgoing;
     private volatile bool _running;
 
     /// <summary>
@@ -77,16 +78,42 @@ public class TlsUnwrap : ISocketAdaptor
         
         _sslStream = new SslStream(_tunnelSideBuffer);
 
-        _pumpThread = new Thread(BufferPumpThread) { IsBackground = true };
-        _pumpThread.Start();
+        _pumpThreadIncoming = new Thread(BufferPumpIncoming) { IsBackground = true };
+        _pumpThreadIncoming.Start();
+        
+        _pumpThreadOutgoing = new Thread(BufferPumpOutgoing) { IsBackground = true };
+        _pumpThreadOutgoing.Start();
     }
 
-    private void BufferPumpThread()
+    private void BufferPumpIncoming()
     {
         var buffer = new byte[8192];
         
         // First, pick up the client's hello, and start doing the hand-shake
         _sslStream.AuthenticateAsServer(_authOptions);
+        while (_running)
+        {
+            // IEB: Continue from here
+            // BUG: This is not moving all data
+            // Keep trying to move data around between the plain and encrypted buffers.
+            // _socket <-> _plainSideBuffer | unwrap | _encryptionSideBuffer <-> ISocketAdaptor methods
+
+            var read = _sslStream.Read(buffer, 0, buffer.Length);
+            if (read > 0)
+            {
+                _socket.IncomingFromTunnel(buffer, 0, read);
+                Log.Trace($"TlsUnwrap: Data from tunnel to web app: {read} bytes;\r\n{Bit.Describe("payload", buffer.Take(read))}");
+            } else Log.Trace("TlsUnwrap: no data from tunnel");
+
+            if (read < 1) Thread.Sleep(50);
+        }
+    }
+    
+    private void BufferPumpOutgoing()
+    {
+        var buffer = new byte[8192];
+        
+        // First, pick up the client's hello, and start doing the hand-shake
         while (_running)
         {
             // IEB: Continue from here
@@ -101,15 +128,8 @@ public class TlsUnwrap : ISocketAdaptor
                 _sslStream.Write(buffer, 0, toWrite);
                 Log.Trace("TlsUnwrap: written.");
             } else Log.Trace("TlsUnwrap: no data from web app");
-
-            var read = _sslStream.Read(buffer, 0, buffer.Length);
-            if (read > 0)
-            {
-                _socket.IncomingFromTunnel(buffer, 0, read);
-                Log.Trace($"TlsUnwrap: Data from tunnel to web app: {toWrite} bytes;\r\n{Bit.Describe("payload", buffer.Take(read))}");
-            } else Log.Trace("TlsUnwrap: no data from tunnel");
-
-            if (read < 1 && toWrite < 1) Thread.Sleep(50);
+            
+            if (toWrite < 1) Thread.Sleep(50);
         }
     }
 
@@ -132,10 +152,11 @@ public class TlsUnwrap : ISocketAdaptor
         try { _sslStream.Dispose(); }
         catch (Exception ex) { Log.Error("TLS unwrap: Failed to dispose SSL stream", ex); }
         
-        var ok = _pumpThread.Join(TimeSpan.FromMilliseconds(256));
+        var ok = _pumpThreadIncoming.Join(TimeSpan.FromMilliseconds(256));
+        ok &= _pumpThreadOutgoing.Join(TimeSpan.FromMilliseconds(256));
         if (!ok)
         {
-            Log.Warn("TLS unwrap: pump thread did not stop within time limit");
+            Log.Warn("TLS unwrap: pump threads did not stop within time limit");
         }
     }
 
