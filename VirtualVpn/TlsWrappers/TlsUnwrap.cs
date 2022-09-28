@@ -40,7 +40,10 @@ public class TlsUnwrap : ISocketAdaptor
     /// Due to unresolved bugs in that operating system, this will probably not work on Windows.
     /// </summary>
     /// <param name="tlsKeyPaths">Paths to PEM keys, private first then public. separated by ';'. e.g. "/var/certs/privkey.pem;/var/certs/fullchain.pem"</param>
-    /// <param name="outgoingConnectionFunction">Function that will start the OUTGOING socket, NOT the incoming client call.</param>
+    /// <param name="outgoingConnectionFunction">
+    /// Function that will start the OUTGOING socket, NOT the incoming client call
+    /// The socket should connect with a TLS tunnel.
+    /// </param>
     public TlsUnwrap(string tlsKeyPaths, Func<ISocketAdaptor> outgoingConnectionFunction)
     {
         if (string.IsNullOrWhiteSpace(tlsKeyPaths)) throw new Exception("Must have valid paths to PEM files to start TLS re-wrap");
@@ -94,7 +97,7 @@ public class TlsUnwrap : ISocketAdaptor
         // The rest should happen as data is pumped around
         Log.Debug("TlsUnwrap: Starting SSL/TLS authentication");
         _sslStream.AuthenticateAsServer(_authOptions);
-        Log.Debug("TlsUnwrap: SSL/TLS authenticated");
+        Log.Trace("TlsUnwrap: SSL/TLS authenticated, starting incoming pump");
 
         while (_running)
         {
@@ -116,11 +119,13 @@ public class TlsUnwrap : ISocketAdaptor
     {
         var buffer = new byte[8192];
 
+        Log.Debug("TlsUnwrap: Waiting for SSL/TLS authentication");
         // wait for SSL/TLS to come up
         while (_running && !_sslStream.IsAuthenticated)
         {
-            Thread.Sleep(50);
+            Thread.Sleep(5);
         }
+        Log.Trace("TlsUnwrap: SSL/TLS is authenticated, starting outgoing pump.");
         
         // First, pick up the client's hello, and start doing the hand-shake
         while (_running)

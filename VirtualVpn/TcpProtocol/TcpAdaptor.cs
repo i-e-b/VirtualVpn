@@ -270,8 +270,8 @@ public class TcpAdaptor : ITcpAdaptor
                 // to peek at the tunneled request data
                 if (SocketThroughTunnel.BytesOfReadDataWaiting >= TlsDetector.RequiredBytes)
                 {
-                    var useTlsPort = TlsDetector.IsTlsHandshake(SocketThroughTunnel.PeekWaitingData(TlsDetector.RequiredBytes), out var isAcceptable);
-                    if (useTlsPort && !isAcceptable) throw new Exception("Client requested an SSL/TLS version that is unacceptably old.");
+                    var incomingIsTls = TlsDetector.IsTlsHandshake(SocketThroughTunnel.PeekWaitingData(TlsDetector.RequiredBytes), out var isAcceptable);
+                    if (incomingIsTls && !isAcceptable) throw new Exception("Client requested an SSL/TLS version that is unacceptably old.");
                     
                     // If this is a TLS session, AND we have a certificate
                     //       mapped to the target (local side), THEN we should
@@ -281,7 +281,7 @@ public class TcpAdaptor : ITcpAdaptor
                     //       We should still make a HTTPS call to our web app so
                     //       that we aren't exposing private data.
                     var key = new IpV4Address(LocalAddress).AsString;
-                    if (useTlsPort && Settings.TlsKeyPaths.ContainsKey(key))
+                    if (incomingIsTls && Settings.TlsKeyPaths.ContainsKey(key))
                     {
                         // Rather than Remote<-[tunnel]->WebApp
                         //  we will do Remote<->VirtualVPN | VirtualVPN<->WebApp separately.
@@ -296,14 +296,15 @@ public class TcpAdaptor : ITcpAdaptor
                         //
                         //  [WebApp] <-(socket)<-(TlsUnwrap)<- VirtualTcpSocket  <=tunnel=> [Remote Gateway]
                         
-                        var keyPaths = Settings.TlsKeyPaths[key]; // IEB: continue in here...
-                        _socketToLocalSide = new TlsUnwrap(keyPaths, () => ConnectToWebApp(false)); // TODO: add a re-wrap.
+                        var keyPaths = Settings.TlsKeyPaths[key];
+                        _socketToLocalSide = new TlsUnwrap(keyPaths, () => ConnectToWebApp(incomingIsTls: false, wrapWithTlsAdaptor: true));
+                        SocketThroughTunnel.EventPump(); // not required, but called to reduce latency
                     }
                     else
                     {
                         // using TLS means Remote<-[tunnel]->WebApp is encrypted as one stream
                         // and this TcpAdaptor doesn't try and understand the encrypted data.
-                        _socketToLocalSide = ConnectToWebApp(useTlsPort);
+                        _socketToLocalSide = ConnectToWebApp(incomingIsTls, wrapWithTlsAdaptor: false);
                     }
                 }
                 else
@@ -450,20 +451,24 @@ public class TcpAdaptor : ITcpAdaptor
         }
     }
 
-    private ISocketAdaptor ConnectToWebApp(bool useTls)
+    private ISocketAdaptor ConnectToWebApp(bool incomingIsTls, bool wrapWithTlsAdaptor)
     {
         // Connect to web app
-        var port = useTls ? Settings.WebAppHttpsPort : Settings.WebAppHttpPort;
-        Log.Debug($"Connecting to web app at {Settings.WebAppIpAddress}:{port} ({(useTls ? "SSL/TLS" : "plain")})");
+        var port = (incomingIsTls || wrapWithTlsAdaptor) ? Settings.WebAppHttpsPort : Settings.WebAppHttpPort;
+        Log.Debug($"Connecting to web app at {Settings.WebAppIpAddress}:{port} ({(incomingIsTls ? "SSL/TLS" : "plain")}, {(wrapWithTlsAdaptor ? "wrapped" : "unwrapped")})");
+        if (port < 1) throw new Exception("Port for WebApp is not configured; Can't connect");
+        
+        // IEB: Continue here
+        // TODO: add an adaptor for SSL/TLS if requested
         
         var webApiSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
         try
         {
             webApiSocket.Connect(IpV4Address.FromString(Settings.WebAppIpAddress).MakeEndpoint(port));
         }
-        catch (SocketException ex)
+        catch (SocketException socketException)
         {
-            switch (ex.SocketErrorCode)
+            switch (socketException.SocketErrorCode)
             {
                 case SocketError.AccessDenied:
                 case SocketError.NetworkDown:
@@ -478,11 +483,18 @@ public class TcpAdaptor : ITcpAdaptor
                     throw;
             }
         }
-        catch (Exception ex2)
+        catch (Exception otherException)
         {
-            if (ex2.Message.Contains("Connection refused"))
+            if (otherException.Message.Contains("Connection refused"))
                 Log.Critical("Web App not available: can't respond to traffic.\r\nCheck web app is up and settings are correct");
             throw;
+        }
+
+
+        if (wrapWithTlsAdaptor)
+        {
+            Log.Debug("connected, starting TLS adaptor");
+            return new TlsAdaptorForRealSocket(webApiSocket, Settings.WebAppIpAddress);
         }
 
         Log.Debug("connection up");
