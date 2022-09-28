@@ -281,14 +281,13 @@ public class TcpAdaptor : ITcpAdaptor
                     //       We should still make a HTTPS call to our web app so
                     //       that we aren't exposing private data.
                     var key = new IpV4Address(LocalAddress).AsString;
-                    if (Settings.TlsKeyPaths.ContainsKey(key))
+                    if (useTlsPort && Settings.TlsKeyPaths.ContainsKey(key))
                     {
                         // Rather than Remote<-[tunnel]->WebApp
                         //  we will do Remote<->VirtualVPN | VirtualVPN<->WebApp separately.
                         // This means we need to decrypt the data, and do a whole lot
                         // of buffering, but we can make the virtual endpoint have
                         // a correct certificate.
-                        //
                         //
                         // We put the TlsUnwrap around the web app socket to keep
                         // the TcpSocket logic as separate as possible (it' already complex enough!)
