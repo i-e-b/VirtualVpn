@@ -5,9 +5,11 @@ namespace VirtualVpn.TcpProtocol;
 internal class AdaptorForRealSocket : ISocketAdaptor
 {
     private readonly Socket _socket;
+    private bool _faulted;
 
     public AdaptorForRealSocket(Socket socket)
     {
+        _faulted = false;
         _socket = socket;
     }
 
@@ -26,6 +28,7 @@ internal class AdaptorForRealSocket : ISocketAdaptor
         catch (Exception ex)
         {
             Log.Error("Writing to socket failed", ex);
+            _faulted = true;
             return 0;
         }
     }
@@ -39,7 +42,13 @@ internal class AdaptorForRealSocket : ISocketAdaptor
         catch (Exception ex)
         {
             Log.Error("Reading from socket failed", ex);
+            _faulted = true;
             return 0;
         }
+    }
+
+    public bool IsFaulted()
+    {
+        return _faulted;
     }
 }

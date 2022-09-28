@@ -150,9 +150,14 @@ public class ChildSa : ITransportTunnel
                           $" local={Bit.ToIpAddressString(tcp.LocalAddress)}:{tcp.LocalPort}. Closing");
                 TerminateConnection(tcpKey);
             }
-            else if (tcp.SocketThroughTunnel.State == TcpSocketState.Closed)
+            else if (tcp.TunnelConnectionIsClosedOrFaulted())
             {
                 Log.Debug($"Old session closed: {Bit.ToIpAddressString(tcp.RemoteAddress)}:{tcp.RemotePort} -> {Bit.ToIpAddressString(tcp.LocalAddress)}:{tcp.LocalPort}");
+                TerminateConnection(tcpKey);
+            }
+            else if (tcp.WebAppConnectionIsFaulted())
+            {
+                Log.Debug($"Connection to web app faulted, disconnecting: {Bit.ToIpAddressString(tcp.RemoteAddress)}:{tcp.RemotePort} -> {Bit.ToIpAddressString(tcp.LocalAddress)}:{tcp.LocalPort}");
                 TerminateConnection(tcpKey);
             }
             else

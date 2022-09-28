@@ -29,4 +29,6 @@ public interface ISocketAdaptor:IDisposable
     /// Read data from local side to send through the tunnel
     /// </summary>
     int OutgoingFromLocal(byte[] buffer);
+
+    bool IsFaulted();
 }

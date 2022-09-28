@@ -19,6 +19,42 @@ public class TcpAdaptor : ITcpAdaptor
     /// <summary> The tunnel gateway we expect to be talking to </summary>
     public IPEndPoint Gateway { get; }
 
+    public bool TunnelConnectionIsClosedOrFaulted()
+    {
+        switch (SocketThroughTunnel.State)
+        {
+            case TcpSocketState.TimeWait:
+            case TcpSocketState.Closed:
+            case TcpSocketState.LastAck:
+                return true;
+        }
+
+        switch (SocketThroughTunnel.ErrorCode)
+        {
+            case SocketError.Success:
+            case SocketError.InProgress:
+            case SocketError.AlreadyInProgress:
+            case SocketError.MessageSize:
+            case SocketError.ProtocolType:
+            case SocketError.ProtocolOption:
+            case SocketError.IsConnected:
+            case SocketError.NotConnected:
+            case SocketError.Shutdown:
+            case SocketError.Disconnecting:
+            case SocketError.TryAgain:
+            case SocketError.NoData:
+                return false;
+            default:
+                return true;
+        }
+    }
+
+    public bool WebAppConnectionIsFaulted()
+    {
+        if (_socketToLocalSide is null) return false;
+        return _socketToLocalSide.IsFaulted();
+    }
+
     /// <summary> The tunnel session we are connected to (used for sending replies) </summary>
     private readonly ChildSa _transport;
 
@@ -547,7 +583,7 @@ public class TcpAdaptor : ITcpAdaptor
 
             default:
                 Log.Error($"Tcp virtual socket is in errored state: code={SocketThroughTunnel.ErrorCode.ToString()}, state={SocketThroughTunnel.State.ToString()}");
-                _transport.ReleaseConnection(SelfKey);
+                _transport.TerminateConnection(SelfKey);
                 return false;
         }
     }

@@ -213,7 +213,12 @@ public class TlsUnwrap : ISocketAdaptor
         Log.Trace($"TlsUnwrap: OutgoingFromLocal({buffer.Length} bytes)");
         return _tunnelSideBuffer.ReadNonBlocking(buffer);
     }
-    
+
+    public bool IsFaulted()
+    {
+        return _socket.IsFaulted();
+    }
+
     #region Certificates
 
     private X509Certificate CertSelect(object sender, string? hostname)

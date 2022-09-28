@@ -654,6 +654,9 @@ public class TestAdaptor : ITcpAdaptor
     public byte[] RemoteAddress { get; }
     public int RemotePort { get; }
     public IPEndPoint Gateway { get; }
+    public bool TunnelConnectionIsClosedOrFaulted() => false;
+
+    public bool WebAppConnectionIsFaulted() => false;
 
     public void Clear()
     {

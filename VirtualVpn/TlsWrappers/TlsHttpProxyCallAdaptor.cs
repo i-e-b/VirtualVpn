@@ -235,6 +235,11 @@ public class TlsHttpProxyCallAdaptor : ISocketAdaptor
         return _blockingBuffer.ReadNonBlocking(buffer);
     }
 
+    public bool IsFaulted()
+    {
+        return false;
+    }
+
     /// <summary>
     /// Build a response object from what has been received so far.
     /// </summary>

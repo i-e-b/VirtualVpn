@@ -64,4 +64,7 @@ public interface ITcpAdaptor
 
     /// <summary> The tunnel gateway we expect to be talking to </summary>
     IPEndPoint Gateway { get; }
+
+    bool TunnelConnectionIsClosedOrFaulted();
+    bool WebAppConnectionIsFaulted();
 }
