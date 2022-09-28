@@ -93,7 +93,13 @@ public class TlsUnwrap : ISocketAdaptor
     private void BufferPumpIncoming()
     {
         var buffer = new byte[8192];
-        
+
+        // wait for SSL/TLS to come up
+        while (_running && !_sslStream.IsAuthenticated)
+        {
+            Thread.Sleep(50);
+        }
+
         while (_running)
         {
             // IEB: Continue from here
@@ -115,6 +121,12 @@ public class TlsUnwrap : ISocketAdaptor
     private void BufferPumpOutgoing()
     {
         var buffer = new byte[8192];
+
+        // wait for SSL/TLS to come up
+        while (_running && !_sslStream.IsAuthenticated)
+        {
+            Thread.Sleep(50);
+        }
         
         // First, pick up the client's hello, and start doing the hand-shake
         while (_running)
