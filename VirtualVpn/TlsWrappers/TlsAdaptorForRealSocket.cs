@@ -23,8 +23,8 @@ public class TlsAdaptorForRealSocket : ISocketAdaptor
         
         var startupThread = new Thread(()=>{
             Log.Debug("TlsAdaptorForRealSocket. Authentication starting");
-            Connected = true;
             _sslWrapper.AuthenticateAsClient(host);
+            Connected = true;
             Log.Debug($"TlsAdaptorForRealSocket. Authentication complete. Success={_sslWrapper.IsAuthenticated}");
         }){IsBackground = true};
         startupThread.Start();

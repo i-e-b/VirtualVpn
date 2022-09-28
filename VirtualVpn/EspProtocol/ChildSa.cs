@@ -167,6 +167,8 @@ public class ChildSa : ITransportTunnel
                 Log.Debug($"Connection to web app faulted, disconnecting: {Bit.ToIpAddressString(tcp.RemoteAddress)}:{tcp.RemotePort} -> {Bit.ToIpAddressString(tcp.LocalAddress)}:{tcp.LocalPort}");
                 TerminateConnection(tcpKey);
             }
+            
+            tcp.EventPump();
         }
 
         // Old sessions that are shutting down.
