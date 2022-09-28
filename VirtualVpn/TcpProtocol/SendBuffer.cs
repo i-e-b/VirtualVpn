@@ -27,43 +27,13 @@ public class SendBuffer
     }
 
     /// <summary>
-    /// Number of bytes buffered for sending
+    /// Number of bytes buffered for sending, including already sent data
     /// </summary>
     public long Count()
     {
         lock (_lock)
         {
-            Log.Trace($"SendBuffer:Count, ReadHead={ReadHead}");
-            if (_segments.Count < 1) return 0;
-
-            var found = FindFirstSegmentForSequence(ReadHead, out var sequenceStart, out var orderedOffsets);
-
-            if (!found) return 0; // can't find any matching data
-
-            var loc = ReadHead;
-            while (sequenceStart < orderedOffsets.Count)
-            {
-                var start = orderedOffsets[sequenceStart];
-                if (start > loc) throw new Exception("Gap in transmission stream"); // REALLY shouldn't happen
-
-                var chunkOffset = loc - start;
-                var chunk = _segments[start];
-                var available = chunk.Length - chunkOffset;
-
-                // check that this is a valid selection (in case of major overlap)
-                if (available < 0)
-                {
-                    sequenceStart++;
-                    continue;
-                }
-
-                loc += available;
-                sequenceStart++;
-            }
-
-            var total = loc - ReadHead;
-            Log.Trace($"SendBuffer:Count - from {ReadHead} to {loc} ({total} bytes)");
-            return total;
+            return _segments.Values.Sum(buf=>buf.Length);
         }
     }
 

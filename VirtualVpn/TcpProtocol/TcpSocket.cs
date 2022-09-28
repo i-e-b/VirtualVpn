@@ -934,7 +934,7 @@ public class TcpSocket
         var ackN = _tcb.Rcv.Nxt;
         flags |= TcpSegmentFlags.Ack;
 
-        var bytesBuffered = _sendBuffer.Count();
+        var bytesBuffered = isRetransmit ? _sendBuffer.Count() : _sendBuffer.RemainingData();
         if (bytesBuffered < 1)
         {
             ErrorCode = SocketError.NoData;
