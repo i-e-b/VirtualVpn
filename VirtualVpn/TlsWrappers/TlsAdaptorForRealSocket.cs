@@ -19,8 +19,11 @@ public class TlsAdaptorForRealSocket : ISocketAdaptor
         
         Log.Debug($"Starting TlsAdaptorForRealSocket. Socket connected={socket.Connected}. Calling for authentication");
         
-        _sslWrapper.AuthenticateAsClient(host);
-        Log.Debug($"TlsAdaptorForRealSocket. Authentication complete. Success={_sslWrapper.IsAuthenticated}");
+        ThreadPool.QueueUserWorkItem(hostStr =>
+        {
+            _sslWrapper.AuthenticateAsClient(hostStr);
+            Log.Debug($"TlsAdaptorForRealSocket. Authentication complete. Success={_sslWrapper.IsAuthenticated}");
+        }, host, true);
     }
 
     /// <summary>
