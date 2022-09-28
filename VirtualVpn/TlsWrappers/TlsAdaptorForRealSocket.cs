@@ -34,6 +34,8 @@ public class TlsAdaptorForRealSocket : ISocketAdaptor
 
     public void Dispose()
     {
+        _closed = true;
+        
         _sslWrapper.Dispose();
         _streamWrapper.Socket?.Dispose();
     }
@@ -47,7 +49,7 @@ public class TlsAdaptorForRealSocket : ISocketAdaptor
         _streamWrapper.Socket?.Close();
     }
 
-    public bool Connected => _streamWrapper.Socket?.Connected ?? false;
+    public bool Connected => !_closed;
     public int Available => _streamWrapper.Socket?.Available ?? 0;
     public int IncomingFromTunnel(byte[] buffer, int offset, int length)
     {

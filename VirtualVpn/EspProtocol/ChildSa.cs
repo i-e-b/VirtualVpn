@@ -134,6 +134,8 @@ public class ChildSa : ITransportTunnel
     /// </summary>
     public bool EventPump()
     {
+        var goFaster = false;
+        
         // if we are the initiator, we should send periodic keep-alive pings to the peer.
         if (Parent?.WeStarted == true)
         {
@@ -142,10 +144,10 @@ public class ChildSa : ITransportTunnel
 
 
         // Check TCP sessions, close them if they are timed out.
-        var acted = false;
         var allSessions = _tcpSessions.Keys.ToList();
         foreach (var tcpKey in allSessions)
         {
+            goFaster = true; // go fast if there are any open connections
             var tcp = _tcpSessions[tcpKey];
             if (tcp is null) continue;
             
@@ -165,10 +167,6 @@ public class ChildSa : ITransportTunnel
                 Log.Debug($"Connection to web app faulted, disconnecting: {Bit.ToIpAddressString(tcp.RemoteAddress)}:{tcp.RemotePort} -> {Bit.ToIpAddressString(tcp.LocalAddress)}:{tcp.LocalPort}");
                 TerminateConnection(tcpKey);
             }
-            else
-            {
-                acted |= tcp.EventPump();
-            }
         }
 
         // Old sessions that are shutting down.
@@ -187,7 +185,7 @@ public class ChildSa : ITransportTunnel
                 || oldSession.SocketThroughTunnel.State == TcpSocketState.Listen) _parkedSessions.Remove(oldKey);
             else oldSession.EventPump();
         }
-        return acted;
+        return goFaster;
     }
     
     /// <summary>
