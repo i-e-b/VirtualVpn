@@ -37,7 +37,7 @@ public static class Log
     private static LogLevel _level = LogLevel.Warning;
     public static bool IncludeCrypto => _level >= LogLevel.Crypto;
     public static bool IncludeInfo => _level >= LogLevel.Info;
-    private static readonly object _lock = new();
+//    private static readonly object _lock = new();
 
     public static void SetLevel(LogLevel level)
     {
@@ -48,7 +48,7 @@ public static class Log
     public static void Crypto(string msg)
     {
         if (_level < LogLevel.Crypto) return;
-        lock (_lock)
+        //lock (_lock)
         {
             Console.WriteLine(msg);
         }
@@ -58,7 +58,7 @@ public static class Log
     {
         if (_level < LogLevel.Trace) return;
 
-        lock (_lock)
+        //lock (_lock)
         {
             BlankTimestamp();
             Console.WriteLine(msg);
@@ -68,7 +68,7 @@ public static class Log
     {
         if (_level < LogLevel.Trace) return;
 
-        lock (_lock)
+        //lock (_lock)
         {
             BlankTimestamp();
             Console.Write(msg);
@@ -79,7 +79,7 @@ public static class Log
     {
         if (_level < LogLevel.Trace) return;
 
-        lock (_lock)
+        //lock (_lock)
         {
             BlankTimestamp();
             Console.Write(msg());
@@ -90,7 +90,7 @@ public static class Log
     {
         if (_level < LogLevel.Trace) return;
 
-        lock (_lock)
+        //lock (_lock)
         {
             BlankTimestamp();
             Console.WriteLine(msg);
@@ -102,7 +102,7 @@ public static class Log
     {
         if (_level < LogLevel.Debug) return;
 
-        lock (_lock)
+        //lock (_lock)
         {
             Timestamp();
 
@@ -123,7 +123,7 @@ public static class Log
         if (_level < LogLevel.Debug) return;
 
 
-        lock (_lock)
+        //lock (_lock)
         {
             Timestamp();
 
@@ -144,7 +144,7 @@ public static class Log
     {
         if (_level < LogLevel.Debug) return;
 
-        lock (_lock)
+        //lock (_lock)
         {
             Timestamp();
 
@@ -157,7 +157,7 @@ public static class Log
     {
         if (_level < LogLevel.Info) return;
         
-        lock (_lock)
+        //lock (_lock)
         {
             Timestamp();
             Console.WriteLine(msg);
@@ -168,7 +168,7 @@ public static class Log
     {
         if (_level < LogLevel.Warning) return;
 
-        lock (_lock)
+        //lock (_lock)
         {
             Timestamp();
             Console.WriteLine(msg);
@@ -182,7 +182,7 @@ public static class Log
     {
         if (_level < LogLevel.Error) return;
 
-        lock (_lock)
+        //lock (_lock)
         {
             Timestamp();
             Console.WriteLine(msg);
@@ -198,7 +198,7 @@ public static class Log
         if (_level < LogLevel.Error) return;
 
 
-        lock (_lock)
+        //lock (_lock)
         {
             Timestamp();
 
@@ -218,7 +218,7 @@ public static class Log
     /// </summary>
     public static void Critical(string msg)
     {
-        lock (_lock)
+        //lock (_lock)
         {
             Timestamp();
             Console.WriteLine();
