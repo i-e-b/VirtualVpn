@@ -1,4 +1,5 @@
 ﻿using System.Net.Sockets;
+using VirtualVpn.Helpers;
 
 namespace VirtualVpn.TlsWrappers;
 
@@ -15,7 +16,7 @@ public class SocketStream : Stream
     /// <param name="socket">socket to wrap</param>
     public SocketStream(Socket socket)
     {
-        Console.WriteLine(nameof(SocketStream));
+        Log.Trace(nameof(SocketStream));
         _socket = socket;
     }
 
@@ -29,7 +30,7 @@ public class SocketStream : Stream
     /// </summary>
     ~SocketStream()
     {
-        Console.WriteLine("~" + nameof(SocketStream));
+        Log.Trace("~" + nameof(SocketStream));
         Dispose(false);
     }
 
@@ -38,7 +39,7 @@ public class SocketStream : Stream
     /// </summary>
     protected override void Dispose(bool disposing)
     {
-        Console.WriteLine(nameof(Dispose));
+        Log.Trace("SocketStream: Dispose");
         var sock = Interlocked.Exchange(ref _socket, null);
         if (sock == null) return;
         if (sock.Connected)
@@ -53,7 +54,7 @@ public class SocketStream : Stream
     /// <summary> Does nothing </summary>
     public override void Flush()
     {
-        Console.WriteLine(nameof(Flush));
+        Log.Trace("SocketStream: Flush");
     }
 
     /// <summary>
@@ -65,7 +66,7 @@ public class SocketStream : Stream
     /// <param name="buffer">An array of bytes. When this method returns, the buffer contains the specified byte array with the values between <paramref name="offset"/> and (<paramref name="offset"/> + <paramref name="count"/> - 1) replaced by the bytes read from the current source. </param><param name="offset">The zero-based byte offset in <paramref name="buffer"/> at which to begin storing the data read from the current stream. </param><param name="count">The maximum number of bytes to be read from the current stream. </param><exception cref="T:System.ArgumentException">The sum of <paramref name="offset"/> and <paramref name="count"/> is larger than the buffer length. </exception><exception cref="T:System.ArgumentNullException"><paramref name="buffer"/> is null. </exception><exception cref="T:System.ArgumentOutOfRangeException"><paramref name="offset"/> or <paramref name="count"/> is negative. </exception><exception cref="T:System.IO.IOException">An I/O error occurs. </exception><exception cref="T:System.NotSupportedException">The stream does not support reading. </exception><exception cref="T:System.ObjectDisposedException">Methods were called after the stream was closed. </exception><filterpriority>1</filterpriority>
     public override int Read(byte[] buffer, int offset, int count)
     {
-        Console.WriteLine($"{nameof(Read)}(buffer[{buffer.Length}], offset={offset}, count={count})");
+        Log.Trace($"SocketStream.{nameof(Read)}(buffer[{buffer.Length}], offset={offset}, count={count})");
         if (_socket == null) throw new InvalidOperationException("Attempted to read from a disconnected socket");
 
         Thread.Sleep(250);
@@ -77,9 +78,8 @@ public class SocketStream : Stream
             throw new SocketException((int)err);
         }
 
-        Console.WriteLine($"    {nameof(Read)} got {len} bytes; err={err.ToString()}");
-        //Console.WriteLine(string.Join(" ", buffer.Take(512).Select(b=>b.ToString("x2"))));
-        //Console.WriteLine(Encoding.UTF8.GetString(buffer, offset, len));
+        Log.Trace($"SocketStream.{nameof(Read)} got {len} bytes; err={err.ToString()}");
+        Log.Trace(string.Join(" ", Bit.Describe("message",buffer.Take(512))));
 
         Position += len;
         return len;
@@ -91,7 +91,7 @@ public class SocketStream : Stream
     /// <param name="buffer">An array of bytes. This method copies <paramref name="count"/> bytes from <paramref name="buffer"/> to the current stream. </param><param name="offset">The zero-based byte offset in <paramref name="buffer"/> at which to begin copying bytes to the current stream. </param><param name="count">The number of bytes to be written to the current stream. </param><filterpriority>1</filterpriority>
     public override void Write(byte[] buffer, int offset, int count)
     {
-        Console.WriteLine(nameof(Write));
+        Log.Trace($"SocketStream.{nameof(Write)}(buffer[{buffer.Length}], offset={offset}, count={count})");
         if (_socket == null) throw new InvalidOperationException("Attempted to read from a disconnected socket");
         _socket.Send(buffer, offset, count, SocketFlags.None, out var err);
         if (err != SocketError.Success)
@@ -105,41 +105,21 @@ public class SocketStream : Stream
     }
 
     long _writtenLength;
-    private long _position;
 
     /// <summary>
     /// Number of bytes written to socket
     /// </summary>
-    public override long Length
-    {
-        get
-        {
-            Console.WriteLine(nameof(Length));
-            return _writtenLength;
-        }
-    }
+    public override long Length => _writtenLength;
 
     /// <summary>
     /// Number of bytes read from socket
     /// </summary>
-    public override long Position
-    {
-        get
-        {
-            Console.WriteLine("get " + nameof(Position));
-            return _position;
-        }
-        set
-        {
-            Console.WriteLine("set " + nameof(Position));
-            _position = value;
-        }
-    }
+    public override long Position { get; set; }
 
     /// <summary> No action </summary>
     public override long Seek(long offset, SeekOrigin origin)
     {
-        Console.WriteLine(nameof(Seek));
+        Log.Trace($"SocketStream.{nameof(Seek)}");
         return 0;
     }
 
@@ -149,32 +129,11 @@ public class SocketStream : Stream
     }
 
     /// <summary> No action </summary>
-    public override bool CanRead
-    {
-        get
-        {
-            Console.WriteLine(nameof(CanRead));
-            return true;
-        }
-    }
+    public override bool CanRead => true;
 
     /// <summary> No action </summary>
-    public override bool CanSeek
-    {
-        get
-        {
-            Console.WriteLine(nameof(CanSeek));
-            return false;
-        }
-    }
+    public override bool CanSeek => false;
 
     /// <summary> No action </summary>
-    public override bool CanWrite
-    {
-        get
-        {
-            Console.WriteLine(nameof(CanWrite));
-            return true;
-        }
-    }
+    public override bool CanWrite => true;
 }

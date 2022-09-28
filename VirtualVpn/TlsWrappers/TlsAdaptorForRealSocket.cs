@@ -17,7 +17,10 @@ public class TlsAdaptorForRealSocket : ISocketAdaptor
         _streamWrapper = new SocketStream(socket);
         _sslWrapper = new SslStream(_streamWrapper, false, AnyCertificate);
         
+        Log.Debug($"Starting TlsAdaptorForRealSocket. Socket connected={socket.Connected}. Calling for authentication");
+        
         _sslWrapper.AuthenticateAsClient(host);
+        Log.Debug($"TlsAdaptorForRealSocket. Authentication complete. Success={_sslWrapper.IsAuthenticated}");
     }
 
     /// <summary>

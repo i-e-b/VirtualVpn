@@ -11,6 +11,11 @@ using VirtualVpn.TcpProtocol;
 
 namespace VirtualVpn.EspProtocol;
 
+/// <summary>
+/// This manages the Security Associations that tunnel traffic
+/// between gateways. Called "Child SA" because they are made
+/// by a "Parent" IKE session.
+/// </summary>
 public class ChildSa : ITransportTunnel
 {
     // Static port rotator
