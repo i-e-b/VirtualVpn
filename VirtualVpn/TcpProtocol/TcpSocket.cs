@@ -646,7 +646,7 @@ public class TcpSocket
 
     private void SetState(TcpSocketState newState) // lib/tcp/tcp.c:178
     {
-        Log.Trace($"Transition from state {_state.ToString()} to {newState.ToString()}");
+        Log.TraceWithStack($"Transition from state {_state.ToString()} to {newState.ToString()}");
         _stateTransitions++;
 
         lock (_lock)

@@ -57,12 +57,11 @@ public static class Log
         BlankTimestamp();
         Console.WriteLine(msg);
     }
-
     public static void Trace(string msg, Func<string> more)
     {
         if (_level < LogLevel.Trace) return;
         
-        Console.Write("                       "); // same spacing as timestamp
+        BlankTimestamp();
         Console.Write(msg);
         Console.WriteLine(more());
     }
@@ -70,8 +69,17 @@ public static class Log
     {
         if (_level < LogLevel.Trace) return;
         
-        Console.Write("                       "); // same spacing as timestamp
+        BlankTimestamp();
         Console.Write(msg());
+    }
+    
+    public static void TraceWithStack(string msg)
+    {
+        if (_level < LogLevel.Trace) return;
+        
+        BlankTimestamp();
+        Console.WriteLine(msg);
+        WriteStack();
     }
 
     public static void Debug(string msg, Func<IEnumerable<string>>? subLines = null)
@@ -113,16 +121,9 @@ public static class Log
         Timestamp();
         
         Console.WriteLine(msg);
-        var st = new StackTrace(0);
-        
-        var frames = st.GetFrames();
-        foreach (var frame in frames)
-        {
-            BlankTimestamp();
-            Console.WriteLine($"    {(frame.GetMethod()?.Name ?? "unknown")}; {frame.GetFileName()??"?"}::{frame.GetFileLineNumber()}");
-        }
+        WriteStack();
     }
-    
+
     public static void Info(string msg)
     {
         if (_level < LogLevel.Info) return;
@@ -182,12 +183,24 @@ public static class Log
         Console.WriteLine();
     }
 
+
+    private static void WriteStack()
+    {
+        var st = new StackTrace(0);
+
+        var frames = st.GetFrames();
+        foreach (var frame in frames)
+        {
+            BlankTimestamp();
+            Console.WriteLine($"    {(frame.GetMethod()?.Name ?? "unknown")}; {frame.GetFileName() ?? "?"}::{frame.GetFileLineNumber()}");
+        }
+    }
+    
     private static void Timestamp()
     {
         Console.Write(DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm"));
         Console.Write(" (utc) ");
     }
-    
 
     private static void BlankTimestamp()
     {
