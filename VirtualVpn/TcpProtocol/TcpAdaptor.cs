@@ -25,7 +25,11 @@ public class TcpAdaptor : ITcpAdaptor
         {
             case TcpSocketState.TimeWait:
             case TcpSocketState.Closed:
+            case TcpSocketState.Closing:
+            case TcpSocketState.CloseWait:
             case TcpSocketState.LastAck:
+            case TcpSocketState.FinWait1:
+            case TcpSocketState.FinWait2:
                 return true;
         }
 

@@ -384,7 +384,8 @@ public class ChildSa : ITransportTunnel
                 }
 
                 if (session.WebAppConnectionIsFaulted()
-                    || session.TunnelConnectionIsClosedOrFaulted())
+                    || session.TunnelConnectionIsClosedOrFaulted()
+                    )
                 {
                     Log.Critical("Data still incoming to broken connection!");
                 }
