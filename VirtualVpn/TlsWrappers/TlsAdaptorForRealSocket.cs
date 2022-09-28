@@ -13,6 +13,7 @@ public class TlsAdaptorForRealSocket : ISocketAdaptor
 
     public TlsAdaptorForRealSocket(Socket socket, string host)
     {
+        Connected = false;
         _faulted = false;
         _closed = false;
         _streamWrapper = new SocketStream(socket);
@@ -24,6 +25,7 @@ public class TlsAdaptorForRealSocket : ISocketAdaptor
         {
             _sslWrapper.AuthenticateAsClient(hostStr);
             Log.Debug($"TlsAdaptorForRealSocket. Authentication complete. Success={_sslWrapper.IsAuthenticated}");
+            Connected = true;
         }, host, true);
     }
 
@@ -49,7 +51,7 @@ public class TlsAdaptorForRealSocket : ISocketAdaptor
         _streamWrapper.Socket?.Close();
     }
 
-    public bool Connected => !_closed;
+    public bool Connected { get; private set; }
     public int Available => _streamWrapper.Socket?.Available ?? 0;
     public int IncomingFromTunnel(byte[] buffer, int offset, int length)
     {
