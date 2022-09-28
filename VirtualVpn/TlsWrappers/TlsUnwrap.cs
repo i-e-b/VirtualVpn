@@ -104,14 +104,22 @@ public class TlsUnwrap : ISocketAdaptor
             // Keep trying to move data around between the plain and encrypted buffers.
             // _socket <-> _plainSideBuffer | unwrap | _encryptionSideBuffer <-> ISocketAdaptor methods
 
-            var read = _sslStream.Read(buffer, 0, buffer.Length);
-            if (read > 0)
+            try
             {
-                _socket.IncomingFromTunnel(buffer, 0, read);
-                Log.Trace($"TlsUnwrap: Data from tunnel to web app: {read} bytes;\r\n{Bit.Describe("payload", buffer.Take(read))}");
-            } else Log.Trace("TlsUnwrap: no data from tunnel");
+                var read = _sslStream.Read(buffer, 0, buffer.Length);
+                if (read > 0)
+                {
+                    _socket.IncomingFromTunnel(buffer, 0, read);
+                    Log.Trace($"TlsUnwrap: Data from tunnel to web app: {read} bytes;\r\n{Bit.Describe("payload", buffer.Take(read))}");
+                }
+                else Log.Trace("TlsUnwrap: no data from tunnel");
 
-            if (read < 1) Thread.Sleep(50);
+                if (read < 1) Thread.Sleep(1);
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Failure in TlsUnwrap.BufferPumpIncoming", ex);
+            }
         }
     }
     
@@ -132,22 +140,31 @@ public class TlsUnwrap : ISocketAdaptor
         {
             // Keep trying to move data around between the plain and encrypted buffers.
             // _socket <-> _plainSideBuffer | unwrap | _encryptionSideBuffer <-> ISocketAdaptor methods
-            
-            var toWrite = _socket.OutgoingFromLocal(buffer);
-            if (toWrite > 0)
+
+            try
             {
-                Log.Trace($"TlsUnwrap: Data from web app: {toWrite} bytes;\r\n{Bit.Describe("payload", buffer.Take(toWrite))}");
-                _sslStream.Write(buffer, 0, toWrite);
-                Log.Trace("TlsUnwrap: written.");
-            } else Log.Trace("TlsUnwrap: no data from web app");
-            
-            if (toWrite < 1) Thread.Sleep(50);
+                var toWrite = _socket.OutgoingFromLocal(buffer);
+                if (toWrite > 0)
+                {
+                    Log.Trace($"TlsUnwrap: Data from web app: {toWrite} bytes;\r\n{Bit.Describe("payload", buffer.Take(toWrite))}");
+                    _sslStream.Write(buffer, 0, toWrite);
+                    Log.Trace("TlsUnwrap: written.");
+                }
+                else Log.Trace("TlsUnwrap: no data from web app");
+
+                if (toWrite < 1) Thread.Sleep(1);
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Failure in TlsUnwrap.BufferPumpOutgoing", ex);
+            }
         }
     }
 
     /// <summary>Release the underlying socket</summary>
     public void Dispose()
     {
+        _running = false;
         Close();
         GC.SuppressFinalize(this);
     }
