@@ -19,11 +19,27 @@ internal class AdaptorForRealSocket : ISocketAdaptor
     public int Available => _socket.Available;
     public int IncomingFromTunnel(byte[] buffer, int offset, int length)
     {
-        return _socket.Send(buffer, offset, length, SocketFlags.None);
+        try
+        {
+            return _socket.Send(buffer, offset, length, SocketFlags.None);
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Writing to socket failed", ex);
+            return 0;
+        }
     }
 
     public int OutgoingFromLocal(byte[] buffer)
     {
-        return _socket.Receive(buffer);
+        try
+        {
+            return _socket.Receive(buffer);
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Reading from socket failed", ex);
+            return 0;
+        }
     }
 }
