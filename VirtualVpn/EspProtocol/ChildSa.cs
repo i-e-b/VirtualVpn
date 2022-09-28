@@ -389,6 +389,10 @@ public class ChildSa : ITransportTunnel
                 {
                     Log.Critical("Data still incoming to broken connection!");
                 }
+                else
+                {
+                    Log.Trace($"####################  Virtual Socket-- state={session.SocketThroughTunnel.State}; error code={session.SocketThroughTunnel.ErrorCode}");
+                }
 
                 // continue existing session
                 session.Accept(incomingIpv4Message);
