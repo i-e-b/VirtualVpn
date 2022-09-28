@@ -367,11 +367,17 @@ public class VpnServer : ISessionHost, IDisposable
         var target = IpV4Address.FromString(prefix[1]);
 
         var matchingSessions = _childSessions.Values.Where(s => s.ContainsIp(target)).ToList();
-        if (matchingSessions.Count > 1) throw new Exception("More than one session claims this IP address (conflict)");
+        if (matchingSessions.Count > 1) HandleSessionConflict(matchingSessions);
         if (matchingSessions.Count < 1) throw new Exception("No session claims this IP address (not found)");
         
         var session = matchingSessions[0];
         session.SendPing(target);
+    }
+
+    private static void HandleSessionConflict(List<ChildSa> matchingSessions)
+    {
+        Log.Warn("More than one session claims this IP address (conflict). Will use first in list.");
+        Log.Info($"Conflicting sessions:\r\n\r\n{string.Join("\r\n", matchingSessions.Select(s=>s.Describe()))}");
     }
 
     private void ListGateways()

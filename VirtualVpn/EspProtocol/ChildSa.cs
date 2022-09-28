@@ -667,4 +667,5 @@ public class ChildSa : ITransportTunnel
         _pingTimer.Restart();
     }
 
+    public string Describe() => $"Child SA, ({Bit.HexString(_spiIn)} / {Bit.HexString(_spiOut)}) Gateway={Gateway.AsString}, ParentSession={Parent?.LocalSpi:x16}";
 }

@@ -328,7 +328,6 @@ public class VpnSession
                     case SessionState.ESTABLISHED:
                     {
                         Log.Critical("IKE_AUTH received for established connection. We might have failed a DPD check, or not sent keep-alive messages?");
-                        // TODO: need to be able to re-establish a connection we thought was up.
                         break;
                     }
                     default:
@@ -361,9 +360,6 @@ public class VpnSession
     /// This is for signalling changes 
     /// https://datatracker.ietf.org/doc/html/rfc4555
     /// </summary>
-    /// <param name="request"></param>
-    /// <param name="sender"></param>
-    /// <param name="sendZeroHeader"></param>
     private void HandleMobIke(IkeMessage request, IPEndPoint sender, bool sendZeroHeader)
     {
         // TODO: implement this. Probably need to send a correctly formed reply

@@ -98,8 +98,6 @@ public class TlsUnwrap : ISocketAdaptor
 
         while (_running)
         {
-            // IEB: Continue from here
-            // BUG: This is not moving all data
             // Keep trying to move data around between the plain and encrypted buffers.
             // _socket <-> _plainSideBuffer | unwrap | _encryptionSideBuffer <-> ISocketAdaptor methods
 
@@ -127,8 +125,6 @@ public class TlsUnwrap : ISocketAdaptor
         // First, pick up the client's hello, and start doing the hand-shake
         while (_running)
         {
-            // IEB: Continue from here
-            // BUG: This is not moving all data
             // Keep trying to move data around between the plain and encrypted buffers.
             // _socket <-> _plainSideBuffer | unwrap | _encryptionSideBuffer <-> ISocketAdaptor methods
             

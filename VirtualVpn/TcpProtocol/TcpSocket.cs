@@ -998,7 +998,7 @@ public class TcpSocket
         }
 
         Log.Info($"SendData: Transmitting data. Expected length={toSend}, Payload length={seg.Payload.Length}");
-        if (toSend != seg.Payload.Length) // BUG: I think this happens during overlap?
+        if (toSend != seg.Payload.Length)
         {
             Log.Critical($"Wrong payload length! Expected {toSend}, but got {seg.Payload.Length}. Error in send buffer? SendBuffer.Count() did not match SendBuffer.Pull()");
             Log.Warn($"bytesBuffered={bytesBuffered},willFitInWindow={willFitInWindow},toSend={toSend},seg.Flags={seg.Flags.ToString()}");
