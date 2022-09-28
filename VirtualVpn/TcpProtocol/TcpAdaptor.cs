@@ -30,6 +30,7 @@ public class TcpAdaptor : ITcpAdaptor
     // Transaction state triggers
     private volatile bool _closeCalled;
 
+    private readonly object _transferLock = new();
     private readonly byte[] _receiveBuffer = new byte[1800]; // big enough for a TCP packet
 
     /// <summary>
@@ -204,7 +205,11 @@ public class TcpAdaptor : ITcpAdaptor
         SocketThroughTunnel.FeedIncomingPacket(tcp, ipv4);
         SocketThroughTunnel.EventPump(); // not strictly needed, but reduces latency a bit
 
-        RunDataTransfer();
+        lock (_transferLock)
+        {
+            RunDataTransfer();
+        }
+
         return true;
     }
 
@@ -266,7 +271,11 @@ public class TcpAdaptor : ITcpAdaptor
                         _socketToLocalSide = ConnectToWebApp(useTlsPort);
                     }
                 }
-                else Log.Trace("Not enough data received to do SSL/TLS detection. Waiting for more.");
+                else
+                {
+                    Log.Trace("Not enough data received to do SSL/TLS detection. Waiting for more.");
+                    return false;
+                }
             }
             catch (Exception ex)
             {
