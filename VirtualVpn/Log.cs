@@ -113,13 +113,13 @@ public static class Log
         Timestamp();
         
         Console.WriteLine(msg);
-        var st = new StackTrace(1);
+        var st = new StackTrace(0);
         
         var frames = st.GetFrames();
         foreach (var frame in frames)
         {
             BlankTimestamp();
-            Console.WriteLine($"{(frame.GetMethod()?.Name ?? "unknown")}; {frame.GetFileName()??"?"}::{frame.GetFileLineNumber()}");
+            Console.WriteLine($"    {(frame.GetMethod()?.Name ?? "unknown")}; {frame.GetFileName()??"?"}::{frame.GetFileLineNumber()}");
         }
     }
     

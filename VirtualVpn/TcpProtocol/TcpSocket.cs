@@ -1799,6 +1799,7 @@ public class TcpSocket
         if (!SeqInWindow(segEnd, _tcb.Rcv.Nxt, _tcb.Rcv.Wnd))
         {
             valid = false;
+            Log.DebugWithStack("Caller is stuffing window. Maybe a streaming adaptor issue?");
             Log.Warn($"More data sent that fits in negotiated window. SEQ={segSeq}, End={segEnd}, Length={segLen}, RCV.NXT={_tcb.Rcv.Nxt}, RCV.WND={_tcb.Rcv.Wnd}");
         }
 
