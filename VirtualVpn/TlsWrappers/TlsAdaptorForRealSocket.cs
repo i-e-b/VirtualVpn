@@ -22,10 +22,10 @@ public class TlsAdaptorForRealSocket : ISocketAdaptor
         Log.Debug($"Starting TlsAdaptorForRealSocket. Socket connected={socket.Connected}. Calling for authentication");
         
         var startupThread = new Thread(()=>{
-            Log.Debug($"TlsAdaptorForRealSocket. Authentication starting");
+            Log.Debug("TlsAdaptorForRealSocket. Authentication starting");
+            Connected = true;
             _sslWrapper.AuthenticateAsClient(host);
             Log.Debug($"TlsAdaptorForRealSocket. Authentication complete. Success={_sslWrapper.IsAuthenticated}");
-            Connected = true;
         }){IsBackground = true};
         startupThread.Start();
         Log.Trace("TlsAdaptorForRealSocket: Leaving constructor");
