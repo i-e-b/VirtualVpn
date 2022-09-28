@@ -283,20 +283,12 @@ public static class Bit
         
         return result;
     }
-    /// <summary>
-    /// Generate a description string in the same format as StrongSwan logs
-    /// </summary>
-    public static string Describe(string name, byte[]? bytes)
-    {
-        return Describe(name, bytes, 0, bytes?.Length ?? 0);
-    }
     
     /// <summary>
     /// Generate a description string in the same format as StrongSwan logs
     /// </summary>
-    public static string Describe(string name, byte[]? bytes, int offset, int length)
+    public static string Describe(string name, IEnumerable<byte>? bytes)
     {
-        var end = offset+length;
         if (Settings.CodeModeForDescription)
         {
             name = Safe(name);
@@ -308,10 +300,9 @@ public static class Bit
             sb.Append(name);
             sb.Append(" = new byte[] {");
             
-            if (end > bytes.Length) end = bytes.Length;
-            for (int b = offset; b < end; b++)
+            foreach (var b in bytes)
             {
-                sb.Append($"0x{bytes[b]:X2}, ");
+                sb.Append($"0x{b:X2}, ");
             }
             
             sb.Append("};");
@@ -328,38 +319,44 @@ public static class Bit
 
             var sb = new StringBuilder();
 
-            sb.Append(name);
-            sb.Append(" => ");
-            sb.Append(bytes.Length);
-            sb.Append("bytes");
-
-            var idx = offset;
-            if (end > bytes.Length) end = bytes.Length;
-            while (idx < end)
+            var idx = 0;
+            var chunks = bytes.Chunk(16);
+            
+            foreach (var chunk in chunks)
             {
                 sb.AppendLine();
                 sb.Append($"{idx:d4}: ");
                 var x = idx;
-                for (int b = 0; (b < 16) && (idx < bytes.Length); b++)
+                foreach(var b in chunk)
                 {
-                    sb.Append($"{bytes[idx++]:X2} ");
+                    sb.Append($"{b:X2} ");
                 }
                 var gap = 16 - (idx - x);
                 for (int i = 0; i < gap; i++)
                 {
                     sb.Append("   ");
                 }
-                for (int b = 0; (b < 16) && (x < bytes.Length); b++)
+                foreach(var b in chunk)
                 {
-                    var ch = bytes[x++];
+                    var ch = b;
                     if (ch >= ' ' && ch <= '~') sb.Append((char)ch);
                     else sb.Append('.');
                 }
+
+                idx += chunk.Length;
             }
 
             sb.AppendLine();
-            return sb.ToString();
+            return $"{name} => {idx} bytes" + sb;
         }
+    }
+    
+    /// <summary>
+    /// Generate a description string in the same format as StrongSwan logs
+    /// </summary>
+    public static string Describe(string name, byte[]? bytes, int offset, int length)
+    {
+        return Describe(name, bytes?.Skip(offset).Take(length));
     }
 
     /// <summary>
