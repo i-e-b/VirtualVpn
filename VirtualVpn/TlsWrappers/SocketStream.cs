@@ -70,16 +70,25 @@ public class SocketStream : Stream
         if (_socket == null) throw new InvalidOperationException("Attempted to read from a disconnected socket");
 
         Thread.Sleep(250);
-        var len = _socket.Receive(buffer, offset, count, SocketFlags.None, out var err);
-        if (err != SocketError.Success && err != SocketError.WouldBlock)
+        int len;
+        try
         {
-            if (err == SocketError.TimedOut)
-                throw new TimeoutException();
-            throw new SocketException((int)err);
-        }
+            len = _socket.Receive(buffer, offset, count, SocketFlags.None, out var err);
+            if (err != SocketError.Success && err != SocketError.WouldBlock)
+            {
+                if (err == SocketError.TimedOut)
+                    throw new TimeoutException();
+                throw new SocketException((int)err);
+            }
 
-        Log.Trace($"SocketStream.{nameof(Read)} got {len} bytes; err={err.ToString()}");
-        Log.Trace(string.Join(" ", Bit.Describe("message",buffer.Take(512))));
+            Log.Trace($"SocketStream.{nameof(Read)} got {len} bytes; err={err.ToString()}");
+            Log.Trace(string.Join(" ", Bit.Describe("message", buffer.Take(512))));
+        }
+        catch (Exception ex)
+        {
+            Log.Error("SocketStream: Failed to read from underlying socket", ex);
+            return 0;
+        }
 
         Position += len;
         return len;

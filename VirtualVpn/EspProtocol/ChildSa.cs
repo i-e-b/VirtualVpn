@@ -397,17 +397,6 @@ public class ChildSa : ITransportTunnel
                 session.Accept(incomingIpv4Message);
                 return;
             }
-
-            var parked = _parkedSessions[key];
-            if (parked is not null)
-            {
-                // kick a parked session? This should be FIN etc.
-                Log.Trace($"####################  PARKED Virtual Socket-- state={parked.SocketThroughTunnel.State}; error code={parked.SocketThroughTunnel.ErrorCode}");
-                parked.Accept(incomingIpv4Message);
-                return;
-            }
-
-            // Not a known session
             
             // check this is valid as the start of a new session
             var ok = ByteSerialiser.FromBytes<TcpSegment>(incomingIpv4Message.Payload, out var tcp);
@@ -416,6 +405,26 @@ public class ChildSa : ITransportTunnel
                 Log.Info($"Rejecting invalid TCP/IP request: {incomingIpv4Message.Destination.AsString}:{tcp.DestinationPort} ({tcp.Flags.ToString()})");
                 return;
             }
+
+            var parked = _parkedSessions[key];
+            if (parked is not null && tcp.Flags.FlagsClear(TcpSegmentFlags.Syn))
+            {
+                if (parked.WebAppConnectionIsFaulted() || parked.TunnelConnectionIsClosedOrFaulted())
+                {
+                    Log.Trace($"####################  PARKED Virtual Socket-- state={parked.SocketThroughTunnel.State}; error code={parked.SocketThroughTunnel.ErrorCode}");
+                    Log.Info("Parked session in closed or faulted state. Will start a new session.");
+                    // don't return.
+                }
+                else
+                {
+                    // kick a parked session? This should be FIN etc.
+                    Log.Trace($"####################  PARKED Virtual Socket-- tcp flags={tcp.Flags.ToString()}; state={parked.SocketThroughTunnel.State}; error code={parked.SocketThroughTunnel.ErrorCode}");
+                    parked.Accept(incomingIpv4Message);
+                    return;
+                }
+            }
+
+            // Not a known session
 
             // Check for shut-down messages
             if (tcp.Flags.FlagsSet(TcpSegmentFlags.FinAck))

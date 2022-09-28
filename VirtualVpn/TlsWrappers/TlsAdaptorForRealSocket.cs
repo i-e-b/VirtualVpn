@@ -7,13 +7,14 @@ namespace VirtualVpn.TlsWrappers;
 
 public class TlsAdaptorForRealSocket : ISocketAdaptor
 {
-    private bool _faulted;
+    private bool _faulted, _closed;
     private readonly SocketStream _streamWrapper;
     private readonly SslStream _sslWrapper;
 
     public TlsAdaptorForRealSocket(Socket socket, string host)
     {
         _faulted = false;
+        _closed = false;
         _streamWrapper = new SocketStream(socket);
         _sslWrapper = new SslStream(_streamWrapper, false, AnyCertificate);
         
@@ -39,6 +40,9 @@ public class TlsAdaptorForRealSocket : ISocketAdaptor
 
     public void Close()
     {
+        if (_closed) return;
+        _closed = true;
+        
         _sslWrapper.Close();
         _streamWrapper.Socket?.Close();
     }
@@ -47,6 +51,12 @@ public class TlsAdaptorForRealSocket : ISocketAdaptor
     public int Available => _streamWrapper.Socket?.Available ?? 0;
     public int IncomingFromTunnel(byte[] buffer, int offset, int length)
     {
+        if (_closed)
+        {
+            Log.Warn("TlsAdaptorForRealSocket.IncomingFromTunnel: use after closed");
+            return 0;
+        }
+
         try
         {
             _sslWrapper.Write(buffer, offset, length);
@@ -62,6 +72,12 @@ public class TlsAdaptorForRealSocket : ISocketAdaptor
 
     public int OutgoingFromLocal(byte[] buffer)
     {
+        if (_closed)
+        {
+            Log.Warn("TlsAdaptorForRealSocket.OutgoingFromLocal: use after closed");
+            return 0;
+        }
+        
         try
         {
             return _sslWrapper.Read(buffer);
