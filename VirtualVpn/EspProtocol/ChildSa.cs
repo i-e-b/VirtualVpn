@@ -373,7 +373,6 @@ public class ChildSa : ITransportTunnel
 
             // Is it a known session?
             var session = _tcpSessions[key];
-            var parked = _parkedSessions[key];
             if (session is not null)
             {
                 // check that this session is still coming through the original tunnel
@@ -391,54 +390,59 @@ public class ChildSa : ITransportTunnel
                 }
                 else
                 {
-                    Log.Trace($"####################  Virtual Socket-- state={session.SocketThroughTunnel.State}; error code={session.SocketThroughTunnel.ErrorCode}");
+                    Log.Trace($"#################### ACTIVE Virtual Socket-- state={session.SocketThroughTunnel.State}; error code={session.SocketThroughTunnel.ErrorCode}");
                 }
 
                 // continue existing session
                 session.Accept(incomingIpv4Message);
+                return;
             }
-            else if (parked is not null)
+
+            var parked = _parkedSessions[key];
+            if (parked is not null)
             {
                 // kick a parked session? This should be FIN etc.
+                Log.Trace($"####################  PARKED Virtual Socket-- state={parked.SocketThroughTunnel.State}; error code={parked.SocketThroughTunnel.ErrorCode}");
                 parked.Accept(incomingIpv4Message);
+                return;
             }
-            else
+
+            // Not a known session
+            
+            // check this is valid as the start of a new session
+            var ok = ByteSerialiser.FromBytes<TcpSegment>(incomingIpv4Message.Payload, out var tcp);
+            if (!ok)
             {
-                // check this is valid as the start of a new session
-                var ok = ByteSerialiser.FromBytes<TcpSegment>(incomingIpv4Message.Payload, out var tcp);
-                if (!ok)
-                {
-                    Log.Info($"Rejecting invalid TCP/IP request: {incomingIpv4Message.Destination.AsString}:{tcp.DestinationPort} ({tcp.Flags.ToString()})");
-                    return;
-                }
-
-                // Check for shut-down messages
-                if (tcp.Flags.FlagsSet(TcpSegmentFlags.FinAck))
-                {
-                    Log.Trace($"Got FIN/ACK from {incomingIpv4Message.Source.AsString}. Sending final ACK");
-                    ReplyToFinAck(incomingIpv4Message, tcp, sender);
-                    return;
-                }
-                
-                if (tcp.Flags.FlagsSet(TcpSegmentFlags.Ack) || tcp.Flags.FlagsSet(TcpSegmentFlags.Rst))
-                {
-                    Log.Trace("Got end-of-stream message for a stream we already closed. Ignoring");
-                    return;
-                }
-
-                if (!tcp.Flags.FlagsSet(TcpSegmentFlags.Syn))
-                {
-                    // Looks ok, but it's not the start of a TCP stream.
-                    // This might happen if we get FIN messages for sessions we've already abandoned
-                    Log.Warn($"Rejecting TCP/IP request due to invalid flags: {incomingIpv4Message.Destination.AsString}:{tcp.DestinationPort} ({tcp.Flags.ToString()})");
-                    return;
-                }
-
-                // start new session
-                var newSession = new TcpAdaptor(this, sender, key, null);
-                var sessionOk = newSession.StartIncoming(incomingIpv4Message);
-                if (sessionOk) _tcpSessions[key] = newSession;
+                Log.Info($"Rejecting invalid TCP/IP request: {incomingIpv4Message.Destination.AsString}:{tcp.DestinationPort} ({tcp.Flags.ToString()})");
+                return;
             }
+
+            // Check for shut-down messages
+            if (tcp.Flags.FlagsSet(TcpSegmentFlags.FinAck))
+            {
+                Log.Trace($"Got FIN/ACK from {incomingIpv4Message.Source.AsString}. Sending final ACK");
+                ReplyToFinAck(incomingIpv4Message, tcp, sender);
+                return;
+            }
+                
+            if (tcp.Flags.FlagsSet(TcpSegmentFlags.Ack) || tcp.Flags.FlagsSet(TcpSegmentFlags.Rst))
+            {
+                Log.Trace("Got end-of-stream message for a stream we already closed. Ignoring");
+                return;
+            }
+
+            if (!tcp.Flags.FlagsSet(TcpSegmentFlags.Syn))
+            {
+                // Looks ok, but it's not the start of a TCP stream.
+                // This might happen if we get FIN messages for sessions we've already abandoned
+                Log.Warn($"Rejecting TCP/IP request due to invalid flags: {incomingIpv4Message.Destination.AsString}:{tcp.DestinationPort} ({tcp.Flags.ToString()})");
+                return;
+            }
+
+            // start new session
+            var newSession = new TcpAdaptor(this, sender, key, null);
+            var sessionOk = newSession.StartIncoming(incomingIpv4Message);
+            if (sessionOk) _tcpSessions[key] = newSession;
         }
         catch (Exception ex)
         {
