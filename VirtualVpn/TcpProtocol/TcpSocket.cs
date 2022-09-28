@@ -1794,6 +1794,7 @@ public class TcpSocket
         {
             valid = false;
             Log.Warn($"Received out of sequence segment. SEQ {segSeq} < RCV.NXT {_tcb.Rcv.Nxt}");
+            Log.DebugWithStack("Caller is giving bad sequence. Maybe a streaming adaptor issue?");
         }
 
         if (!SeqInWindow(segEnd, _tcb.Rcv.Nxt, _tcb.Rcv.Wnd))
