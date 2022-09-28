@@ -21,12 +21,14 @@ public class TlsAdaptorForRealSocket : ISocketAdaptor
         
         Log.Debug($"Starting TlsAdaptorForRealSocket. Socket connected={socket.Connected}. Calling for authentication");
         
-        ThreadPool.QueueUserWorkItem(hostStr =>
-        {
-            _sslWrapper.AuthenticateAsClient(hostStr);
+        var startupThread = new Thread(()=>{
+            Log.Debug($"TlsAdaptorForRealSocket. Authentication starting");
+            _sslWrapper.AuthenticateAsClient(host);
             Log.Debug($"TlsAdaptorForRealSocket. Authentication complete. Success={_sslWrapper.IsAuthenticated}");
             Connected = true;
-        }, host, true);
+        }){IsBackground = true};
+        startupThread.Start();
+        Log.Trace("TlsAdaptorForRealSocket: Leaving constructor");
     }
 
     /// <summary>
@@ -36,6 +38,7 @@ public class TlsAdaptorForRealSocket : ISocketAdaptor
 
     public void Dispose()
     {
+        Log.Trace("TlsAdaptorForRealSocket: Dispose");
         _closed = true;
         
         _sslWrapper.Dispose();
@@ -44,6 +47,7 @@ public class TlsAdaptorForRealSocket : ISocketAdaptor
 
     public void Close()
     {
+        Log.Trace("TlsAdaptorForRealSocket: Close");
         if (_closed) return;
         _closed = true;
         
@@ -63,6 +67,7 @@ public class TlsAdaptorForRealSocket : ISocketAdaptor
 
         try
         {
+            Log.Trace("TlsAdaptorForRealSocket: IncomingFromTunnel");
             _sslWrapper.Write(buffer, offset, length);
             return length;
         }
@@ -84,6 +89,7 @@ public class TlsAdaptorForRealSocket : ISocketAdaptor
         
         try
         {
+            Log.Trace("TlsAdaptorForRealSocket: OutgoingFromLocal");
             return _sslWrapper.Read(buffer);
         }
         catch (Exception ex)
