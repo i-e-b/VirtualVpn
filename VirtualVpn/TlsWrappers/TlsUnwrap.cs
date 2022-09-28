@@ -84,21 +84,17 @@ public class TlsUnwrap : ISocketAdaptor
         
         _pumpThreadOutgoing = new Thread(BufferPumpOutgoing) { IsBackground = true };
         _pumpThreadOutgoing.Start();
-        
-        // Pick up the client's hello, and start doing the hand-shake
-        // The rest should happen as data is pumped around
-        _sslStream.AuthenticateAsServer(_authOptions);
     }
 
     private void BufferPumpIncoming()
     {
         var buffer = new byte[8192];
 
-        // wait for SSL/TLS to come up
-        while (_running && !_sslStream.IsAuthenticated)
-        {
-            Thread.Sleep(50);
-        }
+        // Pick up the client's hello, and start doing the hand-shake
+        // The rest should happen as data is pumped around
+        Log.Debug("TlsUnwrap: Starting SSL/TLS authentication");
+        _sslStream.AuthenticateAsServer(_authOptions);
+        Log.Debug("TlsUnwrap: SSL/TLS authenticated");
 
         while (_running)
         {
