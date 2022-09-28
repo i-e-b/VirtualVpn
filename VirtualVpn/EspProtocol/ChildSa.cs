@@ -95,7 +95,7 @@ public class ChildSa : ITransportTunnel
             }
             else
             {
-                result.Add($"ACTIVE: {session.Address}:{session.Port} - {tcp.SocketThroughTunnel.State.ToString()} ( {IpV4Address.Describe(tcp.LocalAddress)}:{tcp.LocalPort}->{IpV4Address.Describe(tcp.RemoteAddress)}:{tcp.RemotePort} )");
+                result.Add($"ACTIVE: {IpV4Address.Describe(session.Address)}:{session.Port} - {tcp.SocketThroughTunnel.State.ToString()} ( {IpV4Address.Describe(tcp.LocalAddress)}:{tcp.LocalPort}->{IpV4Address.Describe(tcp.RemoteAddress)}:{tcp.RemotePort} )");
             }
         }
         

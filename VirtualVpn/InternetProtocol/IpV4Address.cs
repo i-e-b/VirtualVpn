@@ -119,4 +119,13 @@ public class IpV4Address: IEquatable<IpV4Address>
         if (bytes.Length < 4) return "<empty>";
         return $"{bytes[0]}.{bytes[1]}.{bytes[2]}.{bytes[3]}";
     }
+    
+    public static string Describe(ulong addr)
+    {
+        var a = (addr >> 24) & 0xff;
+        var b = (addr >> 16) & 0xff;
+        var c = (addr >>  8) & 0xff;
+        var d = (addr >>  0) & 0xff;
+        return $"{a}.{b}.{c}.{d}";
+    }
 }

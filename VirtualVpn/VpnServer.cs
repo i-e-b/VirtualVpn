@@ -737,8 +737,9 @@ public class VpnServer : ISessionHost, IDisposable
                 // Wait before looping, unless any of the ChildSA are active,
                 // in which case we go full speed.
                 if (!goFaster) Thread.Sleep(Settings.EventPumpRate);
+                else Thread.Yield();
                 
-                // If there aren't any connections, run slower
+                // If there aren't any connections, run even slower
                 if (_childSessions.Count < 1) Thread.Sleep(Settings.EventPumpRate);
             }
             catch (Exception ex)
