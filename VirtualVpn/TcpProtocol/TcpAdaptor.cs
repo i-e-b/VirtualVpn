@@ -201,12 +201,14 @@ public class TcpAdaptor : ITcpAdaptor
 
         if (!ok) return new SenderPort(Array.Empty<byte>(), 0);
 
-        if (tcpSeg.DestinationPort < 1024)
+        // always expect an ephemeral port on one side, and use that as part of the session key.
+        var portKey = tcpSeg.DestinationPort;
+        if (portKey < 1024)
         {
-            Log.WarnWithStack($"Destination port looks wrong. Dest={message.Destination.AsString}:{tcpSeg.DestinationPort}; Src={message.Source.AsString}:{tcpSeg.SourcePort}");
+            portKey = tcpSeg.SourcePort;
         }
 
-        return new SenderPort(message.Source.Value, tcpSeg.DestinationPort);
+        return new SenderPort(message.Source.Value, portKey);
     }
 
     public void Close()

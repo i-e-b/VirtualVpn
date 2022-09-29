@@ -321,7 +321,7 @@ public class ChildSa : ITransportTunnel
                 Log.Critical("Non-ephemeral port was used as a session key. This will break the routing logic!");
             }
             
-            Log.WarnWithStack($"Trying to remove {key.Describe()}");
+            Log.Info($"Trying to remove {key.Describe()}");
             
             var session = _tcpSessions.Remove(key);
             if (session is not null)
