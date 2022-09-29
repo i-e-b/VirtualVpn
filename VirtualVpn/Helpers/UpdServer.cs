@@ -78,7 +78,7 @@ public class UdpServer : IUdpServer, IDisposable
         {
             try
             {
-                Log.Info("VPN Listening for IKE/ESP/SPN messages on port 4500...");
+                Log.Trace("VPN Listening for IKE/ESP/SPN messages on port 4500...");
                 var buffer = _speClient.Receive(ref sender);
                 TotalIn += (ulong)buffer.Length;
                 _speResponder?.Invoke(buffer, sender);

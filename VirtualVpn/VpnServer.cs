@@ -597,7 +597,7 @@ public class VpnServer : ISessionHost, IDisposable
     {
         if (data.Length < 1) return; // junk message
 
-        Log.Info($"Got a 4500 packet, {data.Length} bytes");
+        Log.Trace($"Got a 4500 packet, {data.Length} bytes");
 
         // Check for keep-alive ping?
         if (data.Length < 4 && data[0] == 0xff)
@@ -621,7 +621,7 @@ public class VpnServer : ISessionHost, IDisposable
         // We strip the padding off, and pass a flag to say it should be sent with a response
         if (header == NonEspHeader)
         {
-            Log.Info("    SPI zero on 4500 -- sending to 500 (IKE) responder");
+            Log.Trace("    SPI zero on 4500 -- sending to 500 (IKE) responder");
             var offsetData = data.Skip(4).ToArray();
             IkeSessionResponder(offsetData, sender, sendZeroHeader: true);
             return;

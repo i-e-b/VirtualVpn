@@ -288,7 +288,7 @@ public class ChildSa : ITransportTunnel
     /// </summary>
     public void Send(IpV4Packet reply, IPEndPoint gateway)
     {
-        Log.Info("ChildSa - Sending packet through gateway");
+        Log.Trace("ChildSa - Sending packet through gateway");
         var raw = WriteSpe(reply);
         UdpDataSend(raw, gateway);
     }
@@ -324,7 +324,7 @@ public class ChildSa : ITransportTunnel
 
     public void HandleSpe(byte[] data, IPEndPoint sender)
     {
-        Log.Info($"HandleSpe: data={data.Length} bytes, sender={sender}");
+        Log.Trace($"HandleSpe: data={data.Length} bytes, sender={sender}");
         
         Parent?.UpdateTrafficTimeout();
         var incomingIpv4Message = ReadSpe(data, out var espPkt);
@@ -341,7 +341,7 @@ public class ChildSa : ITransportTunnel
             }
             case IpV4Protocol.TCP:
             {
-                Log.Info("Regular TCP/IP packet");
+                Log.Trace("Regular TCP/IP packet");
                 HandleTcp(sender, incomingIpv4Message);
                 break;
             }
@@ -399,7 +399,7 @@ public class ChildSa : ITransportTunnel
                 // check that this session is still coming through the original tunnel
                 if (!session.Gateway.Address.Equals(sender.Address))
                 {
-                    Log.Warn($"Crossed connection in TCP? Expected gateway {session.Gateway.Address}, but got gateway {sender.Address} -- not replying");
+                    Log.Critical($"Crossed connection in TCP? Expected gateway {session.Gateway.Address}, but got gateway {sender.Address} -- not replying");
                     return;
                 }
 

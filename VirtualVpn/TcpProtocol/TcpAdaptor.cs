@@ -245,6 +245,12 @@ public class TcpAdaptor : ITcpAdaptor
         SocketThroughTunnel.FeedIncomingPacket(tcp, ipv4);
         SocketThroughTunnel.EventPump(); // not strictly needed, but reduces latency a bit
 
+        if (SocketThroughTunnel.ErrorCode == SocketError.Fault)
+        {
+            _transport.ReleaseConnection(SelfKey);
+            return false;
+        }
+
         lock (_transferLock)
         {
             RunDataTransfer();
@@ -564,7 +570,7 @@ public class TcpAdaptor : ITcpAdaptor
         reply.UpdateChecksum();
         Log.Debug($"IPv4 checksum={reply.Checksum:x4}");
 
-        Log.Info($"Sending message to tunnel {route.LocalAddress}:{message.SourcePort} -> {route.RemoteAddress}:{message.DestinationPort}");
+        Log.Trace($"Sending message to tunnel {route.LocalAddress}:{message.SourcePort} -> {route.RemoteAddress}:{message.DestinationPort}");
         _transport.Send(reply, Gateway);
         SocketThroughTunnel.EventPump();
     }

@@ -553,12 +553,14 @@ public class TcpSocket
     private void ReceiveFromListen(TcpFrame frame)
     {
         // lib/tcp/input.c:87
-        Log.Info($"Received packet. Socket state={_state.ToString()}, {frame.Ip.Source}:{frame.Tcp.SourcePort} -> {frame.Ip.Destination}:{frame.Tcp.DestinationPort}");
+        Log.Trace($"Received packet. Socket state={_state.ToString()}, {frame.Ip.Source}:{frame.Tcp.SourcePort} -> {frame.Ip.Destination}:{frame.Tcp.DestinationPort}");
 
         // Ignore any reset packets
         if (frame.Tcp.Flags.FlagsSet(TcpSegmentFlags.Rst))
         {
-            Log.Debug("Reset flag set. Ignoring packet.");
+            Log.Debug("Reset flag set. Ignoring packet, terminating session");
+            ErrorCode = SocketError.Fault;
+            SetState(TcpSocketState.Closed);
             return;
         }
 
@@ -568,8 +570,10 @@ public class TcpSocket
             // Any acknowledgment is bad if it arrives on a connection still in
             // the LISTEN state.  An acceptable reset segment should be formed
             // for any arriving ACK-bearing segment
-            Log.Warn("Invalid message: ACK send to listening socket. Will send RST.");
+            Log.Warn("Invalid message: ACK send to listening socket. Will send RST and terminate.");
             SendRst(frame.Tcp.AcknowledgmentNumber);
+            ErrorCode = SocketError.Fault;
+            SetState(TcpSocketState.Closed);
             return;
         }
 
@@ -640,7 +644,7 @@ public class TcpSocket
 
         SetState(TcpSocketState.SynReceived);
 
-        Log.Info("Ready for connection. Sending SYN+ACK");
+        Log.Trace("Ready for connection. Sending SYN+ACK");
         SendSynAck();
     }
 
@@ -708,7 +712,7 @@ public class TcpSocket
     private void ReceiveFromClosed(TcpFrame frame)
     {
         // lib/tcp/input.c:44
-        Log.Info($"Received packet. Socket state={_state.ToString()}, {frame.Ip.Source}:{frame.Tcp.SourcePort} -> {frame.Ip.Destination}:{frame.Tcp.DestinationPort}");
+        Log.Trace($"Received packet. Socket state={_state.ToString()}, {frame.Ip.Source}:{frame.Tcp.SourcePort} -> {frame.Ip.Destination}:{frame.Tcp.DestinationPort}");
 
         // Filter rules:
         // - All data in the incoming segment is discarded (there should not be any)
