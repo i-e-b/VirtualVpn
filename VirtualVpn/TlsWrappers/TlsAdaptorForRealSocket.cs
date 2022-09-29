@@ -24,9 +24,19 @@ public class TlsAdaptorForRealSocket : ISocketAdaptor
         var startupThread = new Thread(() =>
         {
             Log.Debug("TlsAdaptorForRealSocket. Authentication starting");
-            _sslWrapper.AuthenticateAsClient(host);
-            Connected = _sslWrapper.IsAuthenticated;
-            _faulted = !_sslWrapper.IsAuthenticated;
+            try
+            {
+                _sslWrapper.AuthenticateAsClient(host);
+                Connected = _sslWrapper.IsAuthenticated;
+                _faulted = !_sslWrapper.IsAuthenticated;
+            }
+            catch (Exception ex)
+            {
+                Log.Error("TlsAdaptorForRealSocket: Failed to connect to SSL/TLS as client", ex);
+                Connected = false;
+                _faulted = true;
+                return;
+            }
             Log.Debug($"TlsAdaptorForRealSocket. Authentication complete. Success={_sslWrapper.IsAuthenticated}");
         }) { IsBackground = true };
         startupThread.Start();
