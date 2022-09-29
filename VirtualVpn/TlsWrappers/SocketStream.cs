@@ -67,9 +67,14 @@ public class SocketStream : Stream
     public override int Read(byte[] buffer, int offset, int count)
     {
         Log.Trace($"SocketStream.{nameof(Read)}(buffer[{buffer.Length}], offset={offset}, count={count})");
-        if (_socket == null) throw new InvalidOperationException("Attempted to read from a disconnected socket");
-        if (!_socket.Connected) return 0; // not connected, no data
-        if (_socket.Available < 1) return 0; // no data
+        if (_socket == null) throw new InvalidOperationException("Attempted to read from a null socket");
+        if (!_socket.Connected) throw new InvalidOperationException("Attempted to read from a disconnected socket");
+        
+        // SslStream REQUIRES us to be blocking on this call
+        while (_socket.Connected && _socket.Available < 1)
+        {
+            Thread.Sleep(50);
+        }
 
         int len;
         try
