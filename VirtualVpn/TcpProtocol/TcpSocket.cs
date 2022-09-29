@@ -23,7 +23,7 @@ public class TcpSocket
     /// <summary>
     /// .Net standard codes for socket errors
     /// </summary>
-    public SocketError ErrorCode { get; set; }
+    public SocketError ErrorCode { get; private set; }
 
     /// <summary>
     /// State of the socket interface
