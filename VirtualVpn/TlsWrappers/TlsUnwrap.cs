@@ -101,8 +101,8 @@ public class TlsUnwrap : ISocketAdaptor
 
         while (_running && _socket?.Connected != true)
         {
-            Log.Debug("TlsUnwrap: Waiting for connection");
-            Thread.Sleep(10);
+            Log.Trace("TlsUnwrap: Waiting for connection");
+            Thread.Sleep(50);
         }
 
         if (_socket is null)
@@ -160,7 +160,8 @@ public class TlsUnwrap : ISocketAdaptor
         // wait for SSL/TLS to come up
         while (_running && !_sslStream.IsAuthenticated)
         {
-            Thread.Sleep(5);
+            Thread.Sleep(50);
+            Log.Trace("TlsUnwrap: Waiting for SSL/TLS authentication...");
         }
         Log.Debug("TlsUnwrap: SSL/TLS is authenticated, starting outgoing pump.");
         
