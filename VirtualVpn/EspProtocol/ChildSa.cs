@@ -313,6 +313,14 @@ public class ChildSa : ITransportTunnel
                              $"Known keys are: {string.Join(", ", _tcpSessions.Keys.Select(x => x.Describe()))}");
             }
 
+
+            // BUG: In some cases, this is the wrong side key (seeing 192.168.0.40:443)
+            //      The port on this side should be the ephemeral one!
+            if (key.Port < 1024)
+            {
+                Log.Critical("Non-ephemeral port was used as a session key. This will break the routing logic!");
+            }
+            
             Log.WarnWithStack($"Trying to remove {key.Describe()}");
             
             var session = _tcpSessions.Remove(key);
