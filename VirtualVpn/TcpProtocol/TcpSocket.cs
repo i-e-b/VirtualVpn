@@ -287,7 +287,11 @@ public class TcpSocket
         {
             var actual =  _receiveQueue.ReadOutAndUpdate(buffer, offset, length);
             
-            _tcb.Rcv.Wnd = (ushort)Math.Min(UInt16.MaxValue, _tcb.Rcv.Wnd + actual); // data is released. Increase available window.
+            var expectedWindow = _tcb.Rcv.Wnd + actual;
+            if (expectedWindow >= UInt16.MaxValue) expectedWindow = UInt16.MaxValue;
+            if (expectedWindow < 0) expectedWindow = 0;
+            
+            _tcb.Rcv.Wnd = (ushort)expectedWindow; // data is released. Increase available window.
             Log.Trace($"Receive window at {_tcb.Rcv.Wnd} bytes");
             
             return actual;

@@ -46,13 +46,13 @@ public class ReceiveBuffer
         lock (_lock)
         {
             _segments.Sort((a, b) => a.SequenceNumber.CompareTo(b.SequenceNumber));
-            var position = initial;
+            long position = initial;
 
             foreach (var segment in _segments)
             {
-                var segSeq = segment.SequenceNumber;
+                long segSeq = segment.SequenceNumber;
                 var segLen = segment.Payload.Length;
-                var segEnd = segSeq + segLen - 1;
+                long segEnd = segSeq + segLen - 1;
 
                 if (SeqGtEq(position, segSeq) && SeqLtEq(position, segEnd)) // position is inside the segment
                 {
@@ -116,7 +116,7 @@ public class ReceiveBuffer
     {
         if (offset >= buffer.Length) throw new Exception("Offset greater than buffer size");
         if (length < 1) return 0;
-        var total = 0;
+        long total = 0;
         lock (_lock)
         {
             _isReading = true;
@@ -124,24 +124,24 @@ public class ReceiveBuffer
             if (_segments.Count < 1) return 0;
             
             var endOfData = ContiguousSequence(_readHead); // this is next sequence position after the data we have
-            var available = endOfData - _readHead;
+            long available = endOfData - _readHead;
             
-            var end = Min((int)available, buffer.Length - offset, length);
-            var idx = offset;
+            long end = Min((int)available, buffer.Length - offset, length);
+            long idx = offset;
 
             // read data out of segments
             foreach (var segment in _segments)
             {
-                var segStart = segment.SequenceNumber;
+                long segStart = segment.SequenceNumber;
                 var segData = segment.Payload;
-                var segEnd = segStart + segData.Length;
+                long segEnd = segStart + segData.Length;
 
                 if (_readHead >= segEnd) continue;
-                var segOffset = _readHead - segStart;
+                long segOffset = _readHead - segStart;
                 if (segOffset < 0) throw new Exception($"Unexpected hole in data. Expected segment starting at or before {_readHead}, but it was {segStart}");
                 if (segOffset >= segData.Length) throw new Exception($"Unexpected segment length. Expected it to end after {segOffset}, but it ends at {segData.Length}");
 
-                for (var i = segOffset; i < segData.Length; i++)
+                for (long i = segOffset; i < segData.Length; i++)
                 {
                     buffer[idx++] = segData[i];
                     total++;
@@ -159,14 +159,14 @@ public class ReceiveBuffer
                 _segments.RemoveAt(0);
             }
         }
-        return total;
+        return (int)total;
     }
 
     private bool FirstSegmentIsUsedUp()
     {
         if (_segments.Count < 1) return false;
         var seg = _segments[0];
-        var end = seg.SequenceNumber + seg.Payload.Length;
+        long end = seg.SequenceNumber + seg.Payload.Length;
         return _readHead >= end;
     }
 

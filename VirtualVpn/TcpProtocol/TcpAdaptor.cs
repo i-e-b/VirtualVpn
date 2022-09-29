@@ -502,7 +502,7 @@ public class TcpAdaptor : ITcpAdaptor
         }
         catch (Exception ex)
         {
-            Log.WarnWithStack("Tunnel movement issue?");
+            Log.Warn($"Tunnel movement issue? {ex}");
             Log.Error("Failed to move data from tunnel to Web App", ex);
             return false;
         }
