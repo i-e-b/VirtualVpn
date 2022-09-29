@@ -22,14 +22,15 @@ namespace VirtualVpn.TlsWrappers;
 public class TlsUnwrap : ISocketAdaptor
 {
     private readonly SslServerAuthenticationOptions _authOptions;
-    private readonly X509Certificate _certificate;
-    private readonly ISocketAdaptor _socket;
     private readonly SslStream _sslStream;
+    
+    private X509Certificate? _certificate;
+    private ISocketAdaptor? _socket;
+    private volatile bool _running, _faulted;
     
     private readonly BlockingBidirectionalBuffer _tunnelSideBuffer;
     private readonly Thread _pumpThreadIncoming;
     private readonly Thread _pumpThreadOutgoing;
-    private volatile bool _running, _faulted;
 
     /// <summary>
     /// Try to create a TLS re-wrapper, given paths to certificates and a connection.
@@ -70,15 +71,21 @@ public class TlsUnwrap : ISocketAdaptor
             CertificateRevocationCheckMode = X509RevocationMode.NoCheck
         };
 
-        _certificate = GetX509Certificate(privatePath, publicPath);
-
-        _socket = outgoingConnectionFunction();
+        var startupThread = new Thread(() =>
+        {
+            Log.Debug("TlsUnwrap: Reading certificate");
+            _certificate = GetX509Certificate(privatePath, publicPath);
+            Log.Debug("TlsUnwrap: Starting socket connection");
+            _socket = outgoingConnectionFunction();
+            Log.Debug($"TlsUnwrap: Connection complete. Connected={_socket.Connected}");
+        }) { IsBackground = true };
+        startupThread.Start();
         
         _faulted = false;
         _running = true;
         
+        Log.Debug("TlsUnwrap: Creating blocking buffer and SSL stream");
         _tunnelSideBuffer = new BlockingBidirectionalBuffer();
-        
         _sslStream = new SslStream(_tunnelSideBuffer);
 
         _pumpThreadIncoming = new Thread(BufferPumpIncoming) { IsBackground = true };
@@ -92,13 +99,26 @@ public class TlsUnwrap : ISocketAdaptor
     {
         var buffer = new byte[8192];
 
+        while (_running && _socket?.Connected != true)
+        {
+            Log.Debug("TlsUnwrap: Waiting for connection");
+            Thread.Sleep(10);
+        }
+
+        if (_socket is null)
+        {
+            Log.Critical("Lost socket in TlsUnwrap");
+            _running = false;
+            return;
+        }
+
         // Pick up the client's hello, and start doing the hand-shake
         // The rest should happen as data is pumped around
         try
         {
-            Log.Debug("TlsUnwrap: Starting SSL/TLS authentication");
+            Log.Trace("TlsUnwrap: Starting SSL/TLS authentication");
             _sslStream.AuthenticateAsServer(_authOptions);
-            Log.Trace("TlsUnwrap: SSL/TLS authenticated, starting incoming pump");
+            Log.Debug("TlsUnwrap: SSL/TLS authenticated, starting incoming pump");
         }
         catch (Exception ex)
         {
@@ -136,13 +156,20 @@ public class TlsUnwrap : ISocketAdaptor
     {
         var buffer = new byte[8192];
 
-        Log.Debug("TlsUnwrap: Waiting for SSL/TLS authentication");
+        Log.Trace("TlsUnwrap: Waiting for SSL/TLS authentication");
         // wait for SSL/TLS to come up
         while (_running && !_sslStream.IsAuthenticated)
         {
             Thread.Sleep(5);
         }
-        Log.Trace("TlsUnwrap: SSL/TLS is authenticated, starting outgoing pump.");
+        Log.Debug("TlsUnwrap: SSL/TLS is authenticated, starting outgoing pump.");
+        
+        if (_socket is null)
+        {
+            Log.Critical("Lost socket in TlsUnwrap.BufferPumpOutgoing");
+            _running = false;
+            return;
+        }
         
         // First, pick up the client's hello, and start doing the hand-shake
         while (_running)
@@ -184,7 +211,7 @@ public class TlsUnwrap : ISocketAdaptor
     public void Close()
     {
         _running = false;
-        try { _socket.Dispose(); }
+        try { _socket?.Dispose(); }
         catch (Exception ex) { Log.Error("TLS unwrap: Failed to dispose socket", ex); }
 
         try { _sslStream.Dispose(); }
@@ -201,7 +228,7 @@ public class TlsUnwrap : ISocketAdaptor
     /// <summary>
     /// True if the underlying socket is in a connected state
     /// </summary>
-    public bool Connected => _socket.Connected && _running;
+    public bool Connected => _socket?.Connected==true && _running;
     
     /// <summary>
     /// Number of bytes available to be read from <see cref="OutgoingFromLocal"/>
@@ -243,13 +270,14 @@ public class TlsUnwrap : ISocketAdaptor
 
     public bool IsFaulted()
     {
-        return _faulted || _socket.IsFaulted();
+        return _faulted || (_socket?.IsFaulted() ?? false);
     }
 
     #region Certificates
 
     private X509Certificate CertSelect(object sender, string? hostname)
     {
+        if (_certificate is null) throw new Exception("TlsUnwrap.CertSelect: tried to select, but no certificate was loaded");
         Console.WriteLine($"Returning cert for {hostname} with {_certificate.Subject}");
 
         if (Platform.Current() == Platform.Kind.Windows)
