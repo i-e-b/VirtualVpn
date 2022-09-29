@@ -300,6 +300,8 @@ public class ChildSa : ITransportTunnel
     {
         try
         {
+            Log.Info($"Trying to remove {IpV4Address.Describe(key.Address)}:{key.Port}");
+            
             var session = _tcpSessions.Remove(key);
             if (session is not null)
             {
