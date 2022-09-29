@@ -463,7 +463,7 @@ public class TcpAdaptor : ITcpAdaptor
             var buffer = new byte[SocketThroughTunnel.BytesOfReadDataWaiting];
             var actual = SocketThroughTunnel.ReadData(buffer);
             _totalVirtualRead += actual;
-            Log.Info($"Message received from tunnel, {actual} bytes of an expected {buffer.Length}.");
+            Log.Debug($"Message received from tunnel, {actual} bytes of an expected {buffer.Length}.");
             Log.Trace("INCOMING:\r\n", () => Bit.Describe("", buffer, 0, actual));
 
             if (actual < 1) return false;

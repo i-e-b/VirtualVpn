@@ -226,6 +226,8 @@ public static class Log
             Console.WriteLine(msg);
             Console.WriteLine("##################################################");
             Console.WriteLine();
+            WriteStack();
+            Console.WriteLine();
         }
     }
 
@@ -238,7 +240,7 @@ public static class Log
         foreach (var frame in frames)
         {
             BlankTimestamp();
-            Console.WriteLine($"    {(frame.GetMethod()?.Name ?? "unknown")}; {frame.GetFileName() ?? "?"}::{frame.GetFileLineNumber()}");
+            Console.WriteLine($"    {frame.GetMethod()?.Name ?? "unknown"}");
         }
     }
     

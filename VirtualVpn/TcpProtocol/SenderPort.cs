@@ -32,6 +32,12 @@ public readonly struct SenderPort
     public SenderPort(byte[] senderAddress, int destinationPort)
     {
         Address = Bit.BytesToUInt64Msb(senderAddress);
+        if (Address == 0)
+        {
+            Log.Critical("Tried to use a zero-value address as a key");
+            throw new Exception("Tried to use a zero-value address as a key");
+        }
+
         Port = (ushort)destinationPort;
     }
 

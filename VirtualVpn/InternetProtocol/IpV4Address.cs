@@ -128,4 +128,11 @@ public class IpV4Address: IEquatable<IpV4Address>
         var d = (addr >>  0) & 0xff;
         return $"{a}.{b}.{c}.{d}";
     }
+
+    public bool IsZero()
+    {
+        if (Value.Length < 4) return true;
+        if (Value[0] == 0 && Value[1] == 0 && Value[2] == 0 && Value[3] == 0) return true;
+        return false;
+    }
 }

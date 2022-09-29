@@ -543,6 +543,12 @@ public class ChildSa : ITransportTunnel
     /// </summary>
     private SenderPort GetAvailableKey(IpV4Address target)
     {
+        if (target.IsZero())
+        {
+            Log.Critical("Created invalid SenderPort!");
+            throw new Exception("Created invalid SenderPort");
+        }
+
         // rotate ports, because if we re-use them too soon the other VPN can get confused
         var port = 1060 + (_portIncrement & 0x7FFF);
         _portIncrement++;

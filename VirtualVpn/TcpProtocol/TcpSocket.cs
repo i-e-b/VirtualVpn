@@ -1001,7 +1001,7 @@ public class TcpSocket
             return 0;
         }
 
-        Log.Info($"SendData: Transmitting data. Expected length={toSend}, Payload length={seg.Payload.Length}");
+        Log.Trace($"SendData: Transmitting data. Expected length={toSend}, Payload length={seg.Payload.Length}");
         if (toSend != seg.Payload.Length)
         {
             Log.Critical($"Wrong payload length! Expected {toSend}, but got {seg.Payload.Length}. Error in send buffer? SendBuffer.Count() did not match SendBuffer.Pull()");
