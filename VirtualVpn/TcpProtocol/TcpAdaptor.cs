@@ -339,6 +339,15 @@ public class TcpAdaptor : ITcpAdaptor
             return false;
         }
 
+        if (_socketToLocalSide?.IsFaulted() == true)
+        {
+            // Failure at web-app. Close down
+            Log.Warn("Local side socket faulted. Ending session");
+            _shutdownTransfer = true;
+            SocketThroughTunnel.StartClose();
+            return true;
+        }
+        
         Log.Trace($"Attempting tunnel<->webApp. Tunnel has {SocketThroughTunnel.BytesOfReadDataWaiting} bytes ready. Web app has {_socketToLocalSide?.Available ?? 0} bytes ready.");
 
         var anyData = false;
@@ -361,6 +370,7 @@ public class TcpAdaptor : ITcpAdaptor
             _shutdownTransfer = true;
             SocketThroughTunnel.StartClose();
         }
+
 
         return anyData;
     }
@@ -461,9 +471,6 @@ public class TcpAdaptor : ITcpAdaptor
         var port = (incomingIsTls || wrapWithTlsAdaptor) ? Settings.WebAppHttpsPort : Settings.WebAppHttpPort;
         Log.Debug($"Connecting to web app at {Settings.WebAppIpAddress}:{port} ({(incomingIsTls ? "SSL/TLS" : "plain")}, {(wrapWithTlsAdaptor ? "wrapped" : "unwrapped")})");
         if (port < 1) throw new Exception("Port for WebApp is not configured; Can't connect");
-        
-        // IEB: Continue here
-        // TODO: add an adaptor for SSL/TLS if requested
         
         var webApiSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
         try

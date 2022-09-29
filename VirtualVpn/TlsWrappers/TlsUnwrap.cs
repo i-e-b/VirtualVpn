@@ -27,10 +27,9 @@ public class TlsUnwrap : ISocketAdaptor
     private readonly SslStream _sslStream;
     
     private readonly BlockingBidirectionalBuffer _tunnelSideBuffer;
-    private readonly BlockingBidirectionalBuffer _webAppSideBuffer; // we will need this once we're doing a secure connection.
     private readonly Thread _pumpThreadIncoming;
     private readonly Thread _pumpThreadOutgoing;
-    private volatile bool _running;
+    private volatile bool _running, _faulted;
 
     /// <summary>
     /// Try to create a TLS re-wrapper, given paths to certificates and a connection.
@@ -75,10 +74,10 @@ public class TlsUnwrap : ISocketAdaptor
 
         _socket = outgoingConnectionFunction();
         
+        _faulted = false;
         _running = true;
         
         _tunnelSideBuffer = new BlockingBidirectionalBuffer();
-        _webAppSideBuffer = new BlockingBidirectionalBuffer();
         
         _sslStream = new SslStream(_tunnelSideBuffer);
 
@@ -95,9 +94,19 @@ public class TlsUnwrap : ISocketAdaptor
 
         // Pick up the client's hello, and start doing the hand-shake
         // The rest should happen as data is pumped around
-        Log.Debug("TlsUnwrap: Starting SSL/TLS authentication");
-        _sslStream.AuthenticateAsServer(_authOptions);
-        Log.Trace("TlsUnwrap: SSL/TLS authenticated, starting incoming pump");
+        try
+        {
+            Log.Debug("TlsUnwrap: Starting SSL/TLS authentication");
+            _sslStream.AuthenticateAsServer(_authOptions);
+            Log.Trace("TlsUnwrap: SSL/TLS authenticated, starting incoming pump");
+        }
+        catch (Exception ex)
+        {
+            Log.Error("TlsUnwrap: Failure during AuthenticateAsServer", ex);
+            _running = false;
+            _faulted = true;
+            return;
+        }
 
         while (_running)
         {
@@ -192,7 +201,7 @@ public class TlsUnwrap : ISocketAdaptor
     /// <summary>
     /// True if the underlying socket is in a connected state
     /// </summary>
-    public bool Connected => _socket.Connected;
+    public bool Connected => _socket.Connected && _running;
     
     /// <summary>
     /// Number of bytes available to be read from <see cref="OutgoingFromLocal"/>
@@ -234,7 +243,7 @@ public class TlsUnwrap : ISocketAdaptor
 
     public bool IsFaulted()
     {
-        return _socket.IsFaulted();
+        return _faulted || _socket.IsFaulted();
     }
 
     #region Certificates
