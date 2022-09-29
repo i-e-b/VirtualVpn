@@ -142,7 +142,6 @@ public class ChildSa : ITransportTunnel
             _keepAliveTrigger.TriggerIfExpired();
         }
 
-
         // Check TCP sessions, close them if they are timed out.
         var allSessions = _tcpSessions.Keys.ToList();
         foreach (var tcpKey in allSessions)
@@ -156,8 +155,13 @@ public class ChildSa : ITransportTunnel
             }
 
             var tcp = _tcpSessions[tcpKey];
-            if (tcp is null) continue;
-            
+            if (tcp is null)
+            {
+                Log.Debug("Null session found. Removing");
+                _tcpSessions.Remove(tcpKey);
+                continue;
+            }
+
             if (tcp.LastContact.Elapsed > Settings.TcpTimeout)
             {
                 Log.Debug($"Old session: {tcp.LastContact.Elapsed}; remote={Bit.ToIpAddressString(tcp.RemoteAddress)}:{tcp.RemotePort}," +
@@ -195,6 +199,13 @@ public class ChildSa : ITransportTunnel
             {
                 _parkedSessions.Remove(oldKey);
                 continue;
+            }
+            
+            if (oldSession.LastContact.Elapsed > Settings.TcpTimeout)
+            {
+                Log.Debug($"Old session: {oldSession.LastContact.Elapsed}; remote={Bit.ToIpAddressString(oldSession.RemoteAddress)}:{oldSession.RemotePort}," +
+                          $" local={Bit.ToIpAddressString(oldSession.LocalAddress)}:{oldSession.LocalPort}. Closing");
+                _parkedSessions.Remove(oldKey);
             }
 
             if (oldSession.SocketThroughTunnel.State is TcpSocketState.Closed or TcpSocketState.Listen)

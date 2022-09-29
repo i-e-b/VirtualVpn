@@ -124,6 +124,7 @@ public class TcpAdaptor : ITcpAdaptor
         Gateway = gateway;
         SocketThroughTunnel = new TcpSocket(this);
         LastContact = new Stopwatch();
+        LastContact.Start(); // start counting. This gets reset every time we get a message
     }
 
     /// <summary>
@@ -134,8 +135,6 @@ public class TcpAdaptor : ITcpAdaptor
     {
         Log.Debug("TCP session initiation, from outgoing packet (we are client)");
         
-        LastContact.Start(); // start counting. This gets reset every time we get another message
-
         // capture identity
         LocalAddress = localAddress.Value;
         LocalPort = localPort;
@@ -168,8 +167,6 @@ public class TcpAdaptor : ITcpAdaptor
             return false;
         }
 
-        LastContact.Start(); // start counting. This gets reset every time we get another message
-
         // capture identity
         LocalAddress = ipv4.Destination.Value;
         LocalPort = tcp.DestinationPort;
@@ -189,11 +186,10 @@ public class TcpAdaptor : ITcpAdaptor
     public void Accept(IpV4Packet ipv4)
     {
         var ok = HandleMessage(ipv4, out _);
-        if (ok)
-        {
-            Log.Trace("Restarting last contact timer");
-            LastContact.Restart(); // back to zero, keep counting
-        }
+        if (!ok) return;
+        
+        Log.Trace("Restarting last contact timer");
+        LastContact.Restart(); // back to zero, keep counting
     }
 
     /// <summary>

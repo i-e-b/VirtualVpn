@@ -148,7 +148,7 @@ public static class Settings
     /// <summary>
     /// How long a TCP session is allowed to go without any traffic before being closed.
     /// </summary>
-    public static TimeSpan TcpTimeout { get; set; } = TimeSpan.FromSeconds(60);
+    public static TimeSpan TcpTimeout { get; set; } = TimeSpan.FromSeconds(30);
     
     /// <summary>
     /// How long an *established* ESP session is allowed to go without any traffic before being closed.

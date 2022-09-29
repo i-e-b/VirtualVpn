@@ -62,7 +62,7 @@ and are not required when running Virtual VPN
 
 - [x] Add an API so outbound calls can go through the virtual network
 - [x] Handle HTTPS unwrapping to retarget in virtual network.
-- [ ] Global time-out for TcpSessions in ChildSa (in another thread)
+- [x] Global time-out for TcpSessions in ChildSa
 - [ ] Migrate Payloads to Bitwise serialiser? (might need counts & looping)
 - [ ] Go through the collection types and make them thread safe
 - [ ] Check all "to-do" items
