@@ -260,14 +260,21 @@ public class TcpAdaptor : ITcpAdaptor
     {
         if (_shutdownTransfer) return false;
 
-        Log.Trace($"### Run Data Transfer ### vRead={_totalVirtualRead}, rSend={_totalRealSent}, rRead={_totalRealRead}, vSend={_totalVirtualSent}," +
-                  $" vSocket={SocketThroughTunnel.State.ToString()}, webApp connected={_socketToLocalSide?.Connected ?? false}");
+        Log.Trace($"Run Data Transfer: vRead={_totalVirtualRead}, rSend={_totalRealSent}, rRead={_totalRealRead}, vSend={_totalVirtualSent}," +
+                  $" vSocket={SocketThroughTunnel.State.ToString()}, webApp connected={_socketToLocalSide?.Connected ?? false}, fault={_socketToLocalSide?.IsFaulted() ?? false}");
         
         
         // If we are ready to talk to web app, make sure we have a real socket
         if (_socketToLocalSide is null) // this is never true when making a proxy call
         {
-            if (!TryConnectToWebApp()) return false;
+            Log.Debug("Trying to connect to web app");
+            if (!TryConnectToWebApp())
+            {
+                Log.Debug("Web app connection failed");
+                return false;
+            }
+
+            Log.Debug("Web app is connected");
         }
 
         // End the transfer operation if we're not ready
@@ -289,6 +296,7 @@ public class TcpAdaptor : ITcpAdaptor
             Log.Warn("Local side socket faulted. Ending session");
             _shutdownTransfer = true;
             SocketThroughTunnel.StartClose();
+            _transport.ReleaseConnection(SelfKey);
             return true;
         }
         
@@ -313,6 +321,7 @@ public class TcpAdaptor : ITcpAdaptor
             // Everything is finished. Close down
             _shutdownTransfer = true;
             SocketThroughTunnel.StartClose();
+            _transport.ReleaseConnection(SelfKey);
         }
 
 
