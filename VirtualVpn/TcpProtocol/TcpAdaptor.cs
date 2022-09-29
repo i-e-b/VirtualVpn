@@ -110,6 +110,7 @@ public class TcpAdaptor : ITcpAdaptor
     public TcpAdaptor(ChildSa transport, IPEndPoint gateway, SenderPort selfKey, ISocketAdaptor? socketAdaptor)
     {
         _transport = transport;
+        if (selfKey.Address == 0) throw new Exception("Invalid key passed to TcpAdaptor");
         SelfKey = selfKey;
         _closeCalled = false;
 

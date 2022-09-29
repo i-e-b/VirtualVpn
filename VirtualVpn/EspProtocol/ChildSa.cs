@@ -148,6 +148,13 @@ public class ChildSa : ITransportTunnel
         foreach (var tcpKey in allSessions)
         {
             goFaster = true; // go fast if there are any open connections
+            if (tcpKey.Address == 0)
+            {
+                Log.Critical("Stored a tcp session with a zero value key!");
+                _tcpSessions.Remove(tcpKey);
+                continue;
+            }
+
             var tcp = _tcpSessions[tcpKey];
             if (tcp is null) continue;
             
@@ -472,6 +479,13 @@ public class ChildSa : ITransportTunnel
                 return;
             }
 
+            // Final check
+            if (key.Port == 0 || key.Address == 0)
+            {
+                Log.Critical("Lost valid TCP/IP request: address or port went zero");
+                return;
+            }
+            
             // start new session
             var newSession = new TcpAdaptor(this, sender, key, null);
             var sessionOk = newSession.StartIncoming(incomingIpv4Message);
@@ -531,6 +545,9 @@ public class ChildSa : ITransportTunnel
     /// </summary>
     public ITcpAdaptor OpenTcpSession(IpV4Address targetAddress, int targetPort, IpV4Address proxyLocalAddress, ISocketAdaptor apiSide)
     {
+        if (targetAddress.IsZero()) throw new Exception("Invalid target address given to OpenTcpSession");
+        if (Gateway.IsZero()) throw new Exception("Invalid gateway in OpenTcpSession");
+        
         var key = GetAvailableKey(targetAddress);
         var newSession = new TcpAdaptor(this, Gateway.MakeEndpoint(4500), key, apiSide);
         var sessionOk = newSession.StartOutgoing(proxyLocalAddress, key.Port, targetAddress, targetPort);
