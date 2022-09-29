@@ -167,8 +167,15 @@ public class ChildSa : ITransportTunnel
                 Log.Debug($"Connection to web app faulted, disconnecting: {Bit.ToIpAddressString(tcp.RemoteAddress)}:{tcp.RemotePort} -> {Bit.ToIpAddressString(tcp.LocalAddress)}:{tcp.LocalPort}");
                 TerminateConnection(tcpKey);
             }
-            
-            tcp.EventPump();
+
+            try
+            {
+                tcp.EventPump();
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Unhandled exception in ChildSa EventPump (active session)", ex);
+            }
         }
 
         // Old sessions that are shutting down.
@@ -183,9 +190,21 @@ public class ChildSa : ITransportTunnel
                 continue;
             }
 
-            if (oldSession.SocketThroughTunnel.State == TcpSocketState.Closed
-                || oldSession.SocketThroughTunnel.State == TcpSocketState.Listen) _parkedSessions.Remove(oldKey);
-            else oldSession.EventPump();
+            if (oldSession.SocketThroughTunnel.State is TcpSocketState.Closed or TcpSocketState.Listen)
+            {
+                _parkedSessions.Remove(oldKey);
+            }
+            else
+            {
+                try
+                {
+                    oldSession.EventPump();
+                }
+                catch (Exception ex)
+                {
+                    Log.Error("Unhandled exception in ChildSa EventPump (old session)", ex);
+                }
+            }
         }
         return goFaster;
     }

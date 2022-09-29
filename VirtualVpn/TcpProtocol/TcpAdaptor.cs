@@ -267,63 +267,7 @@ public class TcpAdaptor : ITcpAdaptor
         // If we are ready to talk to web app, make sure we have a real socket
         if (_socketToLocalSide is null) // this is never true when making a proxy call
         {
-            Log.Trace("Connecting to web app");
-            try
-            {
-                // To determine if we should use TLS, we need
-                // to peek at the tunneled request data
-                if (SocketThroughTunnel.BytesOfReadDataWaiting >= TlsDetector.RequiredBytes)
-                {
-                    var incomingIsTls = TlsDetector.IsTlsHandshake(SocketThroughTunnel.PeekWaitingData(TlsDetector.RequiredBytes), out var isAcceptable);
-                    if (incomingIsTls && !isAcceptable) throw new Exception("Client requested an SSL/TLS version that is unacceptably old.");
-                    
-                    // If this is a TLS session, AND we have a certificate
-                    //       mapped to the target (local side), THEN we should
-                    //       stick an adaptor in between the web app and the
-                    //       remote caller, and handle the TLS ourselves, so we
-                    //       end up with a legitimate certificate from the outside.
-                    //       We should still make a HTTPS call to our web app so
-                    //       that we aren't exposing private data.
-                    var key = new IpV4Address(LocalAddress).AsString;
-                    if (incomingIsTls && Settings.TlsKeyPaths.ContainsKey(key))
-                    {
-                        // Rather than Remote<-[tunnel]->WebApp
-                        //  we will do Remote<->VirtualVPN | VirtualVPN<->WebApp separately.
-                        // This means we need to decrypt the data, and do a whole lot
-                        // of buffering, but we can make the virtual endpoint have
-                        // a correct certificate.
-                        //
-                        // We put the TlsUnwrap around the web app socket to keep
-                        // the TcpSocket logic as separate as possible (it' already complex enough!)
-                        //
-                        // So it looks like:
-                        //
-                        //  [WebApp] <-(socket)<-(TlsUnwrap)<- VirtualTcpSocket  <=tunnel=> [Remote Gateway]
-                        
-                        var keyPaths = Settings.TlsKeyPaths[key];
-                        _socketToLocalSide = new TlsUnwrap(keyPaths, () => ConnectToWebApp(incomingIsTls: false, wrapWithTlsAdaptor: true));
-                        SocketThroughTunnel.EventPump(); // not required, but called to reduce latency
-                    }
-                    else
-                    {
-                        // using TLS means Remote<-[tunnel]->WebApp is encrypted as one stream
-                        // and this TcpAdaptor doesn't try and understand the encrypted data.
-                        _socketToLocalSide = ConnectToWebApp(incomingIsTls, wrapWithTlsAdaptor: false);
-                    }
-                }
-                else
-                {
-                    Log.Trace("Not enough data received to do SSL/TLS detection. Waiting for more.");
-                    return false;
-                }
-            }
-            catch (Exception ex)
-            {
-                Log.Error("Can't connect to web app", ex);
-                SocketThroughTunnel.StartClose();
-                _transport.TerminateConnection(SelfKey);
-                return false;
-            }
+            if (!TryConnectToWebApp()) return false;
         }
 
         // End the transfer operation if we're not ready
@@ -373,6 +317,69 @@ public class TcpAdaptor : ITcpAdaptor
 
 
         return anyData;
+    }
+
+    private bool TryConnectToWebApp()
+    {
+        Log.Trace("Connecting to web app");
+        try
+        {
+            // To determine if we should use TLS, we need
+            // to peek at the tunneled request data
+            if (SocketThroughTunnel.BytesOfReadDataWaiting >= TlsDetector.RequiredBytes)
+            {
+                var incomingIsTls = TlsDetector.IsTlsHandshake(SocketThroughTunnel.PeekWaitingData(TlsDetector.RequiredBytes), out var isAcceptable);
+                if (incomingIsTls && !isAcceptable) throw new Exception("Client requested an SSL/TLS version that is unacceptably old.");
+
+                // If this is a TLS session, AND we have a certificate
+                //       mapped to the target (local side), THEN we should
+                //       stick an adaptor in between the web app and the
+                //       remote caller, and handle the TLS ourselves, so we
+                //       end up with a legitimate certificate from the outside.
+                //       We should still make a HTTPS call to our web app so
+                //       that we aren't exposing private data.
+                var key = new IpV4Address(LocalAddress).AsString;
+                if (incomingIsTls && Settings.TlsKeyPaths.ContainsKey(key))
+                {
+                    // Rather than Remote<-[tunnel]->WebApp
+                    //  we will do Remote<->VirtualVPN | VirtualVPN<->WebApp separately.
+                    // This means we need to decrypt the data, and do a whole lot
+                    // of buffering, but we can make the virtual endpoint have
+                    // a correct certificate.
+                    //
+                    // We put the TlsUnwrap around the web app socket to keep
+                    // the TcpSocket logic as separate as possible (it' already complex enough!)
+                    //
+                    // So it looks like:
+                    //
+                    //  [WebApp] <-(socket)<-(TlsUnwrap)<- VirtualTcpSocket  <=tunnel=> [Remote Gateway]
+
+                    var keyPaths = Settings.TlsKeyPaths[key];
+                    _socketToLocalSide = new TlsUnwrap(keyPaths, () => ConnectToWebApp(incomingIsTls: false, wrapWithTlsAdaptor: true));
+                    SocketThroughTunnel.EventPump(); // not required, but called to reduce latency
+                }
+                else
+                {
+                    // using TLS means Remote<-[tunnel]->WebApp is encrypted as one stream
+                    // and this TcpAdaptor doesn't try and understand the encrypted data.
+                    _socketToLocalSide = ConnectToWebApp(incomingIsTls, wrapWithTlsAdaptor: false);
+                }
+            }
+            else
+            {
+                Log.Trace("Not enough data received to do SSL/TLS detection. Waiting for more.");
+                return false;
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Can't connect to web app", ex);
+            SocketThroughTunnel.StartClose();
+            _transport.TerminateConnection(SelfKey);
+            return false;
+        }
+
+        return true;
     }
 
     private bool MoveDataFromWebAppBackToTunnel()
@@ -574,7 +581,9 @@ public class TcpAdaptor : ITcpAdaptor
             return false;
         }
 
-        var acted = RunDataTransfer();
+        var acted = false;
+        acted |= SocketThroughTunnel.EventPump();
+        acted |= RunDataTransfer();
         acted |= SocketThroughTunnel.EventPump();
         Log.Trace($"Virtual socket state={SocketThroughTunnel.State}");
 

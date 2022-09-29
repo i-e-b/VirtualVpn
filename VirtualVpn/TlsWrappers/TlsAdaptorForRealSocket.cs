@@ -20,14 +20,17 @@ public class TlsAdaptorForRealSocket : ISocketAdaptor
         _sslWrapper = new SslStream(_streamWrapper, false, AnyCertificate);
         
         Log.Debug($"Starting TlsAdaptorForRealSocket. Socket connected={socket.Connected}. Calling for authentication");
-        
-        var startupThread = new Thread(()=>{
+
+        var startupThread = new Thread(() =>
+        {
             Log.Debug("TlsAdaptorForRealSocket. Authentication starting");
             _sslWrapper.AuthenticateAsClient(host);
-            Connected = true;
+            Connected = _sslWrapper.IsAuthenticated;
+            _faulted = !_sslWrapper.IsAuthenticated;
             Log.Debug($"TlsAdaptorForRealSocket. Authentication complete. Success={_sslWrapper.IsAuthenticated}");
-        }){IsBackground = true};
+        }) { IsBackground = true };
         startupThread.Start();
+        
         Log.Trace("TlsAdaptorForRealSocket: Leaving constructor");
     }
 
@@ -38,7 +41,7 @@ public class TlsAdaptorForRealSocket : ISocketAdaptor
 
     public void Dispose()
     {
-        Log.Trace("TlsAdaptorForRealSocket: Dispose");
+        Log.Debug("TlsAdaptorForRealSocket: Dispose");
         _closed = true;
         
         _sslWrapper.Dispose();
@@ -47,7 +50,7 @@ public class TlsAdaptorForRealSocket : ISocketAdaptor
 
     public void Close()
     {
-        Log.Trace("TlsAdaptorForRealSocket: Close");
+        Log.Debug("TlsAdaptorForRealSocket: Close");
         if (_closed) return;
         _closed = true;
         
@@ -62,6 +65,12 @@ public class TlsAdaptorForRealSocket : ISocketAdaptor
         if (_closed)
         {
             Log.Warn("TlsAdaptorForRealSocket.IncomingFromTunnel: use after closed");
+            return 0;
+        }
+
+        if (!Connected)
+        {
+            Log.Trace("TlsAdaptorForRealSocket.IncomingFromTunnel - not yet connected");
             return 0;
         }
 
@@ -86,7 +95,13 @@ public class TlsAdaptorForRealSocket : ISocketAdaptor
             Log.Warn("TlsAdaptorForRealSocket.OutgoingFromLocal: use after closed");
             return 0;
         }
-        
+
+        if (!Connected)
+        {
+            Log.Trace("TlsAdaptorForRealSocket.OutgoingFromLocal - not yet connected");
+            return 0;
+        }
+
         try
         {
             Log.Trace("TlsAdaptorForRealSocket: OutgoingFromLocal");
@@ -102,6 +117,6 @@ public class TlsAdaptorForRealSocket : ISocketAdaptor
 
     public bool IsFaulted()
     {
-        return _faulted;
+        return _faulted || _closed;
     }
 }
