@@ -465,22 +465,24 @@ public class TcpAdaptor : ITcpAdaptor
     private bool MoveDataFromTunnelToWebApp()
     {
         // BUG: this sometimes fails with "Failed to move data from tunnel to Web App: Arithmetic operation resulted in an overflow."
+        long bufferQ = 0;
         try
         {
-            if (SocketThroughTunnel.BytesOfReadDataWaiting < 1)
+            bufferQ = SocketThroughTunnel.BytesOfReadDataWaiting;
+            if (bufferQ < 1)
             {
                 Log.Trace("No data to move to web app");
                 return false;
             }
 
-            if (SocketThroughTunnel.BytesOfReadDataWaiting > 1048576)
+            if (bufferQ > 1048576)
             {
                 Log.Critical("Socket claims over a megabyte queued. This is likely a calculation error");
                 throw new Exception("TcpAdaptor.MoveDataFromTunnelToWebApp  Overflow in SocketThroughTunnel.BytesOfReadDataWaiting");
             }
 
             // read from tunnel
-            var buffer = new byte[SocketThroughTunnel.BytesOfReadDataWaiting];
+            var buffer = new byte[bufferQ];
             var actual = SocketThroughTunnel.ReadData(buffer);
             _totalVirtualRead += actual;
             Log.Debug($"Message received from tunnel, {actual} bytes of an expected {buffer.Length}.");
@@ -502,7 +504,7 @@ public class TcpAdaptor : ITcpAdaptor
         }
         catch (Exception ex)
         {
-            Log.Warn($"Tunnel movement issue? {ex}");
+            Log.Warn($"Tunnel movement issue? {bufferQ} / {ex}");
             Log.Error("Failed to move data from tunnel to Web App", ex);
             return false;
         }

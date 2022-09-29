@@ -1363,7 +1363,14 @@ public class TcpSocket
                 }
 
                 // Calculate and Acknowledge the largest contiguous segment we have
-                _tcb.Rcv.Nxt = _receiveQueue.ContiguousSequence(_tcb.Rcv.Nxt);
+                var nxt = _receiveQueue.ContiguousSequence(_tcb.Rcv.Nxt);
+                if (nxt > uint.MaxValue)
+                {
+                    Log.Warn("Wrap in TCP window");
+                    nxt -= uint.MaxValue;
+                    if (nxt > uint.MaxValue) throw new Exception("Impossible overflow in TcpSocket");
+                }
+                _tcb.Rcv.Nxt = (uint)nxt; 
                 
                 Log.Trace($"ProcessSegmentData - segment queued. {segLen} bytes. Receive queue has {_receiveQueue.EntireSize} bytes. Sending ACK.");
                 

@@ -41,7 +41,7 @@ public class ReceiveBuffer
     /// </summary>
     /// <param name="initial">initial sequence number to count from (next byte expected)</param>
     /// <returns>the next byte after the highest contiguous sequence number from 'initial' that is held</returns>
-    public uint ContiguousSequence(long initial) // lib/tcp/tcp.c:361
+    public long ContiguousSequence(long initial) // lib/tcp/tcp.c:361
     {
         lock (_lock)
         {
@@ -65,7 +65,7 @@ public class ReceiveBuffer
                 else break;
             }
 
-            return (uint)position;
+            return position;
         }
     }
 
