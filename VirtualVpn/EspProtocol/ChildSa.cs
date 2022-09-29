@@ -95,7 +95,7 @@ public class ChildSa : ITransportTunnel
             }
             else
             {
-                result.Add($"ACTIVE: {IpV4Address.Describe(session.Address)}:{session.Port} - {tcp.SocketThroughTunnel.State.ToString()} ( {IpV4Address.Describe(tcp.LocalAddress)}:{tcp.LocalPort}->{IpV4Address.Describe(tcp.RemoteAddress)}:{tcp.RemotePort} )");
+                result.Add($"ACTIVE: {session.Address.AsString}:{session.Port} - {tcp.SocketThroughTunnel.State.ToString()} ( {IpV4Address.Describe(tcp.LocalAddress)}:{tcp.LocalPort}->{IpV4Address.Describe(tcp.RemoteAddress)}:{tcp.RemotePort} )");
             }
         }
         
@@ -148,7 +148,7 @@ public class ChildSa : ITransportTunnel
         foreach (var tcpKey in allSessions)
         {
             goFaster = true; // go fast if there are any open connections
-            if (tcpKey.Address == 0)
+            if (tcpKey.Address.IsZero())
             {
                 Log.Critical("Stored a tcp session with a zero value key!");
                 _tcpSessions.Remove(tcpKey);
@@ -307,13 +307,13 @@ public class ChildSa : ITransportTunnel
     {
         try
         {
-            if (key.Address == 0 || key.Port == 0)
+            if (key.Address.IsZero() || key.Port == 0)
             {
-                Log.Critical($"ChildSa.TerminateConnection was passed an invalid key: {IpV4Address.Describe(key.Address)}:{key.Port}; " +
+                Log.Critical($"ChildSa.TerminateConnection was passed an invalid key: {key.Describe()}; " +
                              $"Known keys are: {string.Join(", ", _tcpSessions.Keys.Select(x => x.Describe()))}");
             }
 
-            Log.WarnWithStack($"Trying to remove {IpV4Address.Describe(key.Address)}:{key.Port}");
+            Log.WarnWithStack($"Trying to remove {key.Describe()}");
             
             var session = _tcpSessions.Remove(key);
             if (session is not null)
@@ -399,7 +399,7 @@ public class ChildSa : ITransportTunnel
         try
         {
             var key = TcpAdaptor.ReadSenderAndPort(incomingIpv4Message);
-            if (key.Port == 0 || key.Address == 0)
+            if (key.Port == 0 || key.Address.IsZero())
             {
                 Log.Info("Invalid TCP/IP request: address or port not recognised");
                 return;
@@ -486,7 +486,7 @@ public class ChildSa : ITransportTunnel
             }
 
             // Final check
-            if (key.Port == 0 || key.Address == 0)
+            if (key.Port == 0 || key.Address.IsZero())
             {
                 Log.Critical("Lost valid TCP/IP request: address or port went zero");
                 return;

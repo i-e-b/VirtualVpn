@@ -110,7 +110,7 @@ public class TcpAdaptor : ITcpAdaptor
     public TcpAdaptor(ChildSa transport, IPEndPoint gateway, SenderPort selfKey, ISocketAdaptor? socketAdaptor)
     {
         _transport = transport;
-        if (selfKey.Address == 0) throw new Exception("Invalid key passed to TcpAdaptor");
+        if (selfKey.Address.IsZero()) throw new Exception("Invalid key passed to TcpAdaptor");
         SelfKey = selfKey;
         _closeCalled = false;
 
@@ -458,6 +458,12 @@ public class TcpAdaptor : ITcpAdaptor
             {
                 Log.Trace("No data to move to web app");
                 return false;
+            }
+
+            if (SocketThroughTunnel.BytesOfReadDataWaiting > 1048576)
+            {
+                Log.Critical("Socket claims over a megabyte queued. This is likely a calculation error");
+                throw new Exception("TcpAdaptor.MoveDataFromTunnelToWebApp  Overflow in SocketThroughTunnel.BytesOfReadDataWaiting");
             }
 
             // read from tunnel

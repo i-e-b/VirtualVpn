@@ -1,5 +1,4 @@
-﻿using VirtualVpn.Helpers;
-using VirtualVpn.InternetProtocol;
+﻿using VirtualVpn.InternetProtocol;
 
 namespace VirtualVpn.TcpProtocol;
 
@@ -12,8 +11,8 @@ public class SenderPort
     /// Address of the remote system as an internal representation.
     /// If zero, this is invalid.
     /// </summary>
-    public readonly ulong Address;
-    
+    public IpV4Address Address { get; }
+
     /// <summary>
     /// Port on local system being requested.
     /// If zero, this is invalid.
@@ -24,16 +23,16 @@ public class SenderPort
     {
         if (obj is SenderPort other)
         {
-            return Port == other.Port
-                && Address   == other.Address;
+            return Port    == other.Port
+                && Address == other.Address;
         }
         return false;
     }
 
     public SenderPort(byte[] senderAddress, int destinationPort)
     {
-        Address = Bit.BytesToUInt64Msb(senderAddress);
-        if (Address == 0)
+        Address = new IpV4Address(senderAddress);
+        if (Address.IsZero())
         {
             Log.Critical("Tried to use a zero-value address as a key");
             throw new Exception("Tried to use a zero-value address as a key");
@@ -44,9 +43,9 @@ public class SenderPort
 
     public override int GetHashCode()
     {
+        var addr = (int)Address.AsInt;
         var h = Port + (Port << 16);
-        h ^= (int)(Address >>  0);
-        h ^= (int)(Address >> 32);
+        h ^= addr;
         return h;
     }
 
@@ -56,6 +55,6 @@ public class SenderPort
 
     public string Describe()
     {
-        return $"{IpV4Address.Describe(Address)}:{Port} ({Address:x})";
+        return $"{Address.AsString}:{Port}";
     }
 }
