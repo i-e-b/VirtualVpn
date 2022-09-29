@@ -1793,15 +1793,19 @@ public class TcpSocket
             || !SeqInWindow(segEnd, _tcb.Rcv.Nxt, _tcb.Rcv.Wnd))
         {
             valid = false;
-            Log.Warn($"Received out of sequence segment. SEQ {segSeq} < RCV.NXT {_tcb.Rcv.Nxt}");
+            Log.Error($"TcpSocket fault: Received out of sequence segment. SEQ {segSeq} < RCV.NXT {_tcb.Rcv.Nxt}");
             Log.DebugWithStack("Caller is giving bad sequence. Maybe a streaming adaptor issue?");
+            SetState(TcpSocketState.Closed);
+            ErrorCode = SocketError.Fault;
         }
 
         if (!SeqInWindow(segEnd, _tcb.Rcv.Nxt, _tcb.Rcv.Wnd))
         {
             valid = false;
+            Log.Error($"TcpSocket fault: More data sent that fits in negotiated window. SEQ={segSeq}, End={segEnd}, Length={segLen}, RCV.NXT={_tcb.Rcv.Nxt}, RCV.WND={_tcb.Rcv.Wnd}");
             Log.DebugWithStack("Caller is stuffing window. Maybe a streaming adaptor issue?");
-            Log.Warn($"More data sent that fits in negotiated window. SEQ={segSeq}, End={segEnd}, Length={segLen}, RCV.NXT={_tcb.Rcv.Nxt}, RCV.WND={_tcb.Rcv.Wnd}");
+            SetState(TcpSocketState.Closed);
+            ErrorCode = SocketError.Fault;
         }
 
         return valid;

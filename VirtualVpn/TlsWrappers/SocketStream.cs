@@ -69,12 +69,21 @@ public class SocketStream : Stream
         Log.Trace($"SocketStream.{nameof(Read)}(buffer[{buffer.Length}], offset={offset}, count={count})");
         if (_socket == null) throw new InvalidOperationException("Attempted to read from a null socket");
         if (!_socket.Connected) throw new InvalidOperationException("Attempted to read from a disconnected socket");
-        
+
         // SslStream REQUIRES us to be blocking on this call
-        while (_socket.Connected && _socket.Available < 1)
+        try
         {
-            Thread.Sleep(50);
+            while (_socket is not null && _socket.Connected && _socket.Available < 1)
+            {
+                Thread.Sleep(50);
+            }
         }
+        catch (Exception ex)
+        {
+            Log.Error("SocketStream failed during wait for data", ex);
+        }
+
+        if (_socket == null) return 0;
 
         int len;
         try
