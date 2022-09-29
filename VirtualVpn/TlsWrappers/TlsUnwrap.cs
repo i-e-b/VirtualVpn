@@ -147,7 +147,8 @@ public class TlsUnwrap : ISocketAdaptor
             }
             catch (Exception ex)
             {
-                Log.Error("Failure in TlsUnwrap.BufferPumpIncoming", ex);
+                Log.Debug($"Failure in TlsUnwrap.BufferPumpIncoming. Probably shutdown related: {ex.Message}");
+                Thread.Sleep(50);
             }
         }
     }
@@ -193,7 +194,8 @@ public class TlsUnwrap : ISocketAdaptor
             }
             catch (Exception ex)
             {
-                Log.Error("Failure in TlsUnwrap.BufferPumpOutgoing", ex);
+                Log.Debug($"Failure in TlsUnwrap.BufferPumpOutgoing. Probably shutdown related: {ex.Message}");
+                Thread.Sleep(50);
             }
         }
     }
