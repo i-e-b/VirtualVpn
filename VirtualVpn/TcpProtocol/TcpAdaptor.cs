@@ -201,6 +201,11 @@ public class TcpAdaptor : ITcpAdaptor
 
         if (!ok) return new SenderPort(Array.Empty<byte>(), 0);
 
+        if (tcpSeg.DestinationPort < 1024)
+        {
+            Log.WarnWithStack($"Destination port looks wrong. Dest={message.Destination.AsString}:{tcpSeg.DestinationPort}; Src={message.Source.AsString}:{tcpSeg.SourcePort}");
+        }
+
         return new SenderPort(message.Source.Value, tcpSeg.DestinationPort);
     }
 
