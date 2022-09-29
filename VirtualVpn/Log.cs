@@ -251,7 +251,8 @@ public static class Log
         foreach (var frame in frames)
         {
             BlankTimestamp();
-            Console.WriteLine($"    {frame.GetMethod()?.Name ?? "unknown"}");
+            var method = frame.GetMethod();
+            Console.WriteLine($"    {method?.DeclaringType?.Name??"?"}.{method?.Name ?? "unknown"}");
         }
     }
     

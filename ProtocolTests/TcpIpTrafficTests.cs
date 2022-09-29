@@ -645,7 +645,7 @@ public class TestAdaptor : ITcpAdaptor
         throw new NotImplementedException();
     }
 
-    public SenderPort SelfKey => new();
+    public SenderPort SelfKey => new(new byte[] { 1, 2, 3, 4 }, 5);
 
     public Stopwatch LastContact { get; }
     public byte[] LocalAddress { get; }

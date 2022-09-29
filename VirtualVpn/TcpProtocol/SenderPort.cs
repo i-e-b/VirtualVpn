@@ -5,7 +5,7 @@ namespace VirtualVpn.TcpProtocol;
 /// <summary>
 /// Combine remote address and local port into a hashable key
 /// </summary>
-public readonly struct SenderPort
+public class SenderPort
 {
     /// <summary>
     /// Address of the remote system as an internal representation.
