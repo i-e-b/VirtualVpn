@@ -68,16 +68,16 @@ public class SocketStream : Stream
     {
         Log.Trace($"SocketStream.{nameof(Read)}(buffer[{buffer.Length}], offset={offset}, count={count})");
         if (_socket == null) throw new InvalidOperationException("Attempted to read from a disconnected socket");
+        if (!_socket.Connected) return 0; // not connected, no data
+        if (_socket.Available < 1) return 0; // no data
 
-        Thread.Sleep(250);
         int len;
         try
         {
             len = _socket.Receive(buffer, offset, count, SocketFlags.None, out var err);
             if (err != SocketError.Success && err != SocketError.WouldBlock)
             {
-                if (err == SocketError.TimedOut)
-                    throw new TimeoutException();
+                if (err == SocketError.TimedOut) throw new TimeoutException();
                 throw new SocketException((int)err);
             }
 
