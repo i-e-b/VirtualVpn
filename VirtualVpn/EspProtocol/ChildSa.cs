@@ -160,18 +160,18 @@ public class ChildSa : ITransportTunnel
             
             if (tcp.LastContact.Elapsed > Settings.TcpTimeout)
             {
-                Log.Info($"Old session: {tcp.LastContact.Elapsed}; remote={Bit.ToIpAddressString(tcp.RemoteAddress)}:{tcp.RemotePort}," +
+                Log.Debug($"Old session: {tcp.LastContact.Elapsed}; remote={Bit.ToIpAddressString(tcp.RemoteAddress)}:{tcp.RemotePort}," +
                           $" local={Bit.ToIpAddressString(tcp.LocalAddress)}:{tcp.LocalPort}. Closing");
                 TerminateConnection(tcpKey);
             }
             else if (tcp.TunnelConnectionIsClosedOrFaulted())
             {
-                Log.Info($"Old session closed: {Bit.ToIpAddressString(tcp.RemoteAddress)}:{tcp.RemotePort} -> {Bit.ToIpAddressString(tcp.LocalAddress)}:{tcp.LocalPort}");
+                Log.Debug($"Old session closed: {Bit.ToIpAddressString(tcp.RemoteAddress)}:{tcp.RemotePort} -> {Bit.ToIpAddressString(tcp.LocalAddress)}:{tcp.LocalPort}");
                 TerminateConnection(tcpKey);
             }
             else if (tcp.WebAppConnectionIsFaulted())
             {
-                Log.Info($"Connection to web app faulted, disconnecting: {Bit.ToIpAddressString(tcp.RemoteAddress)}:{tcp.RemotePort} -> {Bit.ToIpAddressString(tcp.LocalAddress)}:{tcp.LocalPort}");
+                Log.Debug($"Connection to web app faulted, disconnecting: {Bit.ToIpAddressString(tcp.RemoteAddress)}:{tcp.RemotePort} -> {Bit.ToIpAddressString(tcp.LocalAddress)}:{tcp.LocalPort}");
                 TerminateConnection(tcpKey);
             }
 

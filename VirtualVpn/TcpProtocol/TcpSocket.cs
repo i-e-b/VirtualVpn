@@ -1237,14 +1237,14 @@ public class TcpSocket
             switch (_state)
             {
                 case TcpSocketState.Established:
-                    Log.Info("Timer expired from Established state. Beginning close process.");
+                    Log.Trace("Timer expired from Established state. Beginning close process.");
                     _timeWait.Reset();
                     _closeWait.Reset();
                     StartClose();
                     break;
                 
                 case TcpSocketState.CloseWait:
-                    Log.Info("Timer expired from Established state. Beginning close process.");
+                    Log.Trace("Timer expired from CloseWait state. Continuing close process.");
                     _timeWait.Reset();
                     _closeWait.Reset();
                     SetState(TcpSocketState.LastAck);
@@ -1252,7 +1252,7 @@ public class TcpSocket
                     break;
                 
                 default:
-                    Log.Info($"Tcp socket life-timer expired in state {_state.ToString()}. Session is terminated.");
+                    Log.Debug($"Tcp socket life-timer expired in state {_state.ToString()}. Session is terminated.");
                     SetState(TcpSocketState.Closed);
                     _closeWait.Reset();
                     KillSession();
