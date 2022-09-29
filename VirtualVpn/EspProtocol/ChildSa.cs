@@ -408,15 +408,17 @@ public class ChildSa : ITransportTunnel
                     )
                 {
                     Log.Critical("Data still incoming to broken connection!");
+                    Log.Info("Removing session, will try to make it fall through to a new one");
+                    _tcpSessions.Remove(key);
                 }
                 else
                 {
                     Log.Trace($"#################### ACTIVE Virtual Socket-- state={session.SocketThroughTunnel.State}; error code={session.SocketThroughTunnel.ErrorCode}");
-                }
 
-                // continue existing session
-                session.Accept(incomingIpv4Message);
-                return;
+                    // continue existing session
+                    session.Accept(incomingIpv4Message);
+                    return;
+                }
             }
             
             // check this is valid as the start of a new session
@@ -451,14 +453,14 @@ public class ChildSa : ITransportTunnel
             // Check for shut-down messages
             if (tcp.Flags.FlagsSet(TcpSegmentFlags.FinAck))
             {
-                Log.Trace($"Got FIN/ACK from {incomingIpv4Message.Source.AsString}. Sending final ACK");
+                Log.Debug($"Got FIN/ACK from {incomingIpv4Message.Source.AsString}. Sending final ACK");
                 ReplyToFinAck(incomingIpv4Message, tcp, sender);
                 return;
             }
                 
             if (tcp.Flags.FlagsSet(TcpSegmentFlags.Ack) || tcp.Flags.FlagsSet(TcpSegmentFlags.Rst))
             {
-                Log.Trace("Got end-of-stream message for a stream we already closed. Ignoring");
+                Log.Info("Got end-of-stream message for a stream we already closed. Ignoring");
                 return;
             }
 
