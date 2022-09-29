@@ -174,6 +174,17 @@ public static class Log
             Console.WriteLine(msg);
         }
     }
+
+    public static void WarnWithStack(string msg)
+    {        if (_level < LogLevel.Warning) return;
+
+        lock (_lock)
+        {
+            Timestamp();
+            Console.WriteLine(msg);
+            WriteStack();
+        }
+    }
     
     public static void Error(string msg,
         [CallerMemberName] string memberName = "<unknown>",

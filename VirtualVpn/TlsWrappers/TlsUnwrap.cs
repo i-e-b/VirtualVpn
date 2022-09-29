@@ -281,7 +281,7 @@ public class TlsUnwrap : ISocketAdaptor
     private X509Certificate CertSelect(object sender, string? hostname)
     {
         if (_certificate is null) throw new Exception("TlsUnwrap.CertSelect: tried to select, but no certificate was loaded");
-        Console.WriteLine($"Returning cert for {hostname} with {_certificate.Subject}");
+        Log.Trace($"Returning cert for {hostname??"<unknown>"} with {_certificate.Subject}");
 
         if (Platform.Current() == Platform.Kind.Windows)
         {

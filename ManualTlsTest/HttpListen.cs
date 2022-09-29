@@ -64,7 +64,7 @@ public class HttpListen
     private static X509Certificate CertSelect(object sender, string? hostname)
     {
         var cert = GetX509Certificate();
-        Console.WriteLine($"Returning cert for {hostname} with {cert.Subject}");
+        Console.WriteLine($"Returning cert for {hostname??"<unknown>"} with {cert.Subject}");
 
         if (Platform.Current() == Platform.Kind.Windows)
         {
