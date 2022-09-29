@@ -48,8 +48,8 @@ public class BlockingBidirectionalBuffer : Stream
         {
             if (length <= 0) return 0;
 
-            var bytesToStore = length;
-            var available = buffer.Length - offset;
+            long bytesToStore = length;
+            long available = buffer.Length - offset;
             if (bytesToStore > available) bytesToStore = available;
 
             Log.Trace($"BlockingBidirectionalBuffer: IncomingFromTunnel, adding {bytesToStore} bytes");
@@ -59,12 +59,12 @@ public class BlockingBidirectionalBuffer : Stream
             }
             else
             {
-                _incomingQueue.AddRange(buffer.Skip(offset).Take(bytesToStore));
+                _incomingQueue.AddRange(buffer.Skip(offset).Take((int)bytesToStore));
             }
 
             Log.Trace("BlockingBidirectionalBuffer: Releasing lock on incoming data");
             _incomingDataLatch.Set();
-            return bytesToStore;
+            return (int)bytesToStore;
         }
     }
     

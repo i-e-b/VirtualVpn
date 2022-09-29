@@ -464,6 +464,7 @@ public class TcpAdaptor : ITcpAdaptor
     
     private bool MoveDataFromTunnelToWebApp()
     {
+        // BUG: this sometimes fails with "Failed to move data from tunnel to Web App: Arithmetic operation resulted in an overflow."
         try
         {
             if (SocketThroughTunnel.BytesOfReadDataWaiting < 1)
@@ -488,7 +489,7 @@ public class TcpAdaptor : ITcpAdaptor
             if (actual < 1) return false;
             
             // Send data to web app
-            var sent = _socketToLocalSide?.IncomingFromTunnel(buffer, 0, actual) ?? -1;
+            var sent = _socketToLocalSide?.IncomingFromTunnel(buffer, 0, actual) ?? 0;
             if (sent != actual)
             {
                 Log.Warn($"Unexpected send length. Tried to send {actual} bytes, but transmitted {sent} bytes.");
@@ -501,6 +502,7 @@ public class TcpAdaptor : ITcpAdaptor
         }
         catch (Exception ex)
         {
+            Log.WarnWithStack("Tunnel movement issue?");
             Log.Error("Failed to move data from tunnel to Web App", ex);
             return false;
         }
