@@ -433,7 +433,8 @@ public class ChildSa : ITransportTunnel
                 if (parked.WebAppConnectionIsFaulted() || parked.TunnelConnectionIsClosedOrFaulted())
                 {
                     Log.Trace($"####################  PARKED Virtual Socket-- state={parked.SocketThroughTunnel.State}; error code={parked.SocketThroughTunnel.ErrorCode}");
-                    Log.Info("Parked session in closed or faulted state. Will start a new session.");
+                    Log.Info("Parked session in closed or faulted state. Will remove, and start a new session.");
+                    _parkedSessions.Remove(key);
                     // don't return.
                 }
                 else
