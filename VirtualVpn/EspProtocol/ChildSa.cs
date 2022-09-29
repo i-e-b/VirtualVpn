@@ -312,28 +312,21 @@ public class ChildSa : ITransportTunnel
                 Log.Critical($"ChildSa.TerminateConnection was passed an invalid key: {key.Describe()}; " +
                              $"Known keys are: {string.Join(", ", _tcpSessions.Keys.Select(x => x.Describe()))}");
             }
-
-
-            // BUG: In some cases, this is the wrong side key (seeing 192.168.0.40:443)
-            //      The port on this side should be the ephemeral one!
-            if (key.Port < 1024)
-            {
-                Log.Critical("Non-ephemeral port was used as a session key. This will break the routing logic!");
-            }
+            if (key.Port < 1024) { Log.Critical("Non-ephemeral port was used as a session key. This will break the routing logic!"); }
             
-            Log.Info($"Trying to remove {key.Describe()}");
+            Log.Debug($"Trying to remove {key.Describe()}");
             
             var session = _tcpSessions.Remove(key);
             if (session is not null)
             {
-                Log.Info($"Terminating {IpV4Address.Describe(session.LocalAddress)}:{session.LocalPort} -> {IpV4Address.Describe(session.RemoteAddress)}:{session.RemotePort}");
+                Log.Info($"Parking {session.Describe()}");
             }
 
 
             session = _parkedSessions.Remove(key);
             if (session is not null)
             {
-                Log.Info($"Terminating {IpV4Address.Describe(session.LocalAddress)}:{session.LocalPort} -> {IpV4Address.Describe(session.RemoteAddress)}:{session.RemotePort}");
+                Log.Info($"Terminating {session.Describe()}");
             }
             
         }
@@ -503,7 +496,15 @@ public class ChildSa : ITransportTunnel
             // start new session
             var newSession = new TcpAdaptor(this, sender, key, null);
             var sessionOk = newSession.StartIncoming(incomingIpv4Message);
-            if (sessionOk) _tcpSessions[key] = newSession;
+            if (sessionOk)
+            {
+                _tcpSessions[key] = newSession;
+                Log.Info($"Session started {key.Describe()}");
+            }
+            else
+            {
+                Log.Warn($"Could not start session {key.Describe()}");
+            }
         }
         catch (Exception ex)
         {

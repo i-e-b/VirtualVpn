@@ -657,6 +657,7 @@ public class TestAdaptor : ITcpAdaptor
     public bool TunnelConnectionIsClosedOrFaulted() => false;
 
     public bool WebAppConnectionIsFaulted() => false;
+    public string Describe() => "test adaptor";
 
     public void Clear()
     {

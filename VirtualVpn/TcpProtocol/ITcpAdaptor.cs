@@ -67,4 +67,5 @@ public interface ITcpAdaptor
 
     bool TunnelConnectionIsClosedOrFaulted();
     bool WebAppConnectionIsFaulted();
+    string Describe();
 }

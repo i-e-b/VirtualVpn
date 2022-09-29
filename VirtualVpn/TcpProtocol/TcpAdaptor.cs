@@ -59,6 +59,11 @@ public class TcpAdaptor : ITcpAdaptor
         return _socketToLocalSide.IsFaulted();
     }
 
+    public string Describe()
+    {
+        return $"{IpV4Address.Describe(LocalAddress)}:{LocalPort} -> {IpV4Address.Describe(RemoteAddress)}:{RemotePort}";
+    }
+
     /// <summary> The tunnel session we are connected to (used for sending replies) </summary>
     private readonly ChildSa _transport;
 
