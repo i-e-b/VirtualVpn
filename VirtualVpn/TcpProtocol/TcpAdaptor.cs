@@ -464,7 +464,6 @@ public class TcpAdaptor : ITcpAdaptor
     
     private bool MoveDataFromTunnelToWebApp()
     {
-        // BUG: this sometimes fails with "Failed to move data from tunnel to Web App: Arithmetic operation resulted in an overflow."
         long bufferQ = 0;
         try
         {
@@ -504,8 +503,7 @@ public class TcpAdaptor : ITcpAdaptor
         }
         catch (Exception ex)
         {
-            Log.Warn($"Tunnel movement issue? {bufferQ} / {ex}");
-            Log.Error("Failed to move data from tunnel to Web App", ex);
+            Log.Error($"Failed to move data from tunnel to Web App (buffer queue={bufferQ} bytes )", ex);
             return false;
         }
     }
