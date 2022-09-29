@@ -1,4 +1,5 @@
 ﻿using VirtualVpn.Helpers;
+using VirtualVpn.InternetProtocol;
 
 namespace VirtualVpn.TcpProtocol;
 
@@ -52,4 +53,9 @@ public class SenderPort
     public static bool operator ==(SenderPort left, SenderPort right) => left.Equals(right);
 
     public static bool operator !=(SenderPort left, SenderPort right) => !(left == right);
+
+    public string Describe()
+    {
+        return $"{IpV4Address.Describe(Address)}:{Port} ({Address:x})";
+    }
 }

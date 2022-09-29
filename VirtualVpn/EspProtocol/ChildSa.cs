@@ -307,6 +307,12 @@ public class ChildSa : ITransportTunnel
     {
         try
         {
+            if (key.Address == 0 || key.Port == 0)
+            {
+                Log.Critical($"ChildSa.TerminateConnection was passed an invalid key: {IpV4Address.Describe(key.Address)}:{key.Port}; " +
+                             $"Known keys are: {string.Join(", ", _tcpSessions.Keys.Select(x => x.Describe()))}");
+            }
+
             Log.WarnWithStack($"Trying to remove {IpV4Address.Describe(key.Address)}:{key.Port}");
             
             var session = _tcpSessions.Remove(key);
