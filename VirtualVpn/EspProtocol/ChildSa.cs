@@ -485,7 +485,7 @@ public class ChildSa : ITransportTunnel
                 
             if (tcp.Flags.FlagsSet(TcpSegmentFlags.Ack) || tcp.Flags.FlagsSet(TcpSegmentFlags.Rst))
             {
-                Log.Info("Got end-of-stream message for a stream we already closed. Ignoring");
+                Log.Debug("Got end-of-stream message for a stream we already closed. Ignoring");
                 return;
             }
 
