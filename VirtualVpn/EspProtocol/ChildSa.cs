@@ -237,8 +237,8 @@ public class ChildSa : ITransportTunnel
 
         if (_parkedSessions.Count > 50)
         {
-            Log.Info("Count of parked sessions exceeds 50. Pruning oldest sessions");
-            _tcpSessions.RemoveWhere(s => (DateTime.UtcNow - s.StartTime) > Settings.TcpTimeout);
+            _parkedSessions.RemoveWhere(s => (DateTime.UtcNow - s.StartTime) > Settings.TcpTimeout);
+            Log.Trace($"Count of parked sessions exceeds 50. Pruning oldest sessions, now have {_parkedSessions.Count}");
 
             if (_parkedSessions.Count > 250)
             {
