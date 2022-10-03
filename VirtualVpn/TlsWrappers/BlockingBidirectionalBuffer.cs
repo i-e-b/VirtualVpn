@@ -156,7 +156,7 @@ public class BlockingBidirectionalBuffer : Stream
         while (!_disposed && available < 1)
         {
             if (sw.Elapsed > Settings.TcpTimeout) throw new Exception("BBB: Read timed out");
-            Thread.Sleep(1);
+            Thread.Sleep(10);
             lock (_transferLock) { available = _incomingQueue.Count - _incomingQueueRead; }
         }
         Log.Debug($"Read waited {sw.Elapsed}");
@@ -212,8 +212,8 @@ public class BlockingBidirectionalBuffer : Stream
         Log.Trace("Proxy: Write (wait)");
         while (!_disposed && _outgoingQueue.Count > 0)
         {
-            if (sw.Elapsed > TimeSpan.FromSeconds(10)) throw new Exception("BBB: Write timed out");
-            Thread.Sleep(1);
+            if (sw.Elapsed > Settings.TcpTimeout) throw new Exception("BBB: Write timed out");
+            Thread.Sleep(10);
         }
 
         Log.Trace("Proxy: Write complete");

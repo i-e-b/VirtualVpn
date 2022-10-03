@@ -304,11 +304,14 @@ public class TlsUnwrap : ISocketAdaptor
         try { _certificate.Dispose(); }
         catch (Exception ex) { Log.Error("TLS unwrap.Close: Failed to dispose certificate", ex); }
         
-        var ok = _pumpThreadIncoming.Join(TimeSpan.FromSeconds(3));
-        ok &= _pumpThreadOutgoing.Join(TimeSpan.FromSeconds(3));
+        // Give the TLS process a LOT of time to die
+        Thread.Sleep(Settings.TcpTimeout);
+        var ok = _pumpThreadIncoming.Join(Settings.TcpTimeout);
+        ok &= _pumpThreadOutgoing.Join(Settings.TcpTimeout);
         if (!ok)
         {
             Log.Critical("TLS unwrap: pump threads did not stop within time limit");
+            throw new Exception("TLS unwrap: pump threads did not stop within time limit");
         }
     }
 
