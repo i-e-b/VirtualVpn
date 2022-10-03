@@ -192,7 +192,6 @@ public class ChildSa : ITransportTunnel
         }
 
         // Old sessions that are shutting down.
-        // They are no longer keyed.
         var parkedKeys = _parkedSessions.Keys.ToArray();
         foreach (var oldKey in parkedKeys)
         {
@@ -229,9 +228,9 @@ public class ChildSa : ITransportTunnel
 
 
         // If we are accumulating sessions, start pruning them back
-        if (_tcpSessions.Count > 150)
+        if (_tcpSessions.Count > 100)
         {
-            Log.Warn("Count of active sessions exceeds 150. Pruning oldest sessions");
+            Log.Warn("Count of active sessions exceeds 100. Pruning oldest sessions");
             // close oldest sessions
             _tcpSessions.RemoveWhere(s => (DateTime.UtcNow - s.StartTime) > Settings.TcpTimeout);
         }
@@ -241,9 +240,9 @@ public class ChildSa : ITransportTunnel
             Log.Info("Count of parked sessions exceeds 50. Pruning oldest sessions");
             _tcpSessions.RemoveWhere(s => (DateTime.UtcNow - s.StartTime) > Settings.TcpTimeout);
 
-            if (_parkedSessions.Count > 50)
+            if (_parkedSessions.Count > 250)
             {
-                Log.Warn("Count of parked sessions exceeds 50 after pruning. Removing ALL parked sessions");
+                Log.Warn("Count of parked sessions exceeds 250 after pruning. Removing ALL parked sessions");
                 _parkedSessions.Clear();
             }
         }
@@ -357,15 +356,6 @@ public class ChildSa : ITransportTunnel
                 Log.Info($"Parking {session.Describe()}");
                 _parkedSessions[key] = session;
             }
-
-/*
-            session = _parkedSessions.Remove(key);
-            if (session is not null)
-            {
-                Log.Info($"Terminating {session.Describe()}");
-                session.Dispose();
-            }
-  */          
         }
         catch (Exception ex)
         {

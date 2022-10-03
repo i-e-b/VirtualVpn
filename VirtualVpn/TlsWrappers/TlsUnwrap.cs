@@ -53,6 +53,8 @@ public class TlsUnwrap : ISocketAdaptor
     /// </param>
     public TlsUnwrap(string tlsKeyPaths, Func<ISocketAdaptor> outgoingConnectionFunction)
     {
+        Interlocked.Increment(ref _disposalCount);
+        
         if (string.IsNullOrWhiteSpace(tlsKeyPaths)) throw new Exception("Must have valid paths to PEM files to start TLS re-wrap");
         _outgoingConnectionFunction = outgoingConnectionFunction;
 
@@ -145,6 +147,7 @@ public class TlsUnwrap : ISocketAdaptor
             Log.Error("TlsUnwrap: Failed to open outgoing connection", ex);
             _running = false;
             _faulted = true;
+            Interlocked.Decrement(ref _runningThreads);
             return;
         }
 
@@ -272,7 +275,6 @@ public class TlsUnwrap : ISocketAdaptor
     /// <summary>Release the underlying socket</summary>
     public void Dispose()
     {
-        _running = false;
         Close();
     }
 
@@ -281,11 +283,11 @@ public class TlsUnwrap : ISocketAdaptor
     /// </summary>
     public void Close()
     {
+        _running = false;
         if (_disposed) return;
         
         Interlocked.Decrement(ref _disposalCount);
         _disposed = true;
-        _running = false;
         
         try { _tunnelSideBuffer.Dispose(); }
         catch (Exception ex) { Log.Error("TLS unwrap.Close: Failed to dispose tunnel-side buffer", ex); }

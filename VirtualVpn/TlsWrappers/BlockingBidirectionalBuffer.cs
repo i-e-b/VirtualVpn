@@ -14,9 +14,6 @@ public class BlockingBidirectionalBuffer : Stream
     private int _outgoingQueueSent;
     private readonly List<byte> _incomingQueue;
     private int _incomingQueueRead;
-    
-    // latch used to make the Stream interface blocking
-    private readonly AutoResetEvent _incomingDataLatch;
     private bool _disposed;
     
     // thread lock
@@ -28,7 +25,6 @@ public class BlockingBidirectionalBuffer : Stream
     public BlockingBidirectionalBuffer()
     {
         _disposed = false;
-        _incomingDataLatch = new AutoResetEvent(false);
         _outgoingQueueSent = 0;
 
         _outgoingQueue = new List<byte>();
@@ -41,7 +37,6 @@ public class BlockingBidirectionalBuffer : Stream
         _disposed = true;
 
         Log.Warn("BlockingBidirectionalBuffer hit destructor without being disposed");
-        _incomingDataLatch.Dispose();
     }
 
     /// <summary>
@@ -52,7 +47,6 @@ public class BlockingBidirectionalBuffer : Stream
     public override void Close()
     {
         _disposed = true;
-        _incomingDataLatch.Dispose();
         base.Close();
     }
 
@@ -82,7 +76,6 @@ public class BlockingBidirectionalBuffer : Stream
             }
 
             Log.Trace("BlockingBidirectionalBuffer: Releasing lock on incoming data");
-            _incomingDataLatch.Set();
             return (int)bytesToStore;
         }
     }
@@ -158,20 +151,23 @@ public class BlockingBidirectionalBuffer : Stream
         sw.Start();
         
         Log.Trace("BlockingBidirectionalBuffer: Read (wait)");
-        var dataLatch = false;
-        while (!_disposed && !dataLatch)
+        int available;
+        lock (_transferLock) { available = _incomingQueue.Count - _incomingQueueRead; }
+        while (!_disposed && available < 1)
         {
-            if (sw.Elapsed > TimeSpan.FromSeconds(10)) throw new Exception("BBB: Read timed out");
-            dataLatch = _incomingDataLatch.WaitOne(500);
+            if (sw.Elapsed > Settings.TcpTimeout) throw new Exception("BBB: Read timed out");
+            Thread.Sleep(1);
+            lock (_transferLock) { available = _incomingQueue.Count - _incomingQueueRead; }
         }
         Log.Debug($"Read waited {sw.Elapsed}");
 
         Log.Trace("BlockingBidirectionalBuffer: Read (release)");
         if (_disposed) return 0;
 
+        
         lock (_transferLock)
         {
-            var available = _incomingQueue.Count - _incomingQueueRead;
+            available = _incomingQueue.Count - _incomingQueueRead;
             var bytesToCopy = available > count ? count : available;
 
             if (bytesToCopy < 1)
