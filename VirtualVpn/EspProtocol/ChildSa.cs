@@ -183,9 +183,7 @@ public class ChildSa : ITransportTunnel
 
             try
             {
-                // multi-thread active work
-                ThreadPool.QueueUserWorkItem(session => { session.EventPump(); }, tcp, false);
-                //tcp.EventPump();
+                tcp.EventPump();
             }
             catch (Exception ex)
             {
@@ -200,7 +198,7 @@ public class ChildSa : ITransportTunnel
             var oldSession = _parkedSessions[oldKey];
             if (oldSession is null)
             {
-                _parkedSessions.Remove(oldKey)?.Dispose();
+                ThreadPool.QueueUserWorkItem(_ => { _parkedSessions.Remove(oldKey)?.Dispose(); });
                 continue;
             }
             
@@ -208,12 +206,12 @@ public class ChildSa : ITransportTunnel
             {
                 Log.Debug($"Old session: {oldSession.LastContact.Elapsed}; remote={Bit.ToIpAddressString(oldSession.RemoteAddress)}:{oldSession.RemotePort}," +
                           $" local={Bit.ToIpAddressString(oldSession.LocalAddress)}:{oldSession.LocalPort}. Closing");
-                _parkedSessions.Remove(oldKey)?.Dispose();
+                ThreadPool.QueueUserWorkItem(_ => { _parkedSessions.Remove(oldKey)?.Dispose(); });
             }
 
             if (oldSession.SocketThroughTunnel.State is TcpSocketState.Closed or TcpSocketState.Listen)
             {
-                _parkedSessions.Remove(oldKey)?.Dispose();
+                ThreadPool.QueueUserWorkItem(_ => { _parkedSessions.Remove(oldKey)?.Dispose(); });
             }
             else
             {
@@ -229,26 +227,28 @@ public class ChildSa : ITransportTunnel
         }
 
 
-        // If we are accumulating sessions, start pruning them back
-        if (_tcpSessions.Count > 100)
+        ThreadPool.QueueUserWorkItem(_ =>
         {
-            Log.Warn("Count of active sessions exceeds 100. Pruning oldest sessions");
-            // close oldest sessions
-            _tcpSessions.RemoveWhere(s => (DateTime.UtcNow - s.StartTime) > Settings.TcpTimeout);
-        }
-
-        if (_parkedSessions.Count > 50)
-        {
-            _parkedSessions.RemoveWhere(s => (DateTime.UtcNow - s.StartTime) > Settings.TcpTimeout);
-            Log.Trace($"Count of parked sessions exceeds 50. Pruning oldest sessions, now have {_parkedSessions.Count}");
-
-            if (_parkedSessions.Count > 250)
+            // If we are accumulating sessions, start pruning them back
+            if (_tcpSessions.Count > 100)
             {
-                Log.Warn("Count of parked sessions exceeds 250 after pruning. Removing ALL parked sessions");
-                _parkedSessions.Clear();
+                Log.Warn("Count of active sessions exceeds 100. Pruning oldest sessions");
+                // close oldest sessions
+                _tcpSessions.RemoveWhere(s => (DateTime.UtcNow - s.StartTime) > Settings.TcpTimeout);
             }
-        }
 
+            if (_parkedSessions.Count > 50)
+            {
+                _parkedSessions.RemoveWhere(s => (DateTime.UtcNow - s.StartTime) > Settings.TcpTimeout);
+                Log.Trace($"Count of parked sessions exceeds 50. Pruning oldest sessions, now have {_parkedSessions.Count}");
+
+                if (_parkedSessions.Count > 250)
+                {
+                    Log.Warn("Count of parked sessions exceeds 250 after pruning. Removing ALL parked sessions");
+                    _parkedSessions.Clear();
+                }
+            }
+        });
         return goFaster;
     }
     
