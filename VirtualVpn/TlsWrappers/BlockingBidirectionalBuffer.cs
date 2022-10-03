@@ -41,8 +41,6 @@ public class BlockingBidirectionalBuffer : Stream
         _disposed = true;
 
         Log.Warn("BlockingBidirectionalBuffer hit destructor without being disposed");
-        Thread.Sleep(1);
-        _incomingDataLatch.Set();
         _incomingDataLatch.Dispose();
     }
 
@@ -54,9 +52,6 @@ public class BlockingBidirectionalBuffer : Stream
     public override void Close()
     {
         _disposed = true;
-        Thread.Sleep(1);
-        _incomingDataLatch.Set();
-        Thread.Sleep(1);
         _incomingDataLatch.Dispose();
         base.Close();
     }
@@ -167,9 +162,9 @@ public class BlockingBidirectionalBuffer : Stream
         while (!_disposed && !dataLatch)
         {
             if (sw.Elapsed > TimeSpan.FromSeconds(10)) throw new Exception("BBB: Read timed out");
-            dataLatch = _incomingDataLatch.WaitOne(TimeSpan.FromSeconds(1));
-            if (!dataLatch) Log.Info("BlockingBidirectionalBuffer: Waited over a second for data");
+            dataLatch = _incomingDataLatch.WaitOne(500);
         }
+        Log.Debug($"Read waited {sw.Elapsed}");
 
         Log.Trace("BlockingBidirectionalBuffer: Read (release)");
         if (_disposed) return 0;

@@ -79,7 +79,7 @@ public class VpnServer : ISessionHost, IDisposable
         sb.Append($"Statistics:\r\n\r\nSessions={_sessions.Count} active, {_sessionsStarted} started;"); 
         sb.Append($"\r\nTotal data in={Bit.Human(_server.TotalIn)}, out={Bit.Human(_server.TotalOut)}");
         sb.Append($"\r\nMemory: process={Bit.Human(allMem)}, GC.Total={Bit.Human(GC.GetTotalMemory(false))}, GC.Heap={Bit.Human(gc.HeapSizeBytes)}, Avail={Bit.Human(gc.TotalAvailableMemoryBytes)}");
-        sb.Append($"\r\nActive threads={tCount}, tlsWrappers={TlsUnwrap.RunningThreads}, tls nice closes={TlsUnwrap.ClosedAdaptors}");
+        sb.Append($"\r\nActive threads={tCount}, tls wrappers running={TlsUnwrap.RunningThreads}, tls waiting dispose={TlsUnwrap.ClosedAdaptors}");
         
         sb.Append("\r\nChild sessions:\r\n");
         foreach (var childSa in _childSessions.Values)

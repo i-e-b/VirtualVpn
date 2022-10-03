@@ -114,18 +114,19 @@ public class TlsUnwrap : ISocketAdaptor
 
         _running = false;
         if (_disposed) return;
+        
         Interlocked.Decrement(ref _disposalCount);
         
         Log.Warn("TlsUnwrap hit destructor without being disposed");
         
         try { _socket?.Dispose(); }
-        catch (Exception ex) { Log.Error("TLS unwrap: Failed to dispose socket", ex); }
+        catch (Exception ex) { Log.Error("~TLS unwrap: Failed to dispose socket", ex); }
 
         try { _sslStream.Dispose(); }
-        catch (Exception ex) { Log.Error("TLS unwrap: Failed to dispose SSL stream", ex); }
+        catch (Exception ex) { Log.Error("~TLS unwrap: Failed to dispose SSL stream", ex); }
 
         try { _certificate.Dispose(); }
-        catch (Exception ex) { Log.Error("TLS unwrap: Failed to dispose certificate", ex); }
+        catch (Exception ex) { Log.Error("~TLS unwrap: Failed to dispose certificate", ex); }
     }
 
     private void BufferPumpIncoming()
@@ -273,7 +274,6 @@ public class TlsUnwrap : ISocketAdaptor
     {
         _running = false;
         Close();
-        //GC.SuppressFinalize(this);
     }
 
     /// <summary>
@@ -288,16 +288,16 @@ public class TlsUnwrap : ISocketAdaptor
         _running = false;
         
         try { _tunnelSideBuffer.Dispose(); }
-        catch (Exception ex) { Log.Error("TLS unwrap: Failed to dispose tunnel-side buffer", ex); }
+        catch (Exception ex) { Log.Error("TLS unwrap.Close: Failed to dispose tunnel-side buffer", ex); }
         
         try { _socket?.Dispose(); }
-        catch (Exception ex) { Log.Error("TLS unwrap: Failed to dispose socket", ex); }
+        catch (Exception ex) { Log.Error("TLS unwrap.Close: Failed to dispose socket", ex); }
 
         try { _sslStream.Dispose(); }
-        catch (Exception ex) { Log.Error("TLS unwrap: Failed to dispose SSL stream", ex); }
+        catch (Exception ex) { Log.Error("TLS unwrap.Close: Failed to dispose SSL stream", ex); }
 
         try { _certificate.Dispose(); }
-        catch (Exception ex) { Log.Error("TLS unwrap: Failed to dispose certificate", ex); }
+        catch (Exception ex) { Log.Error("TLS unwrap.Close: Failed to dispose certificate", ex); }
         
         var ok = _pumpThreadIncoming.Join(TimeSpan.FromSeconds(3));
         ok &= _pumpThreadOutgoing.Join(TimeSpan.FromSeconds(3));
