@@ -68,13 +68,19 @@ public class VpnServer : ISessionHost, IDisposable
         _statsTimer.Reset();
         if ( ! Log.IncludeInfo) return;
         
+        GC.Collect();
         var gc = GC.GetGCMemoryInfo();
+        var myProc = Process.GetCurrentProcess();
+        var tCount = myProc.Threads.Count;
+        var allMem = myProc.PrivateMemorySize64;
         
         var sb = new StringBuilder();
 
         sb.Append($"Statistics:\r\n\r\nSessions={_sessions.Count} active, {_sessionsStarted} started;"); 
         sb.Append($"\r\nTotal data in={Bit.Human(_server.TotalIn)}, out={Bit.Human(_server.TotalOut)}");
-        sb.Append($"\r\nMemory use:{Bit.Human(GC.GetTotalMemory(false))}, {Bit.Human(gc.HeapSizeBytes)} under GC, {Bit.Human(gc.TotalAvailableMemoryBytes)} available");
+        sb.Append($"\r\nMemory: process={Bit.Human(allMem)}, GC.Total={Bit.Human(GC.GetTotalMemory(false))}, GC.Heap={Bit.Human(gc.HeapSizeBytes)}, Avail={Bit.Human(gc.TotalAvailableMemoryBytes)}");
+        sb.Append($"\r\nActive threads={tCount}");
+        
         sb.Append("\r\nChild sessions:\r\n");
         foreach (var childSa in _childSessions.Values)
         {
@@ -482,7 +488,7 @@ public class VpnServer : ISessionHost, IDisposable
             // Unhook the old session
             var session = _sessions[spi];
             var removed = _sessions.Remove(spi);
-            Log.Trace($"Session {spi:x} removed. It was connected to {session.Gateway}");
+            Log.Info($"Session {spi:x} removed. It was connected to {session.Gateway}");
 
             if (removed) removedCount++;
             
@@ -513,7 +519,7 @@ public class VpnServer : ISessionHost, IDisposable
             // Unhook the old session
             var session = _childSessions[spi];
             var removed = _childSessions.Remove(spi);
-            Log.Trace($"Child session {spi:x} removed. It was connected to {session.Gateway}");
+            Log.Info($"Child session {spi:x} removed. It was connected to {session.Gateway}");
 
             if (removed) removedCount++;
         }

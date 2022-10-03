@@ -32,8 +32,8 @@ public class ChildSa : ITransportTunnel
     public ulong DataOut { get; set; }
     public ulong MessagesIn { get; set; }
     public ulong MessagesOut { get; set; }
-    public int ParkedSessionCount => _tcpSessions.Count;
-    public int ActiveSessionCount => _parkedSessions.Count;
+    public int ActiveSessionCount => _tcpSessions.Count;
+    public int ParkedSessionCount => _parkedSessions.Count;
 
 
     private readonly byte[] _spiIn;
