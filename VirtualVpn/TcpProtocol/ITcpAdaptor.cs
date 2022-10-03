@@ -4,7 +4,7 @@ using VirtualVpn.InternetProtocol;
 
 namespace VirtualVpn.TcpProtocol;
 
-public interface ITcpAdaptor
+public interface ITcpAdaptor: IDisposable
 {
     /// <summary>
     /// The socket is closed. Adaptor should stop event pump

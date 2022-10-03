@@ -73,7 +73,7 @@ public class TcpAdaptor : ITcpAdaptor
     public SenderPort SelfKey { get; }
 
     // Transaction state triggers
-    private volatile bool _closeCalled;
+    private volatile bool _closeCalled, _disposed;
 
     private readonly object _transferLock = new();
     private readonly byte[] _receiveBuffer = new byte[1800]; // big enough for a TCP packet
@@ -123,6 +123,8 @@ public class TcpAdaptor : ITcpAdaptor
         _transport = transport;
         if (selfKey.Address.IsZero()) throw new Exception("Invalid key passed to TcpAdaptor");
         SelfKey = selfKey;
+        
+        _disposed = false;
         _closeCalled = false;
 
         _socketToLocalSide = socketAdaptor;
@@ -132,6 +134,15 @@ public class TcpAdaptor : ITcpAdaptor
         LastContact = new Stopwatch();
         LastContact.Start(); // start counting. This gets reset every time we get a message
         StartTime = DateTime.UtcNow;
+    }
+
+    ~TcpAdaptor()
+    {
+        if (_disposed) return;
+        
+        Log.Warn("TcpAdaptor hit destructor without being disposed");
+        
+        _socketToLocalSide?.Dispose();
     }
 
     /// <summary>
@@ -221,19 +232,19 @@ public class TcpAdaptor : ITcpAdaptor
 
     public void Close()
     {
-        if (_closeCalled)
+        if (!_closeCalled)
         {
             _socketToLocalSide?.Dispose();
-            _transport.TerminateConnection(SelfKey);
+            Log.Info("Ending connection");
+            SocketThroughTunnel.StartClose();
+        }
+        else
+        {
             Log.Info("Repeated call to TcpAdaptor.Close()");
-            return;
+            _transport.TerminateConnection(SelfKey);
         }
 
         _closeCalled = true;
-
-        Log.Info("Ending connection");
-        SocketThroughTunnel.StartClose();
-        _transport.TerminateConnection(SelfKey);
     }
 
     public void Closing()
@@ -656,5 +667,14 @@ public class TcpAdaptor : ITcpAdaptor
                 _transport.TerminateConnection(SelfKey);
                 return false;
         }
+    }
+
+    public void Dispose()
+    {
+        _closeCalled = true;
+        _disposed = true;
+        _socketToLocalSide?.Dispose();
+        _transport.TerminateConnection(SelfKey);
+        GC.SuppressFinalize(this);
     }
 }

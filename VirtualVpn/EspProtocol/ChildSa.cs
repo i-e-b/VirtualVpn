@@ -538,6 +538,7 @@ public class ChildSa : ITransportTunnel
             }
             else
             {
+                newSession.Dispose();
                 Log.Warn($"Could not start session {key.Describe()}");
             }
         }

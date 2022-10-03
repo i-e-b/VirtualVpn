@@ -27,7 +27,7 @@ public class TlsUnwrap : ISocketAdaptor
     private readonly SslServerAuthenticationOptions _authOptions;
     private readonly SslStream _sslStream;
     
-    private X509Certificate? _certificate;
+    private readonly X509Certificate _certificate;
     private ISocketAdaptor? _socket;
     private volatile bool _disposed, _running, _faulted;
     
@@ -74,10 +74,11 @@ public class TlsUnwrap : ISocketAdaptor
             CertificateRevocationCheckMode = X509RevocationMode.NoCheck
         };
 
+        Log.Debug("TlsUnwrap: Reading certificate");
+        _certificate = GetX509Certificate(privatePath, publicPath);
+        
         var startupThread = new Thread(() =>
         {
-            Log.Debug("TlsUnwrap: Reading certificate");
-            _certificate = GetX509Certificate(privatePath, publicPath);
             Log.Debug("TlsUnwrap: Starting socket connection");
             _socket = outgoingConnectionFunction();
             Log.Debug($"TlsUnwrap: Connection complete. Connected={_socket.Connected}");
@@ -111,7 +112,7 @@ public class TlsUnwrap : ISocketAdaptor
         try { _sslStream.Dispose(); }
         catch (Exception ex) { Log.Error("TLS unwrap: Failed to dispose SSL stream", ex); }
 
-        try { _certificate?.Dispose(); }
+        try { _certificate.Dispose(); }
         catch (Exception ex) { Log.Error("TLS unwrap: Failed to dispose certificate", ex); }
     }
 
@@ -182,25 +183,39 @@ public class TlsUnwrap : ISocketAdaptor
         Interlocked.Increment(ref _runningThreads);
         var buffer = new byte[8192];
 
-        Log.Trace("TlsUnwrap: Waiting for SSL/TLS authentication");
-        // wait for SSL/TLS to come up
-        while (_running && !_disposed && !_sslStream.IsAuthenticated)
+        try
         {
-            Thread.Sleep(50);
-            Log.Trace("TlsUnwrap: Waiting for SSL/TLS authentication...");
+            Log.Trace("TlsUnwrap: Waiting for SSL/TLS authentication");
+            // wait for SSL/TLS to come up
+            while (_running && !_disposed && !_sslStream.IsAuthenticated)
+            {
+                Thread.Sleep(50);
+                Log.Trace("TlsUnwrap: Waiting for SSL/TLS authentication...");
+            }
+
+            Log.Debug("TlsUnwrap: SSL/TLS is authenticated, starting outgoing pump.");
+
         }
-        Log.Debug("TlsUnwrap: SSL/TLS is authenticated, starting outgoing pump.");
-        
+        catch (Exception ex)
+        {
+            Log.Error("TlsUnwrap.BufferPumpOutgoing: Unexpected error while waiting for connection", ex);
+            _running = false;
+            _faulted = true;
+            Interlocked.Decrement(ref _runningThreads);
+            return;
+        }
+
         if (_socket is null)
         {
             Log.Critical("Lost socket in TlsUnwrap.BufferPumpOutgoing");
+            _faulted = true;
             _running = false;
             Interlocked.Decrement(ref _runningThreads);
             return;
         }
         
         // First, pick up the client's hello, and start doing the hand-shake
-        while (_running && !_disposed)
+        while (_running && !_disposed && !_faulted)
         {
             // Keep trying to move data around between the plain and encrypted buffers.
             // _socket <-> _plainSideBuffer | unwrap | _encryptionSideBuffer <-> ISocketAdaptor methods
@@ -244,21 +259,24 @@ public class TlsUnwrap : ISocketAdaptor
         
         _disposed = true;
         _running = false;
-        _tunnelSideBuffer.Dispose();
+        
+        try { _tunnelSideBuffer.Dispose(); }
+        catch (Exception ex) { Log.Error("TLS unwrap: Failed to dispose tunnel-side buffer", ex); }
+        
         try { _socket?.Dispose(); }
         catch (Exception ex) { Log.Error("TLS unwrap: Failed to dispose socket", ex); }
 
         try { _sslStream.Dispose(); }
         catch (Exception ex) { Log.Error("TLS unwrap: Failed to dispose SSL stream", ex); }
 
-        try { _certificate?.Dispose(); }
+        try { _certificate.Dispose(); }
         catch (Exception ex) { Log.Error("TLS unwrap: Failed to dispose certificate", ex); }
         
         var ok = _pumpThreadIncoming.Join(TimeSpan.FromSeconds(3));
         ok &= _pumpThreadOutgoing.Join(TimeSpan.FromSeconds(3));
         if (!ok)
         {
-            Log.Warn("TLS unwrap: pump threads did not stop within time limit");
+            Log.Critical("TLS unwrap: pump threads did not stop within time limit");
         }
     }
 
@@ -352,7 +370,9 @@ public class TlsUnwrap : ISocketAdaptor
     /// </summary>
     private static X509Certificate2 ReWrap(X509Certificate2 certFromPem)
     {
-        return new X509Certificate2(certFromPem.Export(X509ContentType.Pkcs12));
+        var next = new X509Certificate2(certFromPem.Export(X509ContentType.Pkcs12));
+        certFromPem.Dispose();
+        return next;
     }
 
     #endregion

@@ -799,8 +799,8 @@ public class VpnServer : ISessionHost, IDisposable
             var proxyAddress = IpV4Address.FromString(request.ProxyLocalAddress);
             var tunnel = FindTunnelTo(target);
             
-            var apiSide = new TlsHttpProxyCallAdaptor(request, uri.Scheme == "https");
-            var channel = tunnel.OpenTcpSession(target, uri.Port, proxyAddress, apiSide);
+            using var apiSide = new TlsHttpProxyCallAdaptor(request, uri.Scheme == "https");
+            using var channel = tunnel.OpenTcpSession(target, uri.Port, proxyAddress, apiSide);
             
             var timeout = new Stopwatch();
             timeout.Start();
