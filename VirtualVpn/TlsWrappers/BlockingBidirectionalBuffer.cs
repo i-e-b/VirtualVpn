@@ -1,4 +1,6 @@
-﻿namespace VirtualVpn.TlsWrappers;
+﻿using System.Diagnostics;
+
+namespace VirtualVpn.TlsWrappers;
 
 /// <summary>
 /// A buffer with separate input/output, that is driven
@@ -39,6 +41,7 @@ public class BlockingBidirectionalBuffer : Stream
         _disposed = true;
 
         Log.Warn("BlockingBidirectionalBuffer hit destructor without being disposed");
+        Thread.Sleep(1);
         _incomingDataLatch.Set();
         _incomingDataLatch.Dispose();
     }
@@ -50,8 +53,11 @@ public class BlockingBidirectionalBuffer : Stream
 
     public override void Close()
     {
-        _incomingDataLatch.Set();
         _disposed = true;
+        Thread.Sleep(1);
+        _incomingDataLatch.Set();
+        Thread.Sleep(1);
+        _incomingDataLatch.Dispose();
         base.Close();
     }
 
@@ -136,8 +142,11 @@ public class BlockingBidirectionalBuffer : Stream
     public override void Flush()
     {
         Log.Trace("BlockingBidirectionalBuffer: Flush (wait)");
+        var sw = new Stopwatch();
+        sw.Start();
         while (!_disposed && _outgoingQueue.Count > 0)
         {
+            if (sw.Elapsed > TimeSpan.FromSeconds(10)) throw new Exception("BBB: Flush timed out");
             Thread.Sleep(50);
         }
         Log.Trace("BlockingBidirectionalBuffer: Flush complete");
@@ -150,11 +159,16 @@ public class BlockingBidirectionalBuffer : Stream
     /// </summary>
     public override int Read(byte[] buffer, int offset, int count)
     {
+        var sw = new Stopwatch();
+        sw.Start();
+        
         Log.Trace("BlockingBidirectionalBuffer: Read (wait)");
         var dataLatch = false;
         while (!_disposed && !dataLatch)
         {
+            if (sw.Elapsed > TimeSpan.FromSeconds(10)) throw new Exception("BBB: Read timed out");
             dataLatch = _incomingDataLatch.WaitOne(TimeSpan.FromSeconds(1));
+            Log.Info("BlockingBidirectionalBuffer: Waited over a second for data");
         }
 
         Log.Trace("BlockingBidirectionalBuffer: Read (release)");
@@ -201,14 +215,13 @@ public class BlockingBidirectionalBuffer : Stream
             if (offset == 0 && count == buffer.Length) _outgoingQueue.AddRange(buffer);
             else _outgoingQueue.AddRange(buffer.Skip(offset).Take(count));
         }
+        var sw = new Stopwatch();
+        sw.Start();
 
         Log.Trace("Proxy: Write (wait)");
-        while (!_disposed)
+        while (!_disposed && _outgoingQueue.Count > 0)
         {
-            lock (_transferLock)
-            {
-                if (_disposed || _outgoingQueue.Count < 1) break;
-            }
+            if (sw.Elapsed > TimeSpan.FromSeconds(10)) throw new Exception("BBB: Write timed out");
             Thread.Sleep(1);
         }
 
@@ -218,18 +231,12 @@ public class BlockingBidirectionalBuffer : Stream
     /// <summary>
     /// Not supported
     /// </summary>
-    public override long Seek(long offset, SeekOrigin origin)
-    {
-        throw new NotSupportedException();
-    }
+    public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
 
     /// <summary>
     /// Not supported
     /// </summary>
-    public override void SetLength(long value)
-    {
-        throw new NotSupportedException();
-    }
+    public override void SetLength(long value) => throw new NotSupportedException();
 
     public override bool CanRead => true;
     public override bool CanSeek => false;

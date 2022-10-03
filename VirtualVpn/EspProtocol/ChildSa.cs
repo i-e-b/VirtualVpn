@@ -356,17 +356,16 @@ public class ChildSa : ITransportTunnel
             {
                 Log.Info($"Parking {session.Describe()}");
                 _parkedSessions[key] = session;
-                return;
             }
 
-
+/*
             session = _parkedSessions.Remove(key);
             if (session is not null)
             {
                 Log.Info($"Terminating {session.Describe()}");
                 session.Dispose();
             }
-            
+  */          
         }
         catch (Exception ex)
         {

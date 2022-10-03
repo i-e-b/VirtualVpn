@@ -21,6 +21,7 @@ namespace VirtualVpn.TlsWrappers;
 /// </summary>
 public class TlsUnwrap : ISocketAdaptor
 {
+    private readonly Func<ISocketAdaptor> _outgoingConnectionFunction;
     private static volatile int _runningThreads;
     public static int RunningThreads => _runningThreads;
     
@@ -53,7 +54,8 @@ public class TlsUnwrap : ISocketAdaptor
     public TlsUnwrap(string tlsKeyPaths, Func<ISocketAdaptor> outgoingConnectionFunction)
     {
         if (string.IsNullOrWhiteSpace(tlsKeyPaths)) throw new Exception("Must have valid paths to PEM files to start TLS re-wrap");
-        
+        _outgoingConnectionFunction = outgoingConnectionFunction;
+
         var filePaths = tlsKeyPaths.Split(';');
         if (filePaths.Length != 2) throw new Exception("TLS key paths must have exactly two files specified, separated by ';'");
         
@@ -79,14 +81,6 @@ public class TlsUnwrap : ISocketAdaptor
 
         Log.Debug("TlsUnwrap: Reading certificate");
         _certificate = GetX509Certificate(privatePath, publicPath);
-        
-        var startupThread = new Thread(() =>
-        {
-            Log.Debug("TlsUnwrap: Starting socket connection");
-            _socket = outgoingConnectionFunction();
-            Log.Debug($"TlsUnwrap: Connection complete. Connected={_socket.Connected}");
-        }) { IsBackground = true };
-        startupThread.Start();
         
         _faulted = false;
         _disposed = false;
@@ -138,6 +132,20 @@ public class TlsUnwrap : ISocketAdaptor
     {
         Interlocked.Increment(ref _runningThreads);
         var buffer = new byte[8192];
+
+        try
+        {
+            Log.Debug("TlsUnwrap: Starting socket connection");
+            _socket = _outgoingConnectionFunction();
+            Log.Debug($"TlsUnwrap: Connection complete. Connected={_socket.Connected}");
+        }
+        catch (Exception ex)
+        {
+            Log.Error("TlsUnwrap: Failed to open outgoing connection", ex);
+            _running = false;
+            _faulted = true;
+            return;
+        }
 
         while (_running && _socket?.Connected != true)
         {
