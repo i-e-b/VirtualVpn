@@ -147,6 +147,7 @@ public class TlsUnwrap : ISocketAdaptor
             Log.Error("TlsUnwrap: Failed to open outgoing connection", ex);
             _running = false;
             _faulted = true;
+            Close();
             Interlocked.Decrement(ref _runningThreads);
             return;
         }
@@ -161,6 +162,7 @@ public class TlsUnwrap : ISocketAdaptor
         {
             Log.Critical("Lost socket in TlsUnwrap");
             _running = false;
+            Close();
             Interlocked.Decrement(ref _runningThreads);
             return;
         }
@@ -178,6 +180,7 @@ public class TlsUnwrap : ISocketAdaptor
             Log.Error("TlsUnwrap: Failure during AuthenticateAsServer", ex);
             _running = false;
             _faulted = true;
+            Close();
             Interlocked.Decrement(ref _runningThreads);
             return;
         }
