@@ -57,15 +57,15 @@ public class BlockingBidirectionalBuffer : Stream
     public int WriteIncomingNonBlocking(byte[] buffer, int offset, int length)
     {
         Log.Trace("BlockingBidirectionalBuffer: IncomingFromTunnel");
+        if (length <= 0) return 0;
+
+        long bytesToStore = length;
+        long available = buffer.Length - offset;
+        if (bytesToStore > available) bytesToStore = available;
+
+        Log.Trace($"BlockingBidirectionalBuffer: IncomingFromTunnel, adding {bytesToStore} bytes");
         lock (_transferLock)
         {
-            if (length <= 0) return 0;
-
-            long bytesToStore = length;
-            long available = buffer.Length - offset;
-            if (bytesToStore > available) bytesToStore = available;
-
-            Log.Trace($"BlockingBidirectionalBuffer: IncomingFromTunnel, adding {bytesToStore} bytes");
             if (offset == 0 && bytesToStore == buffer.Length)
             {
                 _incomingQueue.AddRange(buffer);
@@ -74,10 +74,10 @@ public class BlockingBidirectionalBuffer : Stream
             {
                 _incomingQueue.AddRange(buffer.Skip(offset).Take((int)bytesToStore));
             }
-
-            Log.Trace("BlockingBidirectionalBuffer: Releasing lock on incoming data");
-            return (int)bytesToStore;
         }
+
+        Log.Trace("BlockingBidirectionalBuffer: Releasing lock on incoming data");
+        return (int)bytesToStore;
     }
     
     /// <summary>
@@ -151,13 +151,10 @@ public class BlockingBidirectionalBuffer : Stream
         sw.Start();
         
         Log.Trace("BlockingBidirectionalBuffer: Read (wait)");
-        int available;
-        lock (_transferLock) { available = _incomingQueue.Count - _incomingQueueRead; }
-        while (!_disposed && available < 1)
+        while (!_disposed && Length < 1)
         {
             if (sw.Elapsed > Settings.TcpTimeout) throw new Exception("BBB: Read timed out");
             Thread.Sleep(10);
-            lock (_transferLock) { available = _incomingQueue.Count - _incomingQueueRead; }
         }
         Log.Debug($"Read waited {sw.Elapsed}");
 
@@ -167,7 +164,7 @@ public class BlockingBidirectionalBuffer : Stream
         
         lock (_transferLock)
         {
-            available = _incomingQueue.Count - _incomingQueueRead;
+            var available = _incomingQueue.Count - _incomingQueueRead;
             var bytesToCopy = available > count ? count : available;
 
             if (bytesToCopy < 1)
@@ -232,8 +229,17 @@ public class BlockingBidirectionalBuffer : Stream
     public override bool CanRead => true;
     public override bool CanSeek => false;
     public override bool CanWrite => true;
-    public override long Length => _incomingQueue.Count - _incomingQueueRead;
-    
+    public override long Length
+    {
+        get
+        {
+            lock (_transferLock)
+            {
+                return _incomingQueue.Count - _incomingQueueRead;
+            }
+        }
+    }
+
     /// <summary>
     /// Not supported
     /// </summary>
