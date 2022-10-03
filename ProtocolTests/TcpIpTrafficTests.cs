@@ -648,6 +648,7 @@ public class TestAdaptor : ITcpAdaptor
     public SenderPort SelfKey => new(new byte[] { 1, 2, 3, 4 }, 5);
 
     public Stopwatch LastContact { get; }
+    public DateTime StartTime => DateTime.UtcNow;
     public byte[] LocalAddress { get; }
     public TcpSocket SocketThroughTunnel { get; }
     public int LocalPort { get; }

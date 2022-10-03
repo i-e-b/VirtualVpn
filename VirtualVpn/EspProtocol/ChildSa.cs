@@ -233,17 +233,17 @@ public class ChildSa : ITransportTunnel
         {
             Log.Warn("Count of active sessions exceeds 250. Pruning oldest sessions");
             // close oldest sessions
-            _tcpSessions.RemoveWhere(s => s.LastContact.Elapsed > Settings.TcpTimeout);
+            _tcpSessions.RemoveWhere(s => (DateTime.UtcNow - s.StartTime) > Settings.TcpTimeout);
         }
 
         if (_parkedSessions.Count > 250)
         {
             Log.Info("Count of parked sessions exceeds 250. Pruning oldest sessions");
-            _tcpSessions.RemoveWhere(s => s.LastContact.Elapsed > Settings.TcpTimeout);
+            _tcpSessions.RemoveWhere(s => (DateTime.UtcNow - s.StartTime) > Settings.TcpTimeout);
 
             if (_parkedSessions.Count > 250)
             {
-                Log.Warn("Count of parked sessions exceeds 250 AFTER pruning. Removing all parked sessions");
+                Log.Warn("Count of parked sessions exceeds 250 after pruning. Removing ALL parked sessions");
                 _parkedSessions.Clear();
             }
         }

@@ -46,6 +46,12 @@ public interface ITcpAdaptor
     /// Only starts ticking when first packets transmitted.
     /// </summary>
     Stopwatch LastContact { get; }
+    
+    /// <summary>
+    /// Time that the connection started.
+    /// This is never reset, and is used as a hard-stop for sessions.
+    /// </summary>
+    DateTime StartTime { get; }
 
     /// <summary> Address requested for this session </summary>
     byte[] LocalAddress { get; }

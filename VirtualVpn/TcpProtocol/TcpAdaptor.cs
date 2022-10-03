@@ -84,6 +84,12 @@ public class TcpAdaptor : ITcpAdaptor
     /// </summary>
     public Stopwatch LastContact { get; }
 
+    /// <summary>
+    /// Time since the connection started.
+    /// This is never reset, and is used as a hard-stop for sessions.
+    /// </summary>
+    public DateTime StartTime { get; }
+
     /// <summary> Address of remote side </summary>
     public byte[] RemoteAddress { get; private set; } = Array.Empty<byte>();
 
@@ -125,6 +131,7 @@ public class TcpAdaptor : ITcpAdaptor
         SocketThroughTunnel = new TcpSocket(this);
         LastContact = new Stopwatch();
         LastContact.Start(); // start counting. This gets reset every time we get a message
+        StartTime = DateTime.UtcNow;
     }
 
     /// <summary>
