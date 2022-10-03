@@ -23,6 +23,9 @@ public class TlsUnwrap : ISocketAdaptor
 {
     private static volatile int _runningThreads;
     public static int RunningThreads => _runningThreads;
+    
+    private static volatile int _disposalCount;
+    public static int ClosedAdaptors => _disposalCount;
 
     private readonly SslServerAuthenticationOptions _authOptions;
     private readonly SslStream _sslStream;
@@ -102,7 +105,22 @@ public class TlsUnwrap : ISocketAdaptor
 
     ~TlsUnwrap()
     {
+        if (_pumpThreadIncoming.ThreadState == ThreadState.Background
+            || _pumpThreadIncoming.ThreadState == ThreadState.Running)
+        {
+            Log.Critical("_pumpThreadIncoming still running during TlsUnwrap destructor");
+        }
+        
+        if (_pumpThreadOutgoing.ThreadState == ThreadState.Background
+            || _pumpThreadOutgoing.ThreadState == ThreadState.Running)
+        {
+            Log.Critical("_pumpThreadOutgoing still running during TlsUnwrap destructor");
+        }
+
+
+        _running = false;
         if (_disposed) return;
+        Interlocked.Decrement(ref _disposalCount);
         
         Log.Warn("TlsUnwrap hit destructor without being disposed");
         
@@ -247,7 +265,7 @@ public class TlsUnwrap : ISocketAdaptor
     {
         _running = false;
         Close();
-        GC.SuppressFinalize(this);
+        //GC.SuppressFinalize(this);
     }
 
     /// <summary>
@@ -257,6 +275,7 @@ public class TlsUnwrap : ISocketAdaptor
     {
         if (_disposed) return;
         
+        Interlocked.Decrement(ref _disposalCount);
         _disposed = true;
         _running = false;
         

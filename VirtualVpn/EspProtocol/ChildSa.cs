@@ -152,7 +152,7 @@ public class ChildSa : ITransportTunnel
             if (tcpKey.Address.IsZero())
             {
                 Log.Critical("Stored a tcp session with a zero value key!");
-                _tcpSessions.Remove(tcpKey);
+                _tcpSessions.Remove(tcpKey)?.Dispose();
                 continue;
             }
 
@@ -160,7 +160,7 @@ public class ChildSa : ITransportTunnel
             if (tcp is null)
             {
                 Log.Debug("Null session found. Removing");
-                _tcpSessions.Remove(tcpKey);
+                _tcpSessions.Remove(tcpKey)?.Dispose();
                 continue;
             }
 
@@ -199,7 +199,7 @@ public class ChildSa : ITransportTunnel
             var oldSession = _parkedSessions[oldKey];
             if (oldSession is null)
             {
-                _parkedSessions.Remove(oldKey);
+                _parkedSessions.Remove(oldKey)?.Dispose();
                 continue;
             }
             
@@ -207,12 +207,12 @@ public class ChildSa : ITransportTunnel
             {
                 Log.Debug($"Old session: {oldSession.LastContact.Elapsed}; remote={Bit.ToIpAddressString(oldSession.RemoteAddress)}:{oldSession.RemotePort}," +
                           $" local={Bit.ToIpAddressString(oldSession.LocalAddress)}:{oldSession.LocalPort}. Closing");
-                _parkedSessions.Remove(oldKey);
+                _parkedSessions.Remove(oldKey)?.Dispose();
             }
 
             if (oldSession.SocketThroughTunnel.State is TcpSocketState.Closed or TcpSocketState.Listen)
             {
-                _parkedSessions.Remove(oldKey);
+                _parkedSessions.Remove(oldKey)?.Dispose();
             }
             else
             {
@@ -229,21 +229,21 @@ public class ChildSa : ITransportTunnel
 
 
         // If we are accumulating sessions, start pruning them back
-        if (_tcpSessions.Count > 250)
+        if (_tcpSessions.Count > 150)
         {
-            Log.Warn("Count of active sessions exceeds 250. Pruning oldest sessions");
+            Log.Warn("Count of active sessions exceeds 150. Pruning oldest sessions");
             // close oldest sessions
             _tcpSessions.RemoveWhere(s => (DateTime.UtcNow - s.StartTime) > Settings.TcpTimeout);
         }
 
-        if (_parkedSessions.Count > 250)
+        if (_parkedSessions.Count > 50)
         {
-            Log.Info("Count of parked sessions exceeds 250. Pruning oldest sessions");
+            Log.Info("Count of parked sessions exceeds 50. Pruning oldest sessions");
             _tcpSessions.RemoveWhere(s => (DateTime.UtcNow - s.StartTime) > Settings.TcpTimeout);
 
-            if (_parkedSessions.Count > 250)
+            if (_parkedSessions.Count > 50)
             {
-                Log.Warn("Count of parked sessions exceeds 250 after pruning. Removing ALL parked sessions");
+                Log.Warn("Count of parked sessions exceeds 50 after pruning. Removing ALL parked sessions");
                 _parkedSessions.Clear();
             }
         }
@@ -355,6 +355,8 @@ public class ChildSa : ITransportTunnel
             if (session is not null)
             {
                 Log.Info($"Parking {session.Describe()}");
+                _parkedSessions[key] = session;
+                return;
             }
 
 
@@ -362,6 +364,7 @@ public class ChildSa : ITransportTunnel
             if (session is not null)
             {
                 Log.Info($"Terminating {session.Describe()}");
+                session.Dispose();
             }
             
         }

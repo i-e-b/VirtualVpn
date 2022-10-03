@@ -203,7 +203,7 @@ public class BlockingBidirectionalBuffer : Stream
         }
 
         Log.Trace("Proxy: Write (wait)");
-        while (true)
+        while (!_disposed)
         {
             lock (_transferLock)
             {

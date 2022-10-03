@@ -9,6 +9,7 @@ namespace VirtualVpn.TlsWrappers;
 public class SocketStream : Stream
 {
     private Socket? _socket;
+    private volatile bool _closed;
 
     /// <summary>
     /// Create a stream wrapper for a socket
@@ -17,6 +18,7 @@ public class SocketStream : Stream
     public SocketStream(Socket socket)
     {
         Log.Trace(nameof(SocketStream));
+        _closed = false;
         _socket = socket;
     }
 
@@ -32,6 +34,12 @@ public class SocketStream : Stream
     {
         Log.Trace("~" + nameof(SocketStream));
         Dispose(false);
+    }
+
+    public override void Close()
+    {
+        _closed = true;
+        base.Close();
     }
 
     /// <summary>
@@ -71,7 +79,7 @@ public class SocketStream : Stream
         // SslStream REQUIRES us to be blocking on this call
         try
         {
-            while (_socket is not null && _socket.Connected && _socket.Available < 1)
+            while (!_closed && _socket is not null && _socket.Connected && _socket.Available < 1)
             {
                 Thread.Sleep(50);
             }
@@ -81,7 +89,7 @@ public class SocketStream : Stream
             Log.Error("SocketStream failed during wait for data", ex);
         }
 
-        if (_socket == null) return 0;
+        if (_socket == null || _closed) return 0;
 
         int len;
         try

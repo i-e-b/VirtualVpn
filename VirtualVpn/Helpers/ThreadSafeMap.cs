@@ -59,7 +59,12 @@ public class ThreadSafeMap<TKey, TValue> where TKey : notnull
             {
                 if (value is null) return;
                 if (!_dict.ContainsKey(key)) _dict.Add(key, value);
-                else _dict[key] = value;
+                else
+                {
+                    var old = _dict[key];
+                    _dict[key] = value;
+                    TryDispose(old);
+                }
             }
         }
     }
@@ -76,7 +81,24 @@ public class ThreadSafeMap<TKey, TValue> where TKey : notnull
     {
         lock (_lock)
         {
+            foreach (var kvp in _dict)
+            {
+                TryDispose(kvp.Value);
+            }
+
             _dict.Clear();
+        }
+    }
+
+    private static void TryDispose(TValue value)
+    {
+        try
+        {
+            if (value is IDisposable d) d.Dispose();
+        }
+        catch (Exception ex)
+        {
+            Log.Error("ThreadSafeMap: failed to dispose of contents", ex);
         }
     }
 
@@ -90,6 +112,7 @@ public class ThreadSafeMap<TKey, TValue> where TKey : notnull
             {
                 if (selector(kvp.Value))
                 {
+                    TryDispose(kvp.Value);
                     keys.Add(kvp.Key);
                 }
             }

@@ -667,4 +667,8 @@ public class TestAdaptor : ITcpAdaptor
     }
 
     public bool IsEmpty() => SentSegments.Count < 1 && SentRoutes.Count < 1;
+
+    public void Dispose()
+    {
+    }
 }
