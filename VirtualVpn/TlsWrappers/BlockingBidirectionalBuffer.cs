@@ -168,7 +168,7 @@ public class BlockingBidirectionalBuffer : Stream
         {
             if (sw.Elapsed > TimeSpan.FromSeconds(10)) throw new Exception("BBB: Read timed out");
             dataLatch = _incomingDataLatch.WaitOne(TimeSpan.FromSeconds(1));
-            Log.Info("BlockingBidirectionalBuffer: Waited over a second for data");
+            if (!dataLatch) Log.Info("BlockingBidirectionalBuffer: Waited over a second for data");
         }
 
         Log.Trace("BlockingBidirectionalBuffer: Read (release)");
