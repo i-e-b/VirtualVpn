@@ -21,6 +21,9 @@ namespace VirtualVpn.TlsWrappers;
 /// </summary>
 public class TlsUnwrap : ISocketAdaptor
 {
+    private static volatile int _runningThreads;
+    public static int RunningThreads => _runningThreads;
+
     private readonly SslServerAuthenticationOptions _authOptions;
     private readonly SslStream _sslStream;
     
@@ -114,6 +117,7 @@ public class TlsUnwrap : ISocketAdaptor
 
     private void BufferPumpIncoming()
     {
+        Interlocked.Increment(ref _runningThreads);
         var buffer = new byte[8192];
 
         while (_running && _socket?.Connected != true)
@@ -126,6 +130,7 @@ public class TlsUnwrap : ISocketAdaptor
         {
             Log.Critical("Lost socket in TlsUnwrap");
             _running = false;
+            Interlocked.Decrement(ref _runningThreads);
             return;
         }
 
@@ -142,10 +147,11 @@ public class TlsUnwrap : ISocketAdaptor
             Log.Error("TlsUnwrap: Failure during AuthenticateAsServer", ex);
             _running = false;
             _faulted = true;
+            Interlocked.Decrement(ref _runningThreads);
             return;
         }
 
-        while (_running)
+        while (_running && !_disposed)
         {
             // Keep trying to move data around between the plain and encrypted buffers.
             // _socket <-> _plainSideBuffer | unwrap | _encryptionSideBuffer <-> ISocketAdaptor methods
@@ -168,15 +174,17 @@ public class TlsUnwrap : ISocketAdaptor
                 Thread.Sleep(50);
             }
         }
+        Interlocked.Decrement(ref _runningThreads);
     }
     
     private void BufferPumpOutgoing()
     {
+        Interlocked.Increment(ref _runningThreads);
         var buffer = new byte[8192];
 
         Log.Trace("TlsUnwrap: Waiting for SSL/TLS authentication");
         // wait for SSL/TLS to come up
-        while (_running && !_sslStream.IsAuthenticated)
+        while (_running && !_disposed && !_sslStream.IsAuthenticated)
         {
             Thread.Sleep(50);
             Log.Trace("TlsUnwrap: Waiting for SSL/TLS authentication...");
@@ -187,11 +195,12 @@ public class TlsUnwrap : ISocketAdaptor
         {
             Log.Critical("Lost socket in TlsUnwrap.BufferPumpOutgoing");
             _running = false;
+            Interlocked.Decrement(ref _runningThreads);
             return;
         }
         
         // First, pick up the client's hello, and start doing the hand-shake
-        while (_running)
+        while (_running && !_disposed)
         {
             // Keep trying to move data around between the plain and encrypted buffers.
             // _socket <-> _plainSideBuffer | unwrap | _encryptionSideBuffer <-> ISocketAdaptor methods
@@ -215,6 +224,7 @@ public class TlsUnwrap : ISocketAdaptor
                 Thread.Sleep(50);
             }
         }
+        Interlocked.Decrement(ref _runningThreads);
     }
 
     /// <summary>Release the underlying socket</summary>
@@ -234,6 +244,7 @@ public class TlsUnwrap : ISocketAdaptor
         
         _disposed = true;
         _running = false;
+        _tunnelSideBuffer.Dispose();
         try { _socket?.Dispose(); }
         catch (Exception ex) { Log.Error("TLS unwrap: Failed to dispose socket", ex); }
 
@@ -243,8 +254,8 @@ public class TlsUnwrap : ISocketAdaptor
         try { _certificate?.Dispose(); }
         catch (Exception ex) { Log.Error("TLS unwrap: Failed to dispose certificate", ex); }
         
-        var ok = _pumpThreadIncoming.Join(TimeSpan.FromMilliseconds(256));
-        ok &= _pumpThreadOutgoing.Join(TimeSpan.FromMilliseconds(256));
+        var ok = _pumpThreadIncoming.Join(TimeSpan.FromSeconds(3));
+        ok &= _pumpThreadOutgoing.Join(TimeSpan.FromSeconds(3));
         if (!ok)
         {
             Log.Warn("TLS unwrap: pump threads did not stop within time limit");
@@ -254,7 +265,7 @@ public class TlsUnwrap : ISocketAdaptor
     /// <summary>
     /// True if the underlying socket is in a connected state
     /// </summary>
-    public bool Connected => _socket?.Connected==true && _running;
+    public bool Connected => _socket?.Connected == true && _running;
     
     /// <summary>
     /// Number of bytes available to be read from <see cref="OutgoingFromLocal"/>

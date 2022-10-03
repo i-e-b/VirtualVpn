@@ -15,6 +15,7 @@ public class BlockingBidirectionalBuffer : Stream
     
     // latch used to make the Stream interface blocking
     private readonly AutoResetEvent _incomingDataLatch;
+    private bool _disposed;
     
     // thread lock
     private readonly object _transferLock = new();
@@ -24,19 +25,36 @@ public class BlockingBidirectionalBuffer : Stream
     /// </summary>
     public BlockingBidirectionalBuffer()
     {
+        _disposed = false;
         _incomingDataLatch = new AutoResetEvent(false);
         _outgoingQueueSent = 0;
 
         _outgoingQueue = new List<byte>();
         _incomingQueue = new List<byte>();
     }
-    
+
+    ~BlockingBidirectionalBuffer()
+    {
+        if (_disposed) return;
+        _disposed = true;
+
+        Log.Warn("BlockingBidirectionalBuffer hit destructor without being disposed");
+        _incomingDataLatch.Set();
+        _incomingDataLatch.Dispose();
+    }
+
     /// <summary>
     /// Number of bytes waiting on the 'Outgoing' side, to be read by <see cref="ReadNonBlocking"/>
     /// </summary>
     public int Available => _outgoingQueueSent < _outgoingQueue.Count ? _outgoingQueue.Count - _outgoingQueueSent : 0;
-    
-    
+
+    public override void Close()
+    {
+        _incomingDataLatch.Set();
+        _disposed = true;
+        base.Close();
+    }
+
     /// <summary>
     /// Write data to the 'incoming' queue, as read by the blocking
     /// <see cref="Read"/> method.
@@ -118,7 +136,7 @@ public class BlockingBidirectionalBuffer : Stream
     public override void Flush()
     {
         Log.Trace("BlockingBidirectionalBuffer: Flush (wait)");
-        while (_outgoingQueue.Count > 0)
+        while (!_disposed && _outgoingQueue.Count > 0)
         {
             Thread.Sleep(50);
         }
@@ -133,8 +151,14 @@ public class BlockingBidirectionalBuffer : Stream
     public override int Read(byte[] buffer, int offset, int count)
     {
         Log.Trace("BlockingBidirectionalBuffer: Read (wait)");
-        _incomingDataLatch.WaitOne();
+        var dataLatch = false;
+        while (!_disposed && !dataLatch)
+        {
+            dataLatch = _incomingDataLatch.WaitOne(TimeSpan.FromSeconds(1));
+        }
+
         Log.Trace("BlockingBidirectionalBuffer: Read (release)");
+        if (_disposed) return 0;
 
         lock (_transferLock)
         {
@@ -183,7 +207,7 @@ public class BlockingBidirectionalBuffer : Stream
         {
             lock (_transferLock)
             {
-                if (_outgoingQueue.Count < 1) break;
+                if (_disposed || _outgoingQueue.Count < 1) break;
             }
             Thread.Sleep(1);
         }

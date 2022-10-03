@@ -70,7 +70,7 @@ public class VpnServer : ISessionHost, IDisposable
         
         GC.Collect();
         var gc = GC.GetGCMemoryInfo();
-        var myProc = Process.GetCurrentProcess();
+        using var myProc = Process.GetCurrentProcess();
         var tCount = myProc.Threads.Count;
         var allMem = myProc.PrivateMemorySize64;
         
@@ -79,7 +79,7 @@ public class VpnServer : ISessionHost, IDisposable
         sb.Append($"Statistics:\r\n\r\nSessions={_sessions.Count} active, {_sessionsStarted} started;"); 
         sb.Append($"\r\nTotal data in={Bit.Human(_server.TotalIn)}, out={Bit.Human(_server.TotalOut)}");
         sb.Append($"\r\nMemory: process={Bit.Human(allMem)}, GC.Total={Bit.Human(GC.GetTotalMemory(false))}, GC.Heap={Bit.Human(gc.HeapSizeBytes)}, Avail={Bit.Human(gc.TotalAvailableMemoryBytes)}");
-        sb.Append($"\r\nActive threads={tCount}");
+        sb.Append($"\r\nActive threads={tCount}, tlsWrappers={TlsUnwrap.RunningThreads}");
         
         sb.Append("\r\nChild sessions:\r\n");
         foreach (var childSa in _childSessions.Values)
@@ -92,7 +92,7 @@ public class VpnServer : ISessionHost, IDisposable
         }
         sb.Append("\r\n");
         
-        Log.Info(sb.ToString());
+        Console.WriteLine(sb.ToString());
     }
 
     public void Run()
