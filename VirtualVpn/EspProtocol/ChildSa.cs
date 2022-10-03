@@ -183,7 +183,9 @@ public class ChildSa : ITransportTunnel
 
             try
             {
-                tcp.EventPump();
+                // multi-thread active work
+                ThreadPool.QueueUserWorkItem(session => { session.EventPump(); }, tcp, false);
+                //tcp.EventPump();
             }
             catch (Exception ex)
             {
