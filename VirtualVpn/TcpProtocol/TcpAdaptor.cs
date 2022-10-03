@@ -82,7 +82,7 @@ public class TcpAdaptor : ITcpAdaptor
     /// Time since last packets send or received.
     /// Only starts ticking when first packets transmitted.
     /// </summary>
-    public Stopwatch LastContact { get; set; }
+    public Stopwatch LastContact { get; }
 
     /// <summary> Address of remote side </summary>
     public byte[] RemoteAddress { get; private set; } = Array.Empty<byte>();

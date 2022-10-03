@@ -32,8 +32,10 @@ public class ChildSa : ITransportTunnel
     public ulong DataOut { get; set; }
     public ulong MessagesIn { get; set; }
     public ulong MessagesOut { get; set; }
-    
-    
+    public int ParkedSessionCount => _tcpSessions.Count;
+    public int ActiveSessionCount => _parkedSessions.Count;
+
+
     private readonly byte[] _spiIn;
     private readonly byte[] _spiOut;
     private readonly IkeCrypto _cryptoIn;
@@ -224,6 +226,28 @@ public class ChildSa : ITransportTunnel
                 }
             }
         }
+
+
+        // If we are accumulating sessions, start pruning them back
+        if (_tcpSessions.Count > 250)
+        {
+            Log.Warn("Count of active sessions exceeds 250. Pruning oldest sessions");
+            // close oldest sessions
+            _tcpSessions.RemoveWhere(s => s.LastContact.Elapsed > Settings.TcpTimeout);
+        }
+
+        if (_parkedSessions.Count > 250)
+        {
+            Log.Info("Count of parked sessions exceeds 250. Pruning oldest sessions");
+            _tcpSessions.RemoveWhere(s => s.LastContact.Elapsed > Settings.TcpTimeout);
+
+            if (_parkedSessions.Count > 250)
+            {
+                Log.Warn("Count of parked sessions exceeds 250 AFTER pruning. Removing all parked sessions");
+                _parkedSessions.Clear();
+            }
+        }
+
         return goFaster;
     }
     

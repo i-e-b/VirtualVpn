@@ -76,9 +76,10 @@ public class VpnServer : ISessionHost, IDisposable
         foreach (var childSa in _childSessions.Values)
         {
             sb.Append($"    Gateway={childSa.Gateway}, Spi-in={childSa.SpiIn:x}, Spi-out={childSa.SpiOut:x}\r\n");
-            sb.Append($"        Parent: spi={childSa.Parent?.LocalSpi:x}, state={childSa.Parent?.State.ToString() ?? "<orphan>"}\r\n");
+            sb.Append($"        Parent:   spi={childSa.Parent?.LocalSpi:x}, state={childSa.Parent?.State.ToString() ?? "<orphan>"}\r\n");
             sb.Append($"        Messages: in={childSa.MessagesIn}, out={childSa.MessagesOut}\r\n");
-            sb.Append($"        Data: in={Bit.Human(childSa.DataIn)}, out={Bit.Human(childSa.DataOut)}\r\n");
+            sb.Append($"        Data:     in={Bit.Human(childSa.DataIn)}, out={Bit.Human(childSa.DataOut)}\r\n");
+            sb.Append($"        Sessions: active={childSa.ActiveSessionCount}, parked={childSa.ParkedSessionCount}\r\n");
         }
         sb.Append("\r\n");
         

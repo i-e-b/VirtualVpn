@@ -11,6 +11,16 @@ public class ThreadSafeMap<TKey, TValue> where TKey : notnull
     private readonly object _lock = new();
     private readonly Dictionary<TKey, TValue> _dict;
 
+    public int Count
+    {
+        get {
+            lock (_lock)
+            {
+                return _dict.Count;
+            }
+        }
+    }
+
     public ThreadSafeMap()
     {
         _dict = new Dictionary<TKey, TValue>();
@@ -60,6 +70,28 @@ public class ThreadSafeMap<TKey, TValue> where TKey : notnull
         lock (_lock)
         {
             return _dict.ContainsKey(key);
+        }
+    }
+
+    public void Clear()
+    {
+        lock (_lock)
+        {
+            _dict.Clear();
+        }
+    }
+
+    public void RemoveWhere(Func<TValue, bool> selector)
+    {
+        lock (_lock)
+        {
+            var keys = new List<TKey>();
+
+
+            foreach (var kvp in _dict)
+            {
+
+            }
         }
     }
 }
