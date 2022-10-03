@@ -19,7 +19,6 @@ public class IkeCrypto
     private readonly byte[]? _lastIv;
     private readonly Dictionary<uint, byte[]> _vectors;
 
-    public Cipher Cipher => _cipher;
     public Integrity? Integrity => _integrity;
     public Prf? Prf => _prf;
     public byte[] SkA => _skA ?? Array.Empty<byte>();
@@ -350,25 +349,6 @@ public class IkeCrypto
         {
             encrypted[i + payloadLength] = sum[i];
         }
-    }
-
-    /// <summary>
-    /// Calculate a checksum, return checksum bytes without changing incoming data.
-    /// Key should normally be skA
-    /// </summary>
-    public byte[] CalculateChecksum(byte[] key, byte[] message)
-    {
-        if (_integrity is null) return Array.Empty<byte>();
-        if (_skA is null) throw new Exception($"Checksum is present, but no checksum key was given ({nameof(_skA)})");
-
-        // read just the main body
-        var payloadLength = message.Length - _integrity.HashSize;
-        var mainPayload = message.Take(payloadLength).ToArray();
-
-        Log.Crypto(Bit.Describe("calculating hash on", mainPayload));
-        
-        // compute
-        return _integrity.Compute(key, mainPayload);
     }
 
     /// <summary>

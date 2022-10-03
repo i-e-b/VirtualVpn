@@ -110,32 +110,4 @@ public class Prf
         }
         return ret.GetRange(0, byteCount).ToArray();
     }
-
-    public IEnumerable<byte> HashFont_Old(byte[] key, byte[] seed, bool includeCount = true)
-        {
-        /*def prfplus(key, data, n):
-    ret = bytes()
-    prev = bytes()
-    round = 1
-    while len(ret) < n:
-        prev = prf(key, prev + data + pack("!B", round))
-        ret += prev
-        round += 1
-    return ret[:n]*/
-        
-        
-        var bytes = Array.Empty<byte>();
-        for (var i = 1; i < 1024; i++)
-        {
-            var feed = bytes.Concat(seed);
-            if (includeCount) feed = feed.Concat(new[]{(byte)i});
-            
-            bytes = Hash(key, feed.ToArray());
-            foreach (var b in bytes)
-            {
-                yield return b;
-            }
-        }
-    }
-
 }

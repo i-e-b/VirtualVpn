@@ -117,6 +117,11 @@ public static class Bit
         }
         return size.ToString("#0.##") + prefix[i];
     }
+    
+    /// <summary>
+    /// Render a human-friendly string for a file size in bytes
+    /// </summary>
+    public static string Human(long byteLength) => Human((ulong)byteLength);
 
 
     public static byte[] UInt16ToBytes(ushort value)

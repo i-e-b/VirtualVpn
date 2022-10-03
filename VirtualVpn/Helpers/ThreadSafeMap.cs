@@ -1,5 +1,4 @@
-﻿using VirtualVpn.TcpProtocol;
-
+﻿
 namespace VirtualVpn.Helpers;
 
 /// <summary>
@@ -87,10 +86,17 @@ public class ThreadSafeMap<TKey, TValue> where TKey : notnull
         {
             var keys = new List<TKey>();
 
-
             foreach (var kvp in _dict)
             {
+                if (selector(kvp.Value))
+                {
+                    keys.Add(kvp.Key);
+                }
+            }
 
+            foreach (var key in keys)
+            {
+                _dict.Remove(key);
             }
         }
     }

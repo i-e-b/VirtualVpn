@@ -152,7 +152,7 @@ public class HttpCapture
     /// </summary>
     public static byte[]? HandleProxyCallInternal(string keyGen, string keyHash, string timestamp, byte[] bodyCipherText, Func<HttpProxyRequest, HttpProxyResponse?> core)
     {
-        var cipher = new ProxyCipher(keyGen, timestamp);
+        using var cipher = new ProxyCipher(keyGen, timestamp);
         if (!cipher.IsValidCall(keyHash))
         {
             Log.Debug("Proxy call: header keys invalid");

@@ -52,10 +52,7 @@ public class TlsAdaptorForRealSocket : ISocketAdaptor
     public void Dispose()
     {
         Log.Debug("TlsAdaptorForRealSocket: Dispose");
-        _closed = true;
-        
-        _sslWrapper.Dispose();
-        _streamWrapper.Socket?.Dispose();
+        Close();
     }
 
     public void Close()
@@ -64,8 +61,8 @@ public class TlsAdaptorForRealSocket : ISocketAdaptor
         if (_closed) return;
         _closed = true;
         
-        _sslWrapper.Close();
-        _streamWrapper.Socket?.Close();
+        _sslWrapper.Dispose();
+        _streamWrapper.Socket?.Dispose();
     }
 
     public bool Connected { get; private set; }

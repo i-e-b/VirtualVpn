@@ -84,8 +84,6 @@ public class Integrity
         return full.Take(HashSize).ToArray();
     }
     
-    public byte[] ComputeRaw(byte[] key, byte[] data) => _algo(key, data);
-
     public static bool IsSupported(IntegId transformId)
     {
         switch (transformId)

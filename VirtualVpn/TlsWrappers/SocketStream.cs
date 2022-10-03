@@ -41,13 +41,11 @@ public class SocketStream : Stream
     {
         Log.Trace("SocketStream: Dispose");
         var sock = Interlocked.Exchange(ref _socket, null);
-        if (sock == null) return;
-        if (sock.Connected)
+        if (sock is not null)
         {
-            sock.Disconnect(false);
+            sock.Dispose();
         }
 
-        sock.Dispose();
         base.Dispose(disposing);
     }
 

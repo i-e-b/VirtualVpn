@@ -73,6 +73,11 @@ public class TlsHttpProxyCallAdaptor : ISocketAdaptor
         _messagePumpThread.Start();
     }
 
+    ~TlsHttpProxyCallAdaptor()
+    {
+        _sslStream?.Dispose();
+    }
+
     /// <summary>
     /// Run the blocking SSL/TLS adaptor, using
     /// blocking stream interface on this class.
@@ -286,6 +291,8 @@ public class TlsHttpProxyCallAdaptor : ISocketAdaptor
     public void Close()
     {
         Log.Trace($"{nameof(TlsHttpProxyCallAdaptor)}: Close called");
+        _sslStream?.Dispose();
+        _sslStream = null;
         EndConnection();
     }
     

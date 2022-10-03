@@ -26,7 +26,7 @@ public class TlsUnwrap : ISocketAdaptor
     
     private X509Certificate? _certificate;
     private ISocketAdaptor? _socket;
-    private volatile bool _running, _faulted;
+    private volatile bool _disposed, _running, _faulted;
     
     private readonly BlockingBidirectionalBuffer _tunnelSideBuffer;
     private readonly Thread _pumpThreadIncoming;
@@ -82,6 +82,7 @@ public class TlsUnwrap : ISocketAdaptor
         startupThread.Start();
         
         _faulted = false;
+        _disposed = false;
         _running = true;
         
         Log.Debug("TlsUnwrap: Creating blocking buffer and SSL stream");
@@ -93,6 +94,22 @@ public class TlsUnwrap : ISocketAdaptor
         
         _pumpThreadOutgoing = new Thread(BufferPumpOutgoing) { IsBackground = true };
         _pumpThreadOutgoing.Start();
+    }
+
+    ~TlsUnwrap()
+    {
+        if (_disposed) return;
+        
+        Log.Warn("TlsUnwrap hit destructor without being disposed");
+        
+        try { _socket?.Dispose(); }
+        catch (Exception ex) { Log.Error("TLS unwrap: Failed to dispose socket", ex); }
+
+        try { _sslStream.Dispose(); }
+        catch (Exception ex) { Log.Error("TLS unwrap: Failed to dispose SSL stream", ex); }
+
+        try { _certificate?.Dispose(); }
+        catch (Exception ex) { Log.Error("TLS unwrap: Failed to dispose certificate", ex); }
     }
 
     private void BufferPumpIncoming()
@@ -213,12 +230,18 @@ public class TlsUnwrap : ISocketAdaptor
     /// </summary>
     public void Close()
     {
+        if (_disposed) return;
+        
+        _disposed = true;
         _running = false;
         try { _socket?.Dispose(); }
         catch (Exception ex) { Log.Error("TLS unwrap: Failed to dispose socket", ex); }
 
         try { _sslStream.Dispose(); }
         catch (Exception ex) { Log.Error("TLS unwrap: Failed to dispose SSL stream", ex); }
+
+        try { _certificate?.Dispose(); }
+        catch (Exception ex) { Log.Error("TLS unwrap: Failed to dispose certificate", ex); }
         
         var ok = _pumpThreadIncoming.Join(TimeSpan.FromMilliseconds(256));
         ok &= _pumpThreadOutgoing.Join(TimeSpan.FromMilliseconds(256));

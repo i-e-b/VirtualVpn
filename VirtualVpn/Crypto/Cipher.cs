@@ -36,12 +36,14 @@ public class Cipher
     
     public byte[] Encrypt(byte[] key, byte[] iv, byte[] data)
     {
-        return AesCipher(key).EncryptCbc(data, iv, PaddingMode.None);
+        using var aes = AesCipher(key);
+        return aes.EncryptCbc(data, iv, PaddingMode.None);
     }
 
     public byte[] Decrypt(byte[] key, byte[] iv, byte[] data)
     {
-        return AesCipher(key).DecryptCbc(data, iv, PaddingMode.None);
+        using var aes = AesCipher(key);
+        return aes.DecryptCbc(data, iv, PaddingMode.None);
     }
 
     public byte[] GenerateIv()

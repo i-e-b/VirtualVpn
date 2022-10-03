@@ -8,13 +8,14 @@ namespace VirtualVpn.Web;
 /// A small wrapper to encrypt messages for the API proxy command.
 /// See <see cref="HttpCapture.HandleApiRequest"/>
 /// </summary>
-public class ProxyCipher
+public class ProxyCipher : IDisposable
 {
     private readonly string _keyGen;
     private readonly long _timeStamp;
     private readonly Aes _cipher;
     private readonly int _blockSizeBytes;
     private readonly byte[] _iv;
+    private bool _disposed;
 
     /// <summary>
     /// Create a new proxy-message cipher helper with
@@ -26,13 +27,24 @@ public class ProxyCipher
         var tickBytes = Convert.FromBase64String(timeStamp);
         if (tickBytes.Length != 8) throw new Exception("Invalid timestamp");
         _timeStamp = Bit.BytesToInt64Msb(tickBytes);
-        
+
         Timestamp = timeStamp;
         _keyGen = keyGen;
         _cipher = AesCipher(_keyGen + timeStamp);
+
+        _disposed = false;
+
         _blockSizeBytes = _cipher.BlockSize / 8;
         _iv = new byte[_blockSizeBytes];
         MixBitsToBits(tickBytes, _iv);
+    }
+
+    ~ProxyCipher()
+    {
+        if (_disposed) return;
+        
+        Log.Warn("ProxyCipher hit destructor without being disposed.");
+        _cipher.Dispose();
     }
 
     /// <summary>
@@ -134,5 +146,13 @@ public class ProxyCipher
         var hashData = Encoding.UTF8.GetBytes(clock.ToString("yyyy-MM-ddTHH:mm:ss"));
         var hashBytes = HMACSHA256.HashData(hashKey, hashData);
         return Convert.ToBase64String(hashBytes);
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        _cipher.Dispose();
+        GC.SuppressFinalize(this);
     }
 }

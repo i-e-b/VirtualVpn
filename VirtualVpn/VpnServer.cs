@@ -68,10 +68,13 @@ public class VpnServer : ISessionHost, IDisposable
         _statsTimer.Reset();
         if ( ! Log.IncludeInfo) return;
         
-        var sb = new StringBuilder();
+        var gc = GC.GetGCMemoryInfo();
         
+        var sb = new StringBuilder();
+
         sb.Append($"Statistics:\r\n\r\nSessions={_sessions.Count} active, {_sessionsStarted} started;"); 
         sb.Append($"\r\nTotal data in={Bit.Human(_server.TotalIn)}, out={Bit.Human(_server.TotalOut)}");
+        sb.Append($"\r\nMemory use:{Bit.Human(GC.GetTotalMemory(false))}, {Bit.Human(gc.HeapSizeBytes)} under GC, {Bit.Human(gc.TotalAvailableMemoryBytes)} available");
         sb.Append("\r\nChild sessions:\r\n");
         foreach (var childSa in _childSessions.Values)
         {
