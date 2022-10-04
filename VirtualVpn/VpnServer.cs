@@ -42,7 +42,6 @@ public class VpnServer : ISessionHost, IDisposable
     private ulong _sessionsStarted;
     private readonly ISet<IpV4Address> _alwaysConnections = new HashSet<IpV4Address>();
 
-
     public VpnServer()
     {
         try
@@ -61,44 +60,10 @@ public class VpnServer : ISessionHost, IDisposable
     }
 
     /// <summary>
-    /// Writes server statistics to console
+    /// Run the VirtualVPN software
     /// </summary>
-    private void StatsEvent(EspTimedEvent obj)
-    {
-        _statsTimer.Reset();
-        if ( ! Log.IncludeInfo) return;
-        
-        GC.Collect();
-        var gc = GC.GetGCMemoryInfo();
-        using var myProc = Process.GetCurrentProcess();
-        var tCount = myProc.Threads.Count;
-        var allMem = myProc.PrivateMemorySize64;
-
-        var expectedThreads = TlsUnwrap.ClosedAdaptors * 2;
-        var unexpectedThreads = tCount - expectedThreads;
-        
-        var sb = new StringBuilder();
-
-        sb.Append($"Statistics:\r\n\r\nSessions={_sessions.Count} active, {_sessionsStarted} started;"); 
-        sb.Append($"\r\nTotal data in={Bit.Human(_server.TotalIn)}, out={Bit.Human(_server.TotalOut)}");
-        sb.Append($"\r\nMemory: process={Bit.Human(allMem)}, GC.Total={Bit.Human(GC.GetTotalMemory(false))}, GC.Heap={Bit.Human(gc.HeapSizeBytes)}, Avail={Bit.Human(gc.TotalAvailableMemoryBytes)}");
-        sb.Append($"\r\nActive threads={tCount}, tls wrappers running={TlsUnwrap.RunningThreads}, tls waiting dispose={expectedThreads}, unaccounted={unexpectedThreads}");
-        
-        sb.Append("\r\nChild sessions:\r\n");
-        foreach (var childSa in _childSessions.Values)
-        {
-            sb.Append($"    Gateway={childSa.Gateway}, Spi-in={childSa.SpiIn:x}, Spi-out={childSa.SpiOut:x}\r\n");
-            sb.Append($"        Parent:   spi={childSa.Parent?.LocalSpi:x}, state={childSa.Parent?.State.ToString() ?? "<orphan>"}\r\n");
-            sb.Append($"        Messages: in={childSa.MessagesIn}, out={childSa.MessagesOut}\r\n");
-            sb.Append($"        Data:     in={Bit.Human(childSa.DataIn)}, out={Bit.Human(childSa.DataOut)}\r\n");
-            sb.Append($"        Sessions: active={childSa.ActiveSessionCount}, parked={childSa.ParkedSessionCount}\r\n");
-        }
-        sb.Append("\r\n");
-        
-        Console.WriteLine(sb.ToString());
-    }
-
-    public void Run()
+    /// <param name="args">Optional commands in the form "CmdName=Arg1,Arg2"</param>
+    public void Run(IEnumerable<string>? args)
     {
         Log.Debug("Setup");
         Json.DefaultParameters.EnableAnonymousTypes = true;
@@ -109,11 +74,26 @@ public class VpnServer : ISessionHost, IDisposable
         _server.Start();
         _eventPumpThread.Start();
 
+        if (args is not null)
+        {
+            Thread.Sleep(250);
+            RunCommandArgs(args);
+        }
 
         while (_running)
         {
             // wait for local commands
-            var cmd = Console.ReadLine();
+            string? cmd;
+            try
+            {
+                cmd = Console.ReadLine();
+            }
+            catch (Exception ex)
+            {
+                Log.Info($"Can't read command inputs: {ex.Message}");
+                Thread.Sleep(2500);
+                continue;
+            }
 
             try
             {
@@ -129,9 +109,151 @@ public class VpnServer : ISessionHost, IDisposable
         }
     }
 
-    private void HandleCommands(string[] prefix)
+
+    /// <summary>
+    /// Runs a set of command-line arguments against
+    /// the <see cref="HandleCommands"/> call.
+    /// Each argument is a command in the form "CmdName=Arg1,Arg2"
+    /// </summary>
+    public void RunCommandArgs(IEnumerable<string> args)
     {
-        switch (prefix[0])
+        foreach (var arg in args)
+        {
+            try
+            {
+                var cmd = arg.Split('=', ',');
+                HandleCommands(cmd);
+            }
+            catch (Exception ex)
+            {
+                Log.Error($"Argument '{arg}' failed", ex);
+            }
+        }
+    }
+
+    public void Dispose()
+    {
+        _server.Dispose();
+        GC.SuppressFinalize(this);
+    }
+
+    public void AddChildSession(ChildSa childSa)
+    {
+        _childSessions.Add(childSa.SpiIn, childSa);
+    }
+
+    public void RemoveSession(bool wasRemoteRequest, params ulong[] spis)
+    {
+        var removedCount = 0;
+
+        foreach (var spi in spis)
+        {
+            if (!_sessions.ContainsKey(spi)) continue;
+
+            // Unhook the old session
+            var session = _sessions[spi];
+            var removed = _sessions.Remove(spi);
+            Log.Info($"Session {spi:x} removed. It was connected to {session.Gateway}");
+
+            if (removed) removedCount++;
+            
+            // If this is a persistent session ended from elsewhere, start it back up
+            if (wasRemoteRequest && Settings.ReEstablishOnDisconnect)
+            {
+                Log.Info($"Attempting to restart session with {session.Gateway}");
+                StartVpnSession(session.Gateway);
+            }
+        }
+
+
+        if (removedCount < 1)
+        {
+            Log.Warn($"No matching session found in set: {string.Join(", ", spis.Select(i=>i.ToString("x")))}");
+        }
+
+    }
+
+    public void RemoveChildSession(params uint[] spis)
+    {
+        var removedCount = 0;
+
+        foreach (var spi in spis)
+        {
+            if (!_childSessions.ContainsKey(spi)) continue;
+
+            // Unhook the old session
+            var session = _childSessions[spi];
+            var removed = _childSessions.Remove(spi);
+            Log.Info($"Child session {spi:x} removed. It was connected to {session.Gateway}");
+
+            if (removed) removedCount++;
+        }
+
+        if (removedCount < 1)
+        {
+            Log.Warn($"No matching child session found in set: {string.Join(", ", spis.Select(i=>i.ToString("x")))}");
+        }
+    }
+    
+    public HttpProxyResponse MakeProxyCall(HttpProxyRequest request)
+    {
+        try
+        {
+            var uri = new Uri(request.Url, UriKind.Absolute);
+            
+            var target = IpV4Address.FromString(uri.Host);
+            var proxyAddress = IpV4Address.FromString(request.ProxyLocalAddress);
+            var tunnel = FindTunnelTo(target);
+            
+            using var apiSide = new TlsHttpProxyCallAdaptor(request, uri.Scheme == "https");
+            using var channel = tunnel.OpenTcpSession(target, uri.Port, proxyAddress, apiSide);
+            
+            var timeout = new Stopwatch();
+            timeout.Start();
+
+            while (
+                apiSide.Connected // this will be flipped when the Tcp connection is over
+                && timeout.Elapsed < TimeSpan.FromSeconds(30) // timeout -- needs to be quite long as our SSL/TLS is slow
+                )
+            {
+                if (!channel.EventPump())
+                {
+                    Thread.Sleep(50);
+                }
+                var outgoingDataReady = channel.SocketThroughTunnel.BytesOfSendDataWaiting;
+                if (outgoingDataReady > 0)
+                {
+                    Log.Trace($"Virtual socket has {outgoingDataReady} bytes waiting");
+                }
+            }
+
+            if (apiSide.Connected) Log.Warn("Proxy call ended due to TIMEOUT");
+            else Log.Trace("Ending Proxy call at end of document");
+
+            apiSide.Close();
+            channel.Close();
+
+            // make sure we stop pumping the connection
+            tunnel.ReleaseConnection(channel.SelfKey);
+            
+            return apiSide.GetResponse();
+        }
+        catch (Exception ex)
+        {
+            return new HttpProxyResponse{
+                Success = false,
+                ErrorMessage = ex.ToString()
+            };
+        }
+    }
+
+    /// <summary>
+    /// Handle control argument from either std-in, or from the command line
+    /// </summary>
+    /// <param name="command">command and arguments</param>
+    private void HandleCommands(string[] command)
+    {
+        switch (command[0])
         {
             case "crypto": // very detailed logging, plus crypto details (INSECURE)
             {
@@ -167,7 +289,7 @@ public class VpnServer : ISessionHost, IDisposable
 
             case "kill": // stop an association
             {
-                KillSessionBySpi(prefix[1]);
+                KillSessionBySpi(command[1]);
                 return;
             }
             case "list": // list open SAs
@@ -179,7 +301,7 @@ public class VpnServer : ISessionHost, IDisposable
             {
                 try
                 {
-                    TryStartVpnIfNotAlreadyConnected(prefix[1]);
+                    TryStartVpnIfNotAlreadyConnected(command[1]);
                 }
                 catch (Exception ex)
                 {
@@ -192,10 +314,10 @@ public class VpnServer : ISessionHost, IDisposable
             {
                 try
                 {
-                    var target = TryStartVpnIfNotAlreadyConnected(prefix[1]);
+                    var target = TryStartVpnIfNotAlreadyConnected(command[1]);
                     if (target is null)
                     {
-                        Log.Critical($"Target '{prefix[1]}' does not seem to be a valid IP address.");
+                        Log.Critical($"Target '{command[1]}' does not seem to be a valid IP address.");
                         return;
                     }
 
@@ -222,29 +344,29 @@ public class VpnServer : ISessionHost, IDisposable
             }
             case "psk":
             {
-                Settings.PreSharedKeyString = prefix[1]; // this should be on a per-gateway basis
+                Settings.PreSharedKeyString = command[1]; // this should be on a per-gateway basis
                 Console.WriteLine("Pre-shared key updated. This will affect NEW sessions only.");
                 break;
             }
             case "ping":
             {
-                try { DoPing(prefix); }
+                try { DoPing(command); }
                 catch (Exception ex) { Log.Error("Failed ping", ex); }
                 break;
             }
             case "save": {
-                try { SaveSettings(prefix); }
+                try { SaveSettings(command); }
                 catch (Exception ex) { Log.Error("Failed to save settings", ex); }
                 break;
             }
             case "load": {
-                try { LoadSettings(prefix); }
+                try { LoadSettings(command); }
                 catch (Exception ex) { Log.Error("Failed to load settings", ex); }
                 break;
             }
             case "wget":
             {
-                var parts = prefix[1].Split(' ', StringSplitOptions.TrimEntries);
+                var parts = command[1].Split(' ', StringSplitOptions.TrimEntries);
                 if (parts.Length != 2)
                 {
                     Console.WriteLine($"Expected IP and URL. Got {parts.Length} parts (should be 2)");
@@ -286,6 +408,44 @@ public class VpnServer : ISessionHost, IDisposable
                 Console.WriteLine("        load [file-name], save [file-name]");
                 return;
         }
+    }
+    
+    /// <summary>
+    /// Writes server statistics to console
+    /// </summary>
+    private void StatsEvent(EspTimedEvent obj)
+    {
+        _statsTimer.Reset();
+        if ( ! Log.IncludeInfo) return;
+        
+        GC.Collect();
+        var gc = GC.GetGCMemoryInfo();
+        using var myProc = Process.GetCurrentProcess();
+        var tCount = myProc.Threads.Count;
+        var allMem = myProc.PrivateMemorySize64;
+
+        var expectedThreads = TlsUnwrap.ClosedAdaptors * 2;
+        var unexpectedThreads = tCount - expectedThreads;
+        
+        var sb = new StringBuilder();
+
+        sb.Append($"Statistics:\r\n\r\nSessions={_sessions.Count} active, {_sessionsStarted} started;"); 
+        sb.Append($"\r\nTotal data in={Bit.Human(_server.TotalIn)}, out={Bit.Human(_server.TotalOut)}");
+        sb.Append($"\r\nMemory: process={Bit.Human(allMem)}, GC.Total={Bit.Human(GC.GetTotalMemory(false))}, GC.Heap={Bit.Human(gc.HeapSizeBytes)}, Avail={Bit.Human(gc.TotalAvailableMemoryBytes)}");
+        sb.Append($"\r\nActive threads={tCount}, tls wrappers running={TlsUnwrap.RunningThreads}, tls waiting dispose={expectedThreads}, unaccounted={unexpectedThreads}");
+        
+        sb.Append("\r\nChild sessions:\r\n");
+        foreach (var childSa in _childSessions.Values)
+        {
+            sb.Append($"    Gateway={childSa.Gateway}, Spi-in={childSa.SpiIn:x}, Spi-out={childSa.SpiOut:x}\r\n");
+            sb.Append($"        Parent:   spi={childSa.Parent?.LocalSpi:x}, state={childSa.Parent?.State.ToString() ?? "<orphan>"}\r\n");
+            sb.Append($"        Messages: in={childSa.MessagesIn}, out={childSa.MessagesOut}\r\n");
+            sb.Append($"        Data:     in={Bit.Human(childSa.DataIn)}, out={Bit.Human(childSa.DataOut)}\r\n");
+            sb.Append($"        Sessions: active={childSa.ActiveSessionCount}, parked={childSa.ParkedSessionCount}\r\n");
+        }
+        sb.Append("\r\n");
+        
+        Console.WriteLine(sb.ToString());
     }
 
     /// <summary>
@@ -467,70 +627,6 @@ public class VpnServer : ISessionHost, IDisposable
         if (split.Length <= 0) return new string[2];
         if (split.Length == 1) return new[]{split[0], ""};
         return split;
-    }
-
-    public void Dispose()
-    {
-        _server.Dispose();
-        GC.SuppressFinalize(this);
-    }
-
-    public void AddChildSession(ChildSa childSa)
-    {
-        _childSessions.Add(childSa.SpiIn, childSa);
-    }
-
-    public void RemoveSession(bool wasRemoteRequest, params ulong[] spis)
-    {
-        var removedCount = 0;
-
-        foreach (var spi in spis)
-        {
-            if (!_sessions.ContainsKey(spi)) continue;
-
-            // Unhook the old session
-            var session = _sessions[spi];
-            var removed = _sessions.Remove(spi);
-            Log.Info($"Session {spi:x} removed. It was connected to {session.Gateway}");
-
-            if (removed) removedCount++;
-            
-            // If this is a persistent session ended from elsewhere, start it back up
-            if (wasRemoteRequest && Settings.ReEstablishOnDisconnect)
-            {
-                Log.Info($"Attempting to restart session with {session.Gateway}");
-                StartVpnSession(session.Gateway);
-            }
-        }
-
-
-        if (removedCount < 1)
-        {
-            Log.Warn($"No matching session found in set: {string.Join(", ", spis.Select(i=>i.ToString("x")))}");
-        }
-
-    }
-
-    public void RemoveChildSession(params uint[] spis)
-    {
-        var removedCount = 0;
-
-        foreach (var spi in spis)
-        {
-            if (!_childSessions.ContainsKey(spi)) continue;
-
-            // Unhook the old session
-            var session = _childSessions[spi];
-            var removed = _childSessions.Remove(spi);
-            Log.Info($"Child session {spi:x} removed. It was connected to {session.Gateway}");
-
-            if (removed) removedCount++;
-        }
-
-        if (removedCount < 1)
-        {
-            Log.Warn($"No matching child session found in set: {string.Join(", ", spis.Select(i=>i.ToString("x")))}");
-        }
     }
 
     private void StopRunning(object? sender, ConsoleCancelEventArgs e)
@@ -789,58 +885,6 @@ public class VpnServer : ISessionHost, IDisposable
 
             // Nothing found. Start again
             StartVpnSession(requiredGateway);
-        }
-    }
-
-    public HttpProxyResponse MakeProxyCall(HttpProxyRequest request)
-    {
-        try
-        {
-            var uri = new Uri(request.Url, UriKind.Absolute);
-            
-            var target = IpV4Address.FromString(uri.Host);
-            var proxyAddress = IpV4Address.FromString(request.ProxyLocalAddress);
-            var tunnel = FindTunnelTo(target);
-            
-            using var apiSide = new TlsHttpProxyCallAdaptor(request, uri.Scheme == "https");
-            using var channel = tunnel.OpenTcpSession(target, uri.Port, proxyAddress, apiSide);
-            
-            var timeout = new Stopwatch();
-            timeout.Start();
-
-            while (
-                apiSide.Connected // this will be flipped when the Tcp connection is over
-                && timeout.Elapsed < TimeSpan.FromSeconds(30) // timeout -- needs to be quite long as our SSL/TLS is slow
-                )
-            {
-                if (!channel.EventPump())
-                {
-                    Thread.Sleep(50);
-                }
-                var outgoingDataReady = channel.SocketThroughTunnel.BytesOfSendDataWaiting;
-                if (outgoingDataReady > 0)
-                {
-                    Log.Trace($"Virtual socket has {outgoingDataReady} bytes waiting");
-                }
-            }
-
-            if (apiSide.Connected) Log.Warn("Proxy call ended due to TIMEOUT");
-            else Log.Trace("Ending Proxy call at end of document");
-
-            apiSide.Close();
-            channel.Close();
-
-            // make sure we stop pumping the connection
-            tunnel.ReleaseConnection(channel.SelfKey);
-            
-            return apiSide.GetResponse();
-        }
-        catch (Exception ex)
-        {
-            return new HttpProxyResponse{
-                Success = false,
-                ErrorMessage = ex.ToString()
-            };
         }
     }
 
