@@ -2,20 +2,29 @@
 using System.Net.Sockets;
 using System.Security.Cryptography.X509Certificates;
 using VirtualVpn.TcpProtocol;
+using VirtualVpn.Web;
 
 namespace VirtualVpn.TlsWrappers;
 
 public class TlsAdaptorForRealSocket : ISocketAdaptor
 {
-    private bool _faulted, _closed;
     private readonly SocketStream _streamWrapper;
     private readonly SslStream _sslWrapper;
+    private readonly HttpHostHeaderRewriter _reWriter;
+    private bool _faulted, _closed;
 
-    public TlsAdaptorForRealSocket(Socket socket, string host)
+    /// <summary>
+    /// Wrap a socket connection with an SSL/TLS client.
+    /// </summary>
+    /// <param name="socket">Underlying connection</param>
+    /// <param name="virtualHost">The virtual host that the remote connection should see</param>
+    /// <param name="realHost">The website host, as in the 'Host:' HTTP header</param>
+    public TlsAdaptorForRealSocket(Socket socket, string virtualHost, string realHost)
     {
         Connected = false;
         _faulted = false;
         _closed = false;
+        _reWriter = new HttpHostHeaderRewriter(realHost);
         _streamWrapper = new SocketStream(socket);
         _sslWrapper = new SslStream(_streamWrapper, false, AnyCertificate);
         
@@ -26,7 +35,7 @@ public class TlsAdaptorForRealSocket : ISocketAdaptor
             Log.Debug("TlsAdaptorForRealSocket. Authentication starting");
             try
             {
-                _sslWrapper.AuthenticateAsClient(host);
+                _sslWrapper.AuthenticateAsClient(virtualHost);
                 Connected = _sslWrapper.IsAuthenticated;
                 _faulted = !_sslWrapper.IsAuthenticated;
             }
@@ -42,6 +51,15 @@ public class TlsAdaptorForRealSocket : ISocketAdaptor
         startupThread.Start();
         
         Log.Trace("TlsAdaptorForRealSocket: Leaving constructor");
+    }
+
+    ~TlsAdaptorForRealSocket()
+    {
+        if (_closed) return;
+        
+        Log.Warn("TlsAdaptorForRealSocket hit destructor without Dispose/Close");
+        _sslWrapper.Dispose();
+        _streamWrapper.Socket?.Dispose();
     }
 
     /// <summary>
@@ -84,7 +102,10 @@ public class TlsAdaptorForRealSocket : ISocketAdaptor
         try
         {
             Log.Trace("TlsAdaptorForRealSocket: IncomingFromTunnel");
-            _sslWrapper.Write(buffer, offset, length);
+            
+            var translatedBuffer = _reWriter.Process(buffer, ref offset, ref length);
+            
+            _sslWrapper.Write(translatedBuffer, offset, length);
             return length;
         }
         catch (Exception ex)

@@ -1,17 +1,25 @@
 using System.Net.Sockets;
+using VirtualVpn.Web;
 
 namespace VirtualVpn.TcpProtocol;
 
 internal class AdaptorForRealSocket : ISocketAdaptor
 {
     private readonly Socket _socket;
+    private readonly HttpHostHeaderRewriter _reWriter;
     private bool _faulted, _disposed;
 
-    public AdaptorForRealSocket(Socket socket)
+    /// <summary>
+    /// Wrap an OS socket connection as an ISocketAdaptor
+    /// </summary>
+    /// <param name="socket">Underlying connection</param>
+    /// <param name="webAppHostName">The website host, as in the 'Host:' HTTP header</param>
+    public AdaptorForRealSocket(Socket socket, string webAppHostName)
     {
         _faulted = false;
         _disposed = false;
         _socket = socket;
+        _reWriter = new HttpHostHeaderRewriter(webAppHostName);
     }
     
     ~AdaptorForRealSocket()
@@ -35,7 +43,9 @@ internal class AdaptorForRealSocket : ISocketAdaptor
     {
         try
         {
-            return _socket.Send(buffer, offset, length, SocketFlags.None);
+            var translatedBuffer = _reWriter.Process(buffer, ref offset, ref length);
+            
+            return _socket.Send(translatedBuffer, offset, length, SocketFlags.None);
         }
         catch (Exception ex)
         {

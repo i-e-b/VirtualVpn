@@ -20,6 +20,9 @@ public class HttpBuffer
         _incomingBuffer = new List<byte>();
     }
 
+    /// <summary>
+    /// Number of bytes buffered
+    /// </summary>
     public long Length => _incomingBuffer.Count;
 
     /// <summary>
@@ -69,8 +72,8 @@ public class HttpBuffer
                 && int.TryParse(value, out var declaredLength))
             {
                 var endOfHeader = cursor - 1;
-                var bodySizeGuess = _incomingBuffer.Count - endOfHeader;
-                Log.Trace($"Saw content length={declaredLength}. Currently have {_incomingBuffer.Count} bytes in buffer, with {endOfHeader} of header.");
+                var bodySizeGuess = Length - endOfHeader;
+                Log.Trace($"Saw content length={declaredLength}. Currently have {Length} bytes in buffer, with {endOfHeader} of header.");
                 if (bodySizeGuess >= declaredLength)
                 {
                     Log.Trace($"Ending connection based on length: declared {declaredLength}, got {bodySizeGuess}");
@@ -177,7 +180,7 @@ public class HttpBuffer
 
         // Now we should have enough details to read the body correctly.
         var endedCorrectly = false;
-        if (cursor < _incomingBuffer.Count)
+        if (cursor < Length)
         {
             if (response.Headers.ContainsKey("Transfer-Encoding")
                 && response.Headers["Transfer-Encoding"].Contains("chunked"))
@@ -222,7 +225,7 @@ public class HttpBuffer
             }
 
             // prevent truncation causing an error
-            if (cursor + length > _incomingBuffer.Count)
+            if (cursor + length > Length)
             {
                 endedCorrectly = false;
                 length = _incomingBuffer.Count - cursor;

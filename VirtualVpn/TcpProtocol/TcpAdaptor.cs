@@ -361,11 +361,17 @@ public class TcpAdaptor : ITcpAdaptor
         return anyData;
     }
 
+    /// <summary>
+    /// This is the point at which we try to start the call to
+    /// the Web App.
+    /// </summary>
     private bool TryConnectToWebApp()
     {
         Log.Trace("Connecting to web app");
         try
         {
+            var shouldInjectHost = !string.IsNullOrWhiteSpace(Settings.WebAppHostName);
+            
             // To determine if we should use TLS, we need
             // to peek at the tunneled request data
             if (SocketThroughTunnel.BytesOfReadDataWaiting >= TlsDetector.RequiredBytes)
@@ -394,7 +400,7 @@ public class TcpAdaptor : ITcpAdaptor
                     //
                     // So it looks like:
                     //
-                    //  [WebApp] <-(socket)<-(TlsUnwrap)<- VirtualTcpSocket  <=tunnel=> [Remote Gateway]
+                    //  [WebApp] <-(socket)<-(TlsUnwrap)<- VirtualTcpSocket <=tunnel=> [Remote Gateway]
 
                     var keyPaths = Settings.TlsKeyPaths[key];
                     _socketToLocalSide = new TlsUnwrap(keyPaths, () => ConnectToWebApp(incomingIsTls: false, wrapWithTlsAdaptor: true));
@@ -402,6 +408,11 @@ public class TcpAdaptor : ITcpAdaptor
                 }
                 else
                 {
+                    if (incomingIsTls && shouldInjectHost)
+                    {
+                        Log.Warn("Warning: Will not be able to set Host header. Incoming TLS request without stored certificates. Your call may fail.");
+                    }
+
                     // using TLS means Remote<-[tunnel]->WebApp is encrypted as one stream
                     // and this TcpAdaptor doesn't try and understand the encrypted data.
                     _socketToLocalSide = ConnectToWebApp(incomingIsTls, wrapWithTlsAdaptor: false);
@@ -529,10 +540,33 @@ public class TcpAdaptor : ITcpAdaptor
         Log.Debug($"Connecting to web app at {Settings.WebAppIpAddress}:{port} ({(incomingIsTls ? "SSL/TLS" : "plain")}, {(wrapWithTlsAdaptor ? "wrapped" : "unwrapped")})");
         if (port < 1) throw new Exception("Port for WebApp is not configured; Can't connect");
         
-        var webApiSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+        var webApiSocket = MakeRawSocketConnection(port);
+
+        // Work out what the host header should be
+        var realHost = Settings.WebAppIpAddress;
+        if (!string.IsNullOrWhiteSpace(Settings.WebAppHostName))
+        {
+            realHost = Settings.WebAppHostName;
+        }
+
+        // select, build and return the right kind of adaptor
+        if (wrapWithTlsAdaptor)
+        {
+            Log.Debug("connected, starting TLS adaptor");
+            return new TlsAdaptorForRealSocket(webApiSocket, Settings.WebAppIpAddress, realHost);
+        }
+
+        Log.Debug("connection up, direct connection");
+        return new AdaptorForRealSocket(webApiSocket, realHost);
+    }
+
+    private static Socket MakeRawSocketConnection(int port)
+    {
         try
         {
+            var webApiSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
             webApiSocket.Connect(IpV4Address.FromString(Settings.WebAppIpAddress).MakeEndpoint(port));
+            return webApiSocket;
         }
         catch (SocketException socketException)
         {
@@ -557,17 +591,8 @@ public class TcpAdaptor : ITcpAdaptor
                 Log.Critical("Web App not available: can't respond to traffic.\r\nCheck web app is up and settings are correct");
             throw;
         }
-
-
-        if (wrapWithTlsAdaptor)
-        {
-            Log.Debug("connected, starting TLS adaptor");
-            return new TlsAdaptorForRealSocket(webApiSocket, Settings.WebAppIpAddress);
-        }
-
-        Log.Debug("connection up");
-        return new AdaptorForRealSocket(webApiSocket);
     }
+
     #endregion
 
     /// <summary>

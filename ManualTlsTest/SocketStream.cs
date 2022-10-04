@@ -20,11 +20,6 @@ public class SocketStream : Stream
     }
 
     /// <summary>
-    /// Underlying socket used by this stream
-    /// </summary>
-    public Socket? Socket => _socket;
-
-    /// <summary>
     /// Dispose of stream and socket.
     /// </summary>
     ~SocketStream()

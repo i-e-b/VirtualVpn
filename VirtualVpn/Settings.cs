@@ -10,8 +10,10 @@ namespace VirtualVpn;
 
 public static class Settings
 {
+    #region VPN establishment
     /// <summary>
-    /// PSK for session establishment
+    /// PSK for session establishment. This MUST be shared with the
+    /// remote gateway.
     /// </summary>
     public static string PreSharedKeyString = "ThisIsForTestOnlyDontUse";
     
@@ -60,6 +62,9 @@ public static class Settings
     //public static readonly string LocalIpAddress = "192.168.0.2"; // Hans
     public static string LocalIpAddress = "185.81.252.44"; // Behind NAT
     
+    #endregion
+    
+    #region Web app proxying
     /// <summary>
     /// TCP port to use when client is using HTTP
     /// </summary>
@@ -74,6 +79,17 @@ public static class Settings
     /// IPv4 address of the app we're tunnelling to. If on the same machine, use 127.0.0.1
     /// </summary>
     public static string WebAppIpAddress = "127.0.0.1"; // TODO: support DNS names?
+    
+    /// <summary>
+    /// If supplied, this host name will be added to the headers of incoming requests.
+    /// If blank or null, the incoming request headers will not be changed.
+    /// <p></p>
+    /// Use this if your WebApp is behind a reverse-proxy.
+    /// <p></p>
+    /// IMPORTANT: this will only work if calls are non-TLS <b>or</b>
+    /// the target has certs in <see cref="TlsKeyPaths"/>
+    /// </summary>
+    public static string? WebAppHostName = "my-app.example.com";
     
     /// <summary>
     /// The SECRET api key for sending proxy messages.
@@ -97,6 +113,7 @@ public static class Settings
         {"55.55.55.55","/root/vpnCerts/hans-privkey.pem;/root/vpnCerts/hans-fullchain.pem"}
     };
     
+    #endregion
     
     #region Debug tools and logging
     /// <summary>
