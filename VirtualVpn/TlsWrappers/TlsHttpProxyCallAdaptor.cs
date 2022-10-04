@@ -161,24 +161,31 @@ public class TlsHttpProxyCallAdaptor : ISocketAdaptor
         }
 
         // Read back the incoming queue until the buffer is filled
-        byte[] buf = new byte[8192];
+        var buf = new byte[8192];
         while (_messagePumpRunning)
         {
-            Log.Trace("Proxy direct (wait)");
-            int read;
-            
-            lock (_transferLock)
+            try
             {
-                read = _blockingBuffer.Read(buf, 0, buf.Length);
-                Log.Trace($"Proxy direct: transferring {read} bytes");
+                Log.Trace("Proxy direct (wait)");
+                int read;
+
+                lock (_transferLock)
+                {
+                    read = _blockingBuffer.Read(buf, 0, buf.Length);
+                    Log.Trace($"Proxy direct: transferring {read} bytes");
+                }
+
+                _httpResponseBuffer.FeedData(buf, 0, read);
+
+                if (_httpResponseBuffer.IsComplete())
+                {
+                    Log.Trace("Proxy direct: document complete");
+                    EndConnection();
+                }
             }
-
-            _httpResponseBuffer.FeedData(buf, 0, read);
-
-            if (_httpResponseBuffer.IsComplete())
+            catch (Exception ex)
             {
-                Log.Trace("Proxy direct: document complete");
-                EndConnection();
+                Log.Error("Failure in proxy adaptor: RunDirectAdaptor", ex);
             }
         }
         Log.Trace("Proxy direct: ended");

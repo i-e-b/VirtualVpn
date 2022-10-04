@@ -26,7 +26,7 @@ class TestProxyApiProgram
 
         var proxyRequest = new HttpProxyRequest
         {
-            Url = "https://192.168.0.40:7169/test/secure/remote", // who we want to talk to
+            Url = "http://192.168.0.40/test/remote", // who we want to talk to
             ProxyLocalAddress = "55.55.55.55", // who we are pretending to be
             Headers = { { "Accept", "*/*" } },
             HttpMethod = "GET",

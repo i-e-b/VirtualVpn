@@ -114,37 +114,45 @@ public class HttpCapture
     /// </summary>
     private static bool HandleProxyCall(HttpListenerContext ctx)
     {
-        Log.Trace("Reading proxy request");
-        var keyHash = ctx.Request.Headers.Get("X-Api-Key"); // Hash output of timestamp + ApiKey
-        var timestamp = ctx.Request.Headers.Get("X-Api-TS"); // Caller's claimed local time (UTC, in ticks, base64)
-
-        if (keyHash is null || timestamp is null)
+        try
         {
-            Log.Info("Proxy request with invalid headers");
+            Log.Trace("Reading proxy request");
+            var keyHash = ctx.Request.Headers.Get("X-Api-Key"); // Hash output of timestamp + ApiKey
+            var timestamp = ctx.Request.Headers.Get("X-Api-TS"); // Caller's claimed local time (UTC, in ticks, base64)
+
+            if (keyHash is null || timestamp is null)
+            {
+                Log.Info("Proxy request with invalid headers");
+                return false;
+            }
+
+            var ms = new MemoryStream();
+            ctx.Request.InputStream.CopyTo(ms);
+            ms.Seek(0, SeekOrigin.Begin);
+            var bodyCipherText = ms.ToArray();
+
+            var finalOutput = HandleProxyCallInternal(Settings.ApiKey, keyHash, timestamp, bodyCipherText, rq => Program.VpnServer?.MakeProxyCall(rq));
+            if (finalOutput is null)
+            {
+                Log.Trace("Proxy request internal handler rejected call");
+                return false;
+            }
+
+            ctx.Response.StatusCode = 200;
+            ctx.Response.StatusDescription = "Processed";
+            ctx.Response.ContentType = "application/octet-stream";
+            ctx.Response.ContentLength64 = finalOutput.Length;
+            ctx.Response.OutputStream.Write(finalOutput);
+            ctx.Response.OutputStream.Flush();
+
+            Log.Trace($"Proxy request complete: {finalOutput.Length} bytes");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Unexpected error in HttpCapture.HandleProxyCall", ex);
             return false;
         }
-
-        var ms = new MemoryStream();
-        ctx.Request.InputStream.CopyTo(ms);
-        ms.Seek(0, SeekOrigin.Begin);
-        var bodyCipherText = ms.ToArray();
-
-        var finalOutput = HandleProxyCallInternal(Settings.ApiKey, keyHash, timestamp, bodyCipherText, rq => Program.VpnServer?.MakeProxyCall(rq));
-        if (finalOutput is null)
-        {
-            Log.Trace("Proxy request internal handler rejected call");
-            return false;
-        }
-
-        ctx.Response.StatusCode = 200;
-        ctx.Response.StatusDescription = "Processed";
-        ctx.Response.ContentType = "application/octet-stream";
-        ctx.Response.ContentLength64 = finalOutput.Length;
-        ctx.Response.OutputStream.Write(finalOutput);
-        ctx.Response.OutputStream.Flush();
-        
-        Log.Trace($"Proxy request complete: {finalOutput.Length} bytes");
-        return true;
     }
 
     /// <summary>
@@ -309,7 +317,7 @@ public class HttpCapture
         }
         catch
         {
-            // ignore
+            Log.Trace("Failure closing HTTP context");
         }
     }
 }
