@@ -1803,8 +1803,7 @@ public class TcpSocket
             valid = false;
             Log.Warn("Received data, but RCV.WND = 0");
         }
-
-        if (!SeqInWindow(segSeq, _tcb.Rcv.Nxt, _tcb.Rcv.Wnd)
+        else if (!SeqInWindow(segSeq, _tcb.Rcv.Nxt, _tcb.Rcv.Wnd)
             || !SeqInWindow(segEnd, _tcb.Rcv.Nxt, _tcb.Rcv.Wnd))
         {
             valid = false;
@@ -1813,8 +1812,7 @@ public class TcpSocket
             SetState(TcpSocketState.Closed);
             ErrorCode = SocketError.Fault;
         }
-
-        if (!SeqInWindow(segEnd, _tcb.Rcv.Nxt, _tcb.Rcv.Wnd))
+        else if (!SeqInWindow(segEnd, _tcb.Rcv.Nxt, _tcb.Rcv.Wnd))
         {
             valid = false;
             Log.Error($"TcpSocket fault: More data sent that fits in negotiated window. SEQ={segSeq}, End={segEnd}, Length={segLen}, RCV.NXT={_tcb.Rcv.Nxt}, RCV.WND={_tcb.Rcv.Wnd}");

@@ -401,7 +401,7 @@ public class TcpIpTrafficTests
             Log.Debug("------------- server -------------------");
             transmit |= TryRouteNextMessageAndRemove(from: clientNet, to: server);
             server.EventPump();
-            Assert.That(server.ErrorCode, Is.EqualTo(SocketError.Success), "server faulted");
+            Assert.That(server.ErrorCode, Is.EqualTo(SocketError.Success), $"server faulted: {server.State}");
             
             Log.Debug("------------- client -------------------");
             transmit |= TryRouteNextMessageAndRemove(from: serverNet, to: client);
