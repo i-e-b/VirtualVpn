@@ -518,7 +518,7 @@ public class TcpAdaptor : ITcpAdaptor
             var sent = _socketToLocalSide?.IncomingFromTunnel(buffer, 0, actual) ?? 0;
             if (sent != actual)
             {
-                Log.Warn($"Unexpected send length. Tried to send {actual} bytes, but transmitted {sent} bytes.");
+                Log.Trace($"Unexpected send length. Tried to send {actual} bytes, but transmitted {sent} bytes. This might be an adaptor changing data");
             }
             _totalRealSent += sent;
 
