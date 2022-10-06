@@ -187,6 +187,16 @@ public class TlsUnwrap : ISocketAdaptor
             return;
         }
 
+        // Authentication failed
+        if (!_sslStream.IsAuthenticated)
+        {
+            _running = false;
+            _faulted = true;
+            Close();
+            Interlocked.Decrement(ref _runningThreads);
+            return;
+        }
+
         while (_running && !_disposed)
         {
             // Keep trying to move data around between the plain and encrypted buffers.
@@ -202,12 +212,12 @@ public class TlsUnwrap : ISocketAdaptor
                 }
                 else Log.Trace("TlsUnwrap: no data from tunnel");
 
-                if (read < 1) Thread.Sleep(1);
+                if (read < 1) Thread.Sleep(5);
             }
             catch (Exception ex)
             {
                 Log.Debug($"Failure in TlsUnwrap.BufferPumpIncoming. Probably shutdown related: {ex.Message}");
-                Thread.Sleep(50);
+                Thread.Sleep(5);
             }
         }
         Interlocked.Decrement(ref _runningThreads);
@@ -224,10 +234,10 @@ public class TlsUnwrap : ISocketAdaptor
         {
             Log.Trace("TlsUnwrap: Waiting for SSL/TLS authentication");
             // wait for SSL/TLS to come up
-            while (_running && !_disposed && !_sslStream.IsAuthenticated)
+            while (_running && !_disposed && !_faulted && !_sslStream.IsAuthenticated)
             {
                 if (sw.Elapsed > Settings.ConnectionTimeout) throw new Exception($"TLS connection did not authenticate in expected time ({nameof(Settings)}.{nameof(Settings.ConnectionTimeout)})");
-                Thread.Sleep(50);
+                Thread.Sleep(5);
                 Log.Trace("TlsUnwrap: Waiting for SSL/TLS authentication...");
             }
 
@@ -269,12 +279,12 @@ public class TlsUnwrap : ISocketAdaptor
                 }
                 else Log.Trace("TlsUnwrap: no data from web app");
 
-                if (toWrite < 1) Thread.Sleep(1);
+                if (toWrite < 1) Thread.Sleep(5);
             }
             catch (Exception ex)
             {
                 Log.Debug($"Failure in TlsUnwrap.BufferPumpOutgoing. Probably shutdown related: {ex.Message}");
-                Thread.Sleep(50);
+                Thread.Sleep(5);
             }
         }
         Interlocked.Decrement(ref _runningThreads);
