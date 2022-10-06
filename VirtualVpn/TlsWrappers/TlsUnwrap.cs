@@ -23,6 +23,7 @@ namespace VirtualVpn.TlsWrappers;
 /// </summary>
 public class TlsUnwrap : ISocketAdaptor
 {
+    private readonly string _id;
     private readonly Func<ISocketAdaptor> _outgoingConnectionFunction;
     private static volatile int _runningThreads;
     public static int RunningThreads => _runningThreads;
@@ -49,15 +50,17 @@ public class TlsUnwrap : ISocketAdaptor
     /// Due to unresolved bugs in that operating system, this will probably not work on Windows.
     /// </summary>
     /// <param name="tlsKeyPaths">Paths to PEM keys, private first then public. separated by ';'. e.g. "/var/certs/privkey.pem;/var/certs/fullchain.pem"</param>
+    /// <param name="id">a unique identifier for logging and tracing</param>
     /// <param name="outgoingConnectionFunction">
     /// Function that will start the OUTGOING socket, NOT the incoming client call
     /// The socket should connect with a TLS tunnel.
     /// </param>
-    public TlsUnwrap(string tlsKeyPaths, Func<ISocketAdaptor> outgoingConnectionFunction)
+    public TlsUnwrap(string tlsKeyPaths, string id, Func<ISocketAdaptor> outgoingConnectionFunction)
     {
         Interlocked.Increment(ref _disposalCount);
         
         if (string.IsNullOrWhiteSpace(tlsKeyPaths)) throw new Exception("Must have valid paths to PEM files to start TLS re-wrap");
+        _id = id;
         _outgoingConnectionFunction = outgoingConnectionFunction;
 
         var filePaths = tlsKeyPaths.Split(';');
@@ -83,14 +86,14 @@ public class TlsUnwrap : ISocketAdaptor
             CertificateRevocationCheckMode = X509RevocationMode.NoCheck
         };
 
-        Log.Debug("TlsUnwrap: Reading certificate");
+        Log.Debug($"TlsUnwrap: Reading certificate ({_id})");
         _certificate = GetX509Certificate(privatePath, publicPath);
         
         _faulted = false;
         _disposed = false;
         _running = true;
         
-        Log.Debug("TlsUnwrap: Creating blocking buffer and SSL stream");
+        Log.Debug($"TlsUnwrap: Creating blocking buffer and SSL stream ({_id})");
         _tunnelSideBuffer = new BlockingBidirectionalBuffer();
         _sslStream = new SslStream(_tunnelSideBuffer);
 
@@ -140,13 +143,13 @@ public class TlsUnwrap : ISocketAdaptor
 
         try
         {
-            Log.Debug("TlsUnwrap: Starting socket connection");
+            Log.Info($"TlsUnwrap: Starting socket connection ({_id})");
             _socket = _outgoingConnectionFunction();
-            Log.Debug($"TlsUnwrap: Connection complete. Connected={_socket.Connected}");
+            Log.Info($"TlsUnwrap: Connection complete. Connected={_socket.Connected} ({_id})");
         }
         catch (Exception ex)
         {
-            Log.Error("TlsUnwrap: Failed to open outgoing connection", ex);
+            Log.Error($"TlsUnwrap: Failed to open outgoing connection ({_id})", ex);
             _running = false;
             _faulted = true;
             Close();
@@ -156,7 +159,7 @@ public class TlsUnwrap : ISocketAdaptor
         
         if (_socket is null)
         {
-            Log.Critical("Lost socket in TlsUnwrap");
+            Log.Critical($"Lost socket in TlsUnwrap ({_id})");
             _running = false;
             Close();
             Interlocked.Decrement(ref _runningThreads);
@@ -167,9 +170,9 @@ public class TlsUnwrap : ISocketAdaptor
         // The rest should happen as data is pumped around
         try
         {
-            Log.Trace("TlsUnwrap: Starting SSL/TLS authentication");
+            Log.Info($"TlsUnwrap: Starting SSL/TLS authentication ({_id})");
             _sslStream.AuthenticateAsServer(_authOptions);
-            Log.Debug("TlsUnwrap: SSL/TLS authenticated, starting incoming pump");
+            Log.Info($"TlsUnwrap: SSL/TLS authenticated, starting incoming pump ({_id})");
         }
         catch (Exception ex)
         {
@@ -184,14 +187,14 @@ public class TlsUnwrap : ISocketAdaptor
         // Authentication failed
         if (!_sslStream.IsAuthenticated)
         {
-            Log.Error("TlsUnwrap: AuthenticateAsServer did not complete correctly");
+            Log.Error($"TlsUnwrap: AuthenticateAsServer did not complete correctly ({_id})");
             _running = false;
             _faulted = true;
             Close();
             Interlocked.Decrement(ref _runningThreads);
             return;
         }
-        Log.Info("Start of TLS session");
+        Log.Info($"Start of TLS session ({_id})");
 
         while (_running && !_disposed)
         {
@@ -212,11 +215,11 @@ public class TlsUnwrap : ISocketAdaptor
             }
             catch (Exception ex)
             {
-                Log.Debug($"Failure in TlsUnwrap.BufferPumpIncoming. Probably shutdown related: {ex.Message}");
+                Log.Warn($"Failure in TlsUnwrap.BufferPumpIncoming. Probably shutdown related: {ex.Message}");
                 Thread.Sleep(5);
             }
         }
-        Log.Info("End of TLS session (incoming)");
+        Log.Info($"End of TLS session (incoming) ({_id})");
         Interlocked.Decrement(ref _runningThreads);
     }
     
@@ -229,7 +232,7 @@ public class TlsUnwrap : ISocketAdaptor
         sw.Start();
         try
         {
-            Log.Trace("TlsUnwrap: Waiting for SSL/TLS authentication");
+            Log.Info($"TlsUnwrap: Waiting for SSL/TLS authentication ({_id})");
             // wait for SSL/TLS to come up
             while (!_sslStream.IsAuthenticated)
             {
@@ -237,12 +240,12 @@ public class TlsUnwrap : ISocketAdaptor
                 Thread.Sleep(5);
             }
 
-            Log.Debug("TlsUnwrap: SSL/TLS is authenticated, starting outgoing pump.");
+            Log.Info($"TlsUnwrap: SSL/TLS is authenticated, starting outgoing pump. ({_id})");
 
         }
         catch (Exception ex)
         {
-            Log.Error("TlsUnwrap.BufferPumpOutgoing: Unexpected error while waiting for connection", ex);
+            Log.Error($"TlsUnwrap.BufferPumpOutgoing: Unexpected error while waiting for connection ({_id})", ex);
             _running = false;
             _faulted = true;
             Interlocked.Decrement(ref _runningThreads);
@@ -251,7 +254,7 @@ public class TlsUnwrap : ISocketAdaptor
 
         if (_socket is null)
         {
-            Log.Critical("Lost socket in TlsUnwrap.BufferPumpOutgoing");
+            Log.Critical($"Lost socket in TlsUnwrap.BufferPumpOutgoing ({_id})");
             _faulted = true;
             _running = false;
             Interlocked.Decrement(ref _runningThreads);
@@ -283,7 +286,7 @@ public class TlsUnwrap : ISocketAdaptor
                 Thread.Sleep(5);
             }
         }
-        Log.Info("End of TLS session (outgoing)");
+        Log.Info($"End of TLS session (outgoing) ({_id})");
         Interlocked.Decrement(ref _runningThreads);
     }
 
