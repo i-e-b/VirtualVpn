@@ -1,90 +1,11 @@
 ﻿using System.Security.Cryptography;
 using System.Text;
-using VirtualVpn.Helpers;
 
 namespace VirtualVpn.Web;
 
 /// <summary>
-/// A helper class to give compatibility between dotnet core 3.1, and dotnet 6
-/// </summary>
-public class AesCryptoService
-{
-    private readonly byte[] _key;
-
-    public AesCryptoService(byte[] key)
-    {
-        _key = key;
-        using var aesAlg = new AesCryptoServiceProvider();
-        BlockSize = aesAlg.BlockSize;
-    }
-
-    public int BlockSize { get; private set; }
-
-    public byte[] EncryptStringToBytes_Aes(string plainText, byte[] iv)
-    {
-        if (plainText == null || plainText.Length <= 0) throw new ArgumentNullException(nameof(plainText));
-        if (iv == null || iv.Length <= 0) throw new ArgumentNullException(nameof(iv));
-        byte[] encrypted;
-
-
-        using (AesCryptoServiceProvider aesAlg = new AesCryptoServiceProvider())
-        {
-            aesAlg.Key = _key;
-            aesAlg.IV = iv;
-            aesAlg.Mode = CipherMode.CBC;
-            aesAlg.Padding = PaddingMode.PKCS7;
-
-            ICryptoTransform encryptor = aesAlg.CreateEncryptor(aesAlg.Key, aesAlg.IV);
-
-            using (MemoryStream msEncrypt = new MemoryStream())
-            {
-                using (CryptoStream csEncrypt = new CryptoStream(msEncrypt, encryptor, CryptoStreamMode.Write))
-                {
-                    using (StreamWriter swEncrypt = new StreamWriter(csEncrypt))
-                    {
-                        swEncrypt.Write(plainText);
-                    }
-
-                    encrypted = msEncrypt.ToArray();
-                }
-            }
-        }
-
-        return encrypted;
-    }
-
-    public string DecryptStringFromBytes_Aes(byte[] cipherText, byte[] iv)
-    {
-        if (cipherText == null || cipherText.Length <= 0) throw new ArgumentNullException(nameof(cipherText));
-        if (iv == null || iv.Length <= 0) throw new ArgumentNullException(nameof(iv));
-
-        using (AesCryptoServiceProvider aesAlg = new AesCryptoServiceProvider())
-        {
-            aesAlg.Key = _key;
-            aesAlg.IV = iv;
-            aesAlg.Mode = CipherMode.CBC;
-            aesAlg.Padding = PaddingMode.PKCS7;
-
-
-            ICryptoTransform decryptor = aesAlg.CreateDecryptor(aesAlg.Key, aesAlg.IV);
-
-            using (MemoryStream msDecrypt = new MemoryStream(cipherText))
-            {
-                using (CryptoStream csDecrypt = new CryptoStream(msDecrypt, decryptor, CryptoStreamMode.Read))
-                {
-                    using (StreamReader srDecrypt = new StreamReader(csDecrypt, Encoding.UTF8))
-                    {
-                        return srDecrypt.ReadToEnd();
-                    }
-                }
-            }
-        }
-    }
-}
-
-/// <summary>
 /// A small wrapper to encrypt messages for the API proxy command.
-/// See <see cref="HttpCapture.HandleApiRequest"/>
+/// See <see cref="HttpListenerAndApi.HandleApiRequest"/>
 /// </summary>
 public class ProxyCipher
 {
@@ -103,7 +24,7 @@ public class ProxyCipher
         // Check general validity
         var tickBytes = Convert.FromBase64String(timeStamp);
         if (tickBytes.Length != 8) throw new Exception("Invalid timestamp");
-        _timeStamp = Bit.BytesToInt64Msb(tickBytes);
+        _timeStamp = BytesToInt64Msb(tickBytes);
 
         Timestamp = timeStamp;
         _keyGen = keyGen;
@@ -117,8 +38,11 @@ public class ProxyCipher
     /// <summary>
     /// Generate and return a timestamp from the current system clock.
     /// </summary>
-    public static string TimestampNow => Convert.ToBase64String(Bit.Int64ToBytes(DateTime.UtcNow.Ticks));
+    public static string TimestampNow => Convert.ToBase64String(Int64ToBytes(DateTime.UtcNow.Ticks));
 
+    /// <summary>
+    /// Get the timestamp value with which this cipher was created
+    /// </summary>
     public string Timestamp { get; }
 
     /// <summary>
@@ -189,7 +113,7 @@ public class ProxyCipher
         {
             //var plain = _cipher.DecryptCbc(bytes, _iv);
             //return Encoding.UTF8.GetString(plain);
-            return _cipher.DecryptStringFromBytes_Aes(bytes, _iv);
+            return _cipher.DecryptStringFromBytes(bytes, _iv);
         }
         catch (CryptographicException ex)
         {
@@ -204,7 +128,7 @@ public class ProxyCipher
     {
         //var data = Encoding.UTF8.GetBytes(message);
         //return _cipher.EncryptCbc(data, _iv);
-        return _cipher.EncryptStringToBytes_Aes(message, _iv);
+        return _cipher.EncryptStringToBytes(message, _iv);
     }
 
     /// <summary>
@@ -215,7 +139,57 @@ public class ProxyCipher
         var hashKey = Encoding.UTF8.GetBytes(_keyGen);
         var clock = new DateTime(_timeStamp, DateTimeKind.Utc);
         var hashData = Encoding.UTF8.GetBytes(clock.ToString("yyyy-MM-ddTHH:mm:ss"));
-        var hashBytes = HMACSHA256.HashData(hashKey, hashData);
+        var hashBytes = AesCryptoService.HashData(hashKey, hashData);
         return Convert.ToBase64String(hashBytes);
+    }
+    
+    /// <summary>
+    /// Convert a 64-bit int to 8 bytes in an array.
+    /// </summary>
+    private static byte[] Int64ToBytes(long value)
+    {
+        var data = new byte[8];
+        
+        data[0] = (byte)((value >> 56) & 0xff);
+        data[1] = (byte)((value >> 48) & 0xff);
+        data[2] = (byte)((value >> 40) & 0xff);
+        data[3] = (byte)((value >> 32) & 0xff);
+        
+        data[4] = (byte)((value >> 24) & 0xff);
+        data[5] = (byte)((value >> 16) & 0xff);
+        data[6] = (byte)((value >>  8) & 0xff);
+        data[7] = (byte)((value >>  0) & 0xff);
+        
+        return data;
+    }
+    
+    /// <summary>
+    /// Read most significant bytes first from data, filling in
+    /// as much of a 64-bit integer as possible,
+    /// starting at most significant byte of output.
+    /// Will stop after 8 bytes, OR if data is exhausted.
+    /// </summary>
+    private static long BytesToInt64Msb(byte[] data)
+    {
+        var result = 0L;
+        var idx = 0;
+        var end = data.Length;
+        result |= (long)data[idx++] << 56;
+        if (idx >= end) return result;
+        result |= (long)data[idx++] << 48;
+        if (idx >= end) return result;
+        result |= (long)data[idx++] << 40;
+        if (idx >= end) return result;
+        result |= (long)data[idx++] << 32;
+        if (idx >= end) return result;
+        
+        result |= (long)data[idx++] << 24;
+        if (idx >= end) return result;
+        result |= (long)data[idx++] << 16;
+        if (idx >= end) return result;
+        result |= (long)data[idx++] <<  8;
+        if (idx >= end) return result;
+        result |= (long)data[idx  ] <<  0;
+        return result;
     }
 }

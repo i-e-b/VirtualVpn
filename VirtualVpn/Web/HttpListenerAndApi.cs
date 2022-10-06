@@ -5,13 +5,13 @@ using Tag;
 
 namespace VirtualVpn.Web;
 
-public class HttpCapture
+public class HttpListenerAndApi
 {
     private readonly HttpListener _listener;
     private readonly Thread _listenThread;
     private volatile bool _running;
 
-    public HttpCapture()
+    public HttpListenerAndApi()
     {
         _listener = new HttpListener();
         _listener.IgnoreWriteExceptions = true;

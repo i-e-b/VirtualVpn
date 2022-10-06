@@ -6,7 +6,7 @@ namespace VirtualVpn;
 internal static class Program
 {
     public static VpnServer? VpnServer;
-    public static HttpCapture? HttpServer;
+    public static HttpListenerAndApi? HttpServer;
 
     /// <summary>
     /// Close and restart the http server.
@@ -17,7 +17,7 @@ internal static class Program
     {
         HttpServer?.Stop();
         
-        HttpServer = new HttpCapture();
+        HttpServer = new HttpListenerAndApi();
         HttpServer.Start();
     }
 
@@ -33,7 +33,7 @@ internal static class Program
 
         // Mini web site that provides an API,
         // and allows file captures to be retrieved if Settings.RunAirliftSite is on.
-        HttpServer = new HttpCapture();
+        HttpServer = new HttpListenerAndApi();
         HttpServer.Start();
 
         // Run the VPN server

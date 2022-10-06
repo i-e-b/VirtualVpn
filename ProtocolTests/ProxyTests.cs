@@ -116,7 +116,7 @@ public class ProxyTests
 
         var proxyRequestBytes = cipher.Encode(Json.Freeze(proxyRequest));
 
-        var resultBytes = HttpCapture.HandleProxyCallInternal(keyGen,
+        var resultBytes = HttpListenerAndApi.HandleProxyCallInternal(keyGen,
             cipher.MakeKey(), timestamp, proxyRequestBytes,
             rq => new HttpProxyResponse
             {
