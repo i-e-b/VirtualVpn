@@ -847,7 +847,10 @@ public class VpnServer : ISessionHost, IDisposable
                 // in which case we go full speed.
                 if (!goFaster) Thread.Sleep(Settings.EventPumpRate);
                 else Thread.Yield();
-                
+
+                // Go slower when running trace logging
+                if (Log.IsTracing) { Thread.Sleep(Settings.EventPumpRate); }
+
                 // If there aren't any connections, run even slower
                 if (_childSessions.Count < 1) Thread.Sleep(Settings.EventPumpRate);
             }

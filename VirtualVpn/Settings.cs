@@ -78,7 +78,7 @@ public static class Settings
     /// <summary>
     /// IPv4 address of the app we're tunnelling to. If on the same machine, use 127.0.0.1
     /// </summary>
-    public static string WebAppIpAddress = "127.0.0.1"; // TODO: support DNS names?
+    public static string WebAppIpAddress = "127.0.0.1";
     
     /// <summary>
     /// If supplied, this host name will be added to the headers of incoming requests.

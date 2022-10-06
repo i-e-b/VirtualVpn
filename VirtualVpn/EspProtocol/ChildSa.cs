@@ -148,7 +148,11 @@ public class ChildSa : ITransportTunnel
         var allSessions = _tcpSessions.Keys.ToList();
         foreach (var tcpKey in allSessions)
         {
-            goFaster = true; // go fast if there are any open connections
+            if (Log.NotTraceOrDebug)
+            {
+                goFaster = true; // go fast if there are any active connections
+            }
+
             if (tcpKey.Address.IsZero())
             {
                 Log.Critical("Stored a tcp session with a zero value key!");
@@ -183,7 +187,7 @@ public class ChildSa : ITransportTunnel
 
             try
             {
-                tcp.EventPump();
+                goFaster |= tcp.EventPump();
             }
             catch (Exception ex)
             {
