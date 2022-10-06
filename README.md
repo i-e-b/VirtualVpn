@@ -60,7 +60,7 @@ and are not required when running Virtual VPN
 
 ## Current issues & work-face
 
-- [ ] Add `Host:` injection to WebApp proxying
+- [x] Add `Host:` injection to WebApp proxying
 - [ ] Migrate Payloads to Bitwise serialiser? (might need counts & looping)
 - [ ] Go through the collection types and make them thread safe
 - [ ] Check all "to-do" items
