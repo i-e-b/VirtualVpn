@@ -1,10 +1,8 @@
-﻿using System.Diagnostics;
-using System.Net.Security;
+﻿using System.Net.Security;
 using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
 using VirtualVpn.Helpers;
 using VirtualVpn.TcpProtocol;
-using ThreadState = System.Threading.ThreadState;
 
 namespace VirtualVpn.TlsWrappers;
 
@@ -36,7 +34,7 @@ public class TlsUnwrap : ISocketAdaptor
     
     private readonly X509Certificate _certificate;
     private ISocketAdaptor? _socket;
-    private volatile bool _disposed, _running, _faulted, _sslReady;
+    private volatile bool _disposed, _running, _faulted;
     
     private readonly BlockingBidirectionalBuffer _tunnelSideBuffer;
     private readonly Thread _pumpThreadIncoming;
@@ -91,7 +89,6 @@ public class TlsUnwrap : ISocketAdaptor
         
         _faulted = false;
         _disposed = false;
-        _sslReady = false;
         _running = true;
         
         Log.Debug($"TlsUnwrap: Creating blocking buffer and SSL stream ({_id})");
@@ -102,7 +99,6 @@ public class TlsUnwrap : ISocketAdaptor
         _pumpThreadIncoming.Start();
         
         _pumpThreadOutgoing = new Thread(BufferPumpOutgoing) { IsBackground = true };
-        _pumpThreadOutgoing.Start();
     }
 
     ~TlsUnwrap()
@@ -197,7 +193,7 @@ public class TlsUnwrap : ISocketAdaptor
         }
         
         Log.Info($"Start of TLS session ({_id})");
-        _sslReady = true; // unlock the outgoing pump thread
+        _pumpThreadOutgoing.Start();
 
         while (_running && !_disposed)
         {
@@ -230,30 +226,6 @@ public class TlsUnwrap : ISocketAdaptor
     {
         Interlocked.Increment(ref _runningThreads);
         var buffer = new byte[8192];
-
-        var sw = new Stopwatch();
-        sw.Start();
-        try
-        {
-            Log.Info($"TlsUnwrap: Waiting for SSL/TLS authentication ({_id})");
-            // wait for SSL/TLS to come up
-            while (!_sslReady)
-            {
-                if (sw.Elapsed > Settings.ConnectionTimeout) throw new Exception($"TLS connection did not authenticate in expected time ({nameof(Settings)}.{nameof(Settings.ConnectionTimeout)})");
-                Thread.Sleep(5);
-            }
-
-            Log.Info($"TlsUnwrap: SSL/TLS is authenticated, starting outgoing pump. ({_id})");
-
-        }
-        catch (Exception ex)
-        {
-            Log.Error($"TlsUnwrap.BufferPumpOutgoing: Unexpected error while waiting for connection ({_id})", ex);
-            _running = false;
-            _faulted = true;
-            Interlocked.Decrement(ref _runningThreads);
-            return;
-        }
 
         if (_socket is null)
         {
