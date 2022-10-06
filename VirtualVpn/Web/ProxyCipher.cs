@@ -5,17 +5,94 @@ using VirtualVpn.Helpers;
 namespace VirtualVpn.Web;
 
 /// <summary>
+/// A helper class to give compatibility between dotnet core 3.1, and dotnet 6
+/// </summary>
+public class AesCryptoService
+{
+    private readonly byte[] _key;
+
+    public AesCryptoService(byte[] key)
+    {
+        _key = key;
+        using var aesAlg = new AesCryptoServiceProvider();
+        BlockSize = aesAlg.BlockSize;
+    }
+
+    public int BlockSize { get; private set; }
+
+    public byte[] EncryptStringToBytes_Aes(string plainText, byte[] iv)
+    {
+        if (plainText == null || plainText.Length <= 0) throw new ArgumentNullException(nameof(plainText));
+        if (iv == null || iv.Length <= 0) throw new ArgumentNullException(nameof(iv));
+        byte[] encrypted;
+
+
+        using (AesCryptoServiceProvider aesAlg = new AesCryptoServiceProvider())
+        {
+            aesAlg.Key = _key;
+            aesAlg.IV = iv;
+            aesAlg.Mode = CipherMode.CBC;
+            aesAlg.Padding = PaddingMode.PKCS7;
+
+            ICryptoTransform encryptor = aesAlg.CreateEncryptor(aesAlg.Key, aesAlg.IV);
+
+            using (MemoryStream msEncrypt = new MemoryStream())
+            {
+                using (CryptoStream csEncrypt = new CryptoStream(msEncrypt, encryptor, CryptoStreamMode.Write))
+                {
+                    using (StreamWriter swEncrypt = new StreamWriter(csEncrypt))
+                    {
+                        swEncrypt.Write(plainText);
+                    }
+
+                    encrypted = msEncrypt.ToArray();
+                }
+            }
+        }
+
+        return encrypted;
+    }
+
+    public string DecryptStringFromBytes_Aes(byte[] cipherText, byte[] iv)
+    {
+        if (cipherText == null || cipherText.Length <= 0) throw new ArgumentNullException(nameof(cipherText));
+        if (iv == null || iv.Length <= 0) throw new ArgumentNullException(nameof(iv));
+
+        using (AesCryptoServiceProvider aesAlg = new AesCryptoServiceProvider())
+        {
+            aesAlg.Key = _key;
+            aesAlg.IV = iv;
+            aesAlg.Mode = CipherMode.CBC;
+            aesAlg.Padding = PaddingMode.PKCS7;
+
+
+            ICryptoTransform decryptor = aesAlg.CreateDecryptor(aesAlg.Key, aesAlg.IV);
+
+            using (MemoryStream msDecrypt = new MemoryStream(cipherText))
+            {
+                using (CryptoStream csDecrypt = new CryptoStream(msDecrypt, decryptor, CryptoStreamMode.Read))
+                {
+                    using (StreamReader srDecrypt = new StreamReader(csDecrypt, Encoding.UTF8))
+                    {
+                        return srDecrypt.ReadToEnd();
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// <summary>
 /// A small wrapper to encrypt messages for the API proxy command.
 /// See <see cref="HttpCapture.HandleApiRequest"/>
 /// </summary>
-public class ProxyCipher : IDisposable
+public class ProxyCipher
 {
     private readonly string _keyGen;
     private readonly long _timeStamp;
-    private readonly Aes _cipher;
+    private readonly AesCryptoService _cipher;
     private readonly int _blockSizeBytes;
     private readonly byte[] _iv;
-    private bool _disposed;
 
     /// <summary>
     /// Create a new proxy-message cipher helper with
@@ -32,19 +109,9 @@ public class ProxyCipher : IDisposable
         _keyGen = keyGen;
         _cipher = AesCipher(_keyGen + timeStamp);
 
-        _disposed = false;
-
         _blockSizeBytes = _cipher.BlockSize / 8;
         _iv = new byte[_blockSizeBytes];
         MixBitsToBits(tickBytes, _iv);
-    }
-
-    ~ProxyCipher()
-    {
-        if (_disposed) return;
-        
-        Log.Warn("ProxyCipher hit destructor without being disposed.");
-        _cipher.Dispose();
     }
 
     /// <summary>
@@ -61,18 +128,18 @@ public class ProxyCipher : IDisposable
     private static void MixBitsToBits(byte[] source, byte[] dest)
     {
         var max = source.Length > dest.Length ? source.Length : dest.Length;
-        
+
         dest[0] = (byte)(source[0] ^ source[^1]);
         for (int i = 1; i < max; i++)
         {
             var j = i >> 1;
             var k = max - i;
-            
+
             var a1 = i % dest.Length; // should be power of 2 in the cases used here
-            var a2 = (i-1) % dest.Length; // should be power of 2 in the cases used here
+            var a2 = (i - 1) % dest.Length; // should be power of 2 in the cases used here
             var b = j % source.Length;
             var c = k % source.Length;
-            
+
             dest[a1] = (byte)(dest[a2] ^ source[b] ^ source[c]);
         }
     }
@@ -80,18 +147,20 @@ public class ProxyCipher : IDisposable
     /// <summary>
     /// Create CBC-mode AES cipher, generating a crypto key from a string keyGen source
     /// </summary>
-    private static Aes AesCipher(string keySource)
+    private static AesCryptoService AesCipher(string keySource)
     {
         // Hash the secret down to a key
         var key = new byte[32];
         var sourceBytes = Encoding.UTF8.GetBytes(keySource);
         MixBitsToBits(sourceBytes, key);
-        
+
+        return new AesCryptoService(key);
+
         // build crypto with that key
-        var aes = Aes.Create();
+        /*var aes = Aes.Create();
         aes.Mode = CipherMode.CBC;
         aes.Key = key;
-        return aes;
+        return aes;*/
     }
 
     /// <summary>
@@ -103,9 +172,9 @@ public class ProxyCipher : IDisposable
         // Clock drift must be less than one hour
         var remoteClock = new DateTime(_timeStamp, DateTimeKind.Utc);
         var clockDifferenceHours = Math.Abs((DateTime.UtcNow - remoteClock).TotalHours);
-        
+
         if (clockDifferenceHours > 1.0) return false;
-        
+
         // Check the key hash
         return MakeKey() == keyHash;
     }
@@ -118,8 +187,9 @@ public class ProxyCipher : IDisposable
         if (bytes.Length < _blockSizeBytes) throw new Exception("Invalid incoming data");
         try
         {
-            var plain = _cipher.DecryptCbc(bytes, _iv);
-            return Encoding.UTF8.GetString(plain);
+            //var plain = _cipher.DecryptCbc(bytes, _iv);
+            //return Encoding.UTF8.GetString(plain);
+            return _cipher.DecryptStringFromBytes_Aes(bytes, _iv);
         }
         catch (CryptographicException ex)
         {
@@ -132,8 +202,9 @@ public class ProxyCipher : IDisposable
     /// </summary>
     public byte[] Encode(string message)
     {
-        var data = Encoding.UTF8.GetBytes(message);
-        return _cipher.EncryptCbc(data, _iv);
+        //var data = Encoding.UTF8.GetBytes(message);
+        //return _cipher.EncryptCbc(data, _iv);
+        return _cipher.EncryptStringToBytes_Aes(message, _iv);
     }
 
     /// <summary>
@@ -146,13 +217,5 @@ public class ProxyCipher : IDisposable
         var hashData = Encoding.UTF8.GetBytes(clock.ToString("yyyy-MM-ddTHH:mm:ss"));
         var hashBytes = HMACSHA256.HashData(hashKey, hashData);
         return Convert.ToBase64String(hashBytes);
-    }
-
-    public void Dispose()
-    {
-        if (_disposed) return;
-        _disposed = true;
-        _cipher.Dispose();
-        GC.SuppressFinalize(this);
     }
 }
