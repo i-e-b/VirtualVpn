@@ -191,6 +191,7 @@ public class TlsUnwrap : ISocketAdaptor
             Interlocked.Decrement(ref _runningThreads);
             return;
         }
+        Log.Info("Start of TLS session");
 
         while (_running && !_disposed)
         {
@@ -215,6 +216,7 @@ public class TlsUnwrap : ISocketAdaptor
                 Thread.Sleep(5);
             }
         }
+        Log.Info("End of TLS session (incoming)");
         Interlocked.Decrement(ref _runningThreads);
     }
     
@@ -281,6 +283,7 @@ public class TlsUnwrap : ISocketAdaptor
                 Thread.Sleep(5);
             }
         }
+        Log.Info("End of TLS session (outgoing)");
         Interlocked.Decrement(ref _runningThreads);
     }
 
