@@ -314,13 +314,7 @@ public class VpnServer : ISessionHost, IDisposable
             {
                 try
                 {
-                    var target = TryStartVpnIfNotAlreadyConnected(command[1]);
-                    if (target is null)
-                    {
-                        Log.Critical($"Target '{command[1]}' does not seem to be a valid IP address.");
-                        return;
-                    }
-
+                    var target = IpV4Address.FromString(command[1]);//TryStartVpnIfNotAlreadyConnected(command[1]);
                     RegisterAlways(target);
                 }
                 catch (Exception ex)
@@ -846,7 +840,7 @@ public class VpnServer : ISessionHost, IDisposable
                 // Wait before looping, unless any of the ChildSA are active,
                 // in which case we go full speed.
                 if (!goFaster) Thread.Sleep(Settings.EventPumpRate);
-                else Thread.Yield();
+                else Thread.Sleep(1);
 
                 // Go slower when running trace logging
                 if (Log.IsTracing) { Thread.Sleep(Settings.EventPumpRate); }
