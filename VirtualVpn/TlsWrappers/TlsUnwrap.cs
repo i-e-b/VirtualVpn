@@ -153,13 +153,7 @@ public class TlsUnwrap : ISocketAdaptor
             Interlocked.Decrement(ref _runningThreads);
             return;
         }
-
-        while (_running && _socket?.Connected != true)
-        {
-            Log.Trace("TlsUnwrap: Waiting for connection");
-            Thread.Sleep(50);
-        }
-
+        
         if (_socket is null)
         {
             Log.Critical("Lost socket in TlsUnwrap");
@@ -190,6 +184,7 @@ public class TlsUnwrap : ISocketAdaptor
         // Authentication failed
         if (!_sslStream.IsAuthenticated)
         {
+            Log.Error("TlsUnwrap: AuthenticateAsServer did not complete correctly");
             _running = false;
             _faulted = true;
             Close();
@@ -234,11 +229,10 @@ public class TlsUnwrap : ISocketAdaptor
         {
             Log.Trace("TlsUnwrap: Waiting for SSL/TLS authentication");
             // wait for SSL/TLS to come up
-            while (_running && !_disposed && !_faulted && !_sslStream.IsAuthenticated)
+            while (!_sslStream.IsAuthenticated)
             {
                 if (sw.Elapsed > Settings.ConnectionTimeout) throw new Exception($"TLS connection did not authenticate in expected time ({nameof(Settings)}.{nameof(Settings.ConnectionTimeout)})");
                 Thread.Sleep(5);
-                Log.Trace("TlsUnwrap: Waiting for SSL/TLS authentication...");
             }
 
             Log.Debug("TlsUnwrap: SSL/TLS is authenticated, starting outgoing pump.");
