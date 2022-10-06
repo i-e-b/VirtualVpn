@@ -36,7 +36,7 @@ public class TlsUnwrap : ISocketAdaptor
     
     private readonly X509Certificate _certificate;
     private ISocketAdaptor? _socket;
-    private volatile bool _disposed, _running, _faulted;
+    private volatile bool _disposed, _running, _faulted, _sslReady;
     
     private readonly BlockingBidirectionalBuffer _tunnelSideBuffer;
     private readonly Thread _pumpThreadIncoming;
@@ -91,6 +91,7 @@ public class TlsUnwrap : ISocketAdaptor
         
         _faulted = false;
         _disposed = false;
+        _sslReady = false;
         _running = true;
         
         Log.Debug($"TlsUnwrap: Creating blocking buffer and SSL stream ({_id})");
@@ -194,7 +195,9 @@ public class TlsUnwrap : ISocketAdaptor
             Interlocked.Decrement(ref _runningThreads);
             return;
         }
+        
         Log.Info($"Start of TLS session ({_id})");
+        _sslReady = true; // unlock the outgoing pump thread
 
         while (_running && !_disposed)
         {
@@ -234,7 +237,7 @@ public class TlsUnwrap : ISocketAdaptor
         {
             Log.Info($"TlsUnwrap: Waiting for SSL/TLS authentication ({_id})");
             // wait for SSL/TLS to come up
-            while (!_sslStream.IsAuthenticated)
+            while (!_sslReady)
             {
                 if (sw.Elapsed > Settings.ConnectionTimeout) throw new Exception($"TLS connection did not authenticate in expected time ({nameof(Settings)}.{nameof(Settings.ConnectionTimeout)})");
                 Thread.Sleep(5);
