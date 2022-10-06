@@ -11,13 +11,15 @@ public class BlockingBidirectionalBuffer : Stream
 {
     // Message buffers (encrypted)
     private readonly List<byte> _outgoingQueue;
-    private int _outgoingQueueSent;
     private readonly List<byte> _incomingQueue;
-    private int _incomingQueueRead;
-    private bool _disposed;
+    
+    private volatile int _outgoingQueueSent;
+    private volatile int _incomingQueueRead;
+    private volatile bool _disposed;
     
     // thread lock
-    private readonly object _transferLock = new();
+    private readonly object _incomingLock = new();
+    private readonly object _outgoingLock = new();
 
     /// <summary>
     /// Create a new, empty, bi-directional buffer.
@@ -64,7 +66,7 @@ public class BlockingBidirectionalBuffer : Stream
         if (bytesToStore > available) bytesToStore = available;
 
         Log.Trace($"BlockingBidirectionalBuffer: IncomingFromTunnel, adding {bytesToStore} bytes");
-        lock (_transferLock)
+        lock (_incomingLock)
         {
             if (offset == 0 && bytesToStore == buffer.Length)
             {
@@ -87,7 +89,7 @@ public class BlockingBidirectionalBuffer : Stream
     public void WriteOutgoingNonBlocking(byte[] buffer)
     {
         Log.Trace("BlockingBidirectionalBuffer: WriteOutgoingNonBlocking");
-        lock (_transferLock)
+        lock (_outgoingLock)
         {
             Log.Trace($"BlockingBidirectionalBuffer: WriteOutgoingNonBlocking, adding {buffer.Length} bytes");
             _outgoingQueue.AddRange(buffer);
@@ -100,7 +102,7 @@ public class BlockingBidirectionalBuffer : Stream
     /// </summary>
     public int ReadNonBlocking(byte[] buffer)
     {
-        lock (_transferLock)
+        lock (_outgoingLock)
         {
             var available = _outgoingQueue.Count - _outgoingQueueSent;
 
@@ -111,7 +113,8 @@ public class BlockingBidirectionalBuffer : Stream
 
             for (int i = 0; i < end; i++)
             {
-                buffer[i] = _outgoingQueue[_outgoingQueueSent++];
+                buffer[i] = _outgoingQueue[_outgoingQueueSent];
+                Interlocked.Increment(ref _outgoingQueueSent);
             }
 
             if (_outgoingQueueSent >= _outgoingQueue.Count)
@@ -162,7 +165,7 @@ public class BlockingBidirectionalBuffer : Stream
         if (_disposed) return 0;
 
         
-        lock (_transferLock)
+        lock (_incomingLock)
         {
             var available = _incomingQueue.Count - _incomingQueueRead;
             var bytesToCopy = available > count ? count : available;
@@ -176,7 +179,8 @@ public class BlockingBidirectionalBuffer : Stream
             Log.Trace($"BlockingBidirectionalBuffer: Read (copying {bytesToCopy} bytes)");
             for (int i = 0; i < bytesToCopy; i++)
             {
-                buffer[i+offset] = _incomingQueue[_incomingQueueRead++];
+                buffer[i+offset] = _incomingQueue[_incomingQueueRead];
+                Interlocked.Increment(ref _incomingQueueRead);
             }
 
             if (_incomingQueueRead >= _incomingQueue.Count)
@@ -198,7 +202,7 @@ public class BlockingBidirectionalBuffer : Stream
     {
         Log.Trace("Proxy: Write");
 
-        lock (_transferLock)
+        lock (_outgoingLock)
         {
             if (offset == 0 && count == buffer.Length) _outgoingQueue.AddRange(buffer);
             else _outgoingQueue.AddRange(buffer.Skip(offset).Take(count));
@@ -233,7 +237,7 @@ public class BlockingBidirectionalBuffer : Stream
     {
         get
         {
-            lock (_transferLock)
+            lock (_incomingLock)
             {
                 return _incomingQueue.Count - _incomingQueueRead;
             }

@@ -140,9 +140,9 @@ public class TlsUnwrap : ISocketAdaptor
 
         try
         {
-            Log.Info($"TlsUnwrap: Starting socket connection ({_id})");
+            Log.Debug($"TlsUnwrap: Starting socket connection ({_id})");
             _socket = _outgoingConnectionFunction();
-            Log.Info($"TlsUnwrap: Connection complete. Connected={_socket.Connected} ({_id})");
+            Log.Debug($"TlsUnwrap: Connection complete. Connected={_socket.Connected} ({_id})");
         }
         catch (Exception ex)
         {
@@ -167,9 +167,9 @@ public class TlsUnwrap : ISocketAdaptor
         // The rest should happen as data is pumped around
         try
         {
-            Log.Info($"TlsUnwrap: Starting SSL/TLS authentication ({_id})");
+            Log.Debug($"TlsUnwrap: Starting SSL/TLS authentication ({_id})");
             _sslStream.AuthenticateAsServer(_authOptions);
-            Log.Info($"TlsUnwrap: SSL/TLS authenticated, starting incoming pump ({_id})");
+            Log.Debug($"TlsUnwrap: SSL/TLS authenticated, starting incoming pump ({_id})");
         }
         catch (Exception ex)
         {
@@ -192,7 +192,7 @@ public class TlsUnwrap : ISocketAdaptor
             return;
         }
         
-        Log.Info($"Start of TLS session ({_id})");
+        Log.Debug($"Start of TLS session ({_id})");
         _pumpThreadOutgoing.Start();
 
         while (_running && !_disposed)
@@ -218,7 +218,7 @@ public class TlsUnwrap : ISocketAdaptor
                 Thread.Sleep(5);
             }
         }
-        Log.Info($"End of TLS session (incoming) ({_id})");
+        Log.Debug($"End of TLS session (incoming) ({_id})");
         Interlocked.Decrement(ref _runningThreads);
     }
     
@@ -261,7 +261,7 @@ public class TlsUnwrap : ISocketAdaptor
                 Thread.Sleep(5);
             }
         }
-        Log.Info($"End of TLS session (outgoing) ({_id})");
+        Log.Debug($"End of TLS session (outgoing) ({_id})");
         Interlocked.Decrement(ref _runningThreads);
     }
 
