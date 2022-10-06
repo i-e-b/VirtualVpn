@@ -32,6 +32,8 @@ public class HttpHostHeaderRewriter
     {
         if (_done) return buffer; // feed the rest through without changes
         
+        Log.Trace("HttpHostHeaderRewriter: looking for host header");
+        
         // handle offset and length being non-standard
         var span = BufferSpanWithJoin(_lastTail, buffer, offset, length);
         
@@ -41,6 +43,7 @@ public class HttpHostHeaderRewriter
             _first = false;
             if (!Contains(span, _httpMarker, out _)) // this probably isn't HTTP
             {
+                Log.Trace("HttpHostHeaderRewriter: request isn't HTTP? Ignoring");
                 _done = true;
                 return buffer;
             }
@@ -56,6 +59,8 @@ public class HttpHostHeaderRewriter
             {
                 // Copy up to this point, replace.
                 var newBuffer = CopyWithReplace(span, start, end);
+                
+                Log.Trace("HttpHostHeaderRewriter: found header in a complete block. Rewriting");
 
                 _done = true;
                 offset = 0;
@@ -68,6 +73,7 @@ public class HttpHostHeaderRewriter
         // Look for "\r\n\r\n", which would mean we have the whole headers, but no Host line.
         if (Contains(span, _doubleNewLine, out _) || Contains(span, _degenerateDoubleNewLine, out _))
         {
+            Log.Trace("HttpHostHeaderRewriter: found end of headers without Host.");
             _done = true;
             return buffer;
         }
@@ -84,6 +90,7 @@ public class HttpHostHeaderRewriter
             var line = lines[index];
             if (Contains(line, _hostMarker, out _))
             {
+                Log.Trace("HttpHostHeaderRewriter: found host header in fragments");
                 _done = true;
                 output.AddRange(_newHostHeaderLine);
             }
@@ -94,6 +101,9 @@ public class HttpHostHeaderRewriter
         if (_done) output.AddRange(lines[^1]);
         else _lastTail = lines[^1];
 
+        
+        Log.Trace($"HttpHostHeaderRewriter: returning partial fragments. Found header={_done}");
+        
         var partialBuffer = output.ToArray();
         offset = 0;
         length = partialBuffer.Length;

@@ -161,6 +161,11 @@ public static class Settings
     /// If no connections are up, the event pump will run slower.
     /// </summary>
     public static TimeSpan EventPumpRate { get; set; } = TimeSpan.FromSeconds(0.5);
+    
+    /// <summary>
+    /// How long should a socket connection be attempted before failing
+    /// </summary>
+    public static TimeSpan ConnectionTimeout { get; set; } = TimeSpan.FromSeconds(10);
 
     /// <summary>
     /// How long a TCP session is allowed to go without any traffic before being closed.

@@ -1,8 +1,10 @@
-﻿using System.Net.Security;
+﻿using System.Diagnostics;
+using System.Net.Security;
 using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
 using VirtualVpn.Helpers;
 using VirtualVpn.TcpProtocol;
+using ThreadState = System.Threading.ThreadState;
 
 namespace VirtualVpn.TlsWrappers;
 
@@ -216,12 +218,15 @@ public class TlsUnwrap : ISocketAdaptor
         Interlocked.Increment(ref _runningThreads);
         var buffer = new byte[8192];
 
+        var sw = new Stopwatch();
+        sw.Start();
         try
         {
             Log.Trace("TlsUnwrap: Waiting for SSL/TLS authentication");
             // wait for SSL/TLS to come up
             while (_running && !_disposed && !_sslStream.IsAuthenticated)
             {
+                if (sw.Elapsed > Settings.ConnectionTimeout) throw new Exception($"TLS connection did not authenticate in expected time ({nameof(Settings)}.{nameof(Settings.ConnectionTimeout)})");
                 Thread.Sleep(50);
                 Log.Trace("TlsUnwrap: Waiting for SSL/TLS authentication...");
             }
