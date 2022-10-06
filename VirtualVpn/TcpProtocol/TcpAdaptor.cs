@@ -403,7 +403,7 @@ public class TcpAdaptor : ITcpAdaptor
                     //  [WebApp] <-(socket)<-(TlsUnwrap)<- VirtualTcpSocket <=tunnel=> [Remote Gateway]
 
                     var keyPaths = Settings.TlsKeyPaths[key];
-                    var trace = $"{LocalAddress}:{LocalPort}";
+                    var trace = $"{IpV4Address.Describe(RemoteAddress)}:{RemotePort}";
                     Log.Info($"Starting TLS unwrap: {trace}");
                     _socketToLocalSide = new TlsUnwrap(keyPaths, trace, () => ConnectToWebApp(incomingIsTls: false, wrapWithTlsAdaptor: true));
                     SocketThroughTunnel.EventPump(); // not required, but called to reduce latency
