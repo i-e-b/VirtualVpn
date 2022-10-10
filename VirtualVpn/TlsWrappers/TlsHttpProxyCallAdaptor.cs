@@ -16,6 +16,7 @@ namespace VirtualVpn.TlsWrappers;
 /// </summary>
 public class TlsHttpProxyCallAdaptor : ISocketAdaptor
 {
+    private readonly HttpProxyRequest _request;
     private readonly object _transferLock = new();
     private readonly Uri _targetUri;
     
@@ -38,6 +39,7 @@ public class TlsHttpProxyCallAdaptor : ISocketAdaptor
     /// <param name="useTls">If true, the message will be transmitted as HTTPS</param>
     public TlsHttpProxyCallAdaptor(HttpProxyRequest request, bool useTls)
     {
+        _request = request;
         _targetUri = new Uri(request.Url, UriKind.Absolute);
 
         // We start in connected state, as we already have the proxy request
@@ -95,6 +97,13 @@ public class TlsHttpProxyCallAdaptor : ISocketAdaptor
                 _sslStream.WriteTimeout = (int)TimeSpan.FromSeconds(30).TotalMilliseconds;
                 _sslStream.ReadTimeout = (int)TimeSpan.FromSeconds(30).TotalMilliseconds;
             }
+            
+            // Make a best guess at who the authority will be
+            var targetHost = _targetUri.Authority;
+            if (_request.Headers.ContainsKey("Host"))
+            {
+                targetHost = _request.Headers["Host"];
+            }
 
             // This will call our object's 'Write' and 'Read' methods
             // and this call will block until either the handshake is
@@ -102,8 +111,8 @@ public class TlsHttpProxyCallAdaptor : ISocketAdaptor
             // methods return without any data, the authentication is
             // immediately ended with an exception.
             var authOptions = new SslClientAuthenticationOptions{
-                TargetHost = _targetUri.Authority,
-                EnabledSslProtocols = SslProtocols.Tls12|SslProtocols.Tls13,
+                TargetHost = targetHost,
+                EnabledSslProtocols = SslProtocols.Tls11 | SslProtocols.Tls12 | SslProtocols.Tls13,
                 CertificateRevocationCheckMode = X509RevocationMode.NoCheck,
                 RemoteCertificateValidationCallback = AnyCertificate
             };
