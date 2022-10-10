@@ -223,7 +223,7 @@ public static class Log
             }
             else
             {
-                Console.WriteLine(message + ": " + ex.Message); // just the top message if not debug
+                Console.WriteLine(message + ": " + ex.GetType().Name + " " + ex.Message); // just the top message if not debug
             }
         }
     }

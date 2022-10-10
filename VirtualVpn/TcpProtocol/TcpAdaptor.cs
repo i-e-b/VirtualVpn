@@ -301,14 +301,21 @@ public class TcpAdaptor : ITcpAdaptor
         // If we are ready to talk to web app, make sure we have a real socket
         if (_socketToLocalSide is null) // this is never true when making a proxy call
         {
-            Log.Debug("Trying to connect to web app");
-            if (!TryConnectToWebApp())
-            {
-                Log.Debug("Web app connection failed");
-                return false;
-            }
+            Log.Debug($"Trying to connect to web app: {IpV4Address.Describe(RemoteAddress)}:{RemotePort} -> {IpV4Address.Describe(LocalAddress)}:{LocalPort}");
+            var state = TryConnectToWebApp();
 
-            Log.Debug("Web app is connected");
+            switch (state)
+            {
+                case ConnectionProgress.WaitingForMoreData:
+                    Log.Debug("Waiting for enough data to detect TLS");
+                    break;
+                case ConnectionProgress.Connected:
+                    Log.Info("Web app connected");
+                    break;
+                default:
+                    Log.Debug("Web app connection failed");
+                    return false;
+            }
         }
 
         // End the transfer operation if we're not ready
@@ -366,12 +373,12 @@ public class TcpAdaptor : ITcpAdaptor
     /// This is the point at which we try to start the call to
     /// the Web App.
     /// </summary>
-    private bool TryConnectToWebApp()
+    private ConnectionProgress TryConnectToWebApp()
     {
         lock (_connectionLock)
         {
             // Double check now we're locked:
-            if (_socketToLocalSide is not null) return true;
+            if (_socketToLocalSide is not null) return ConnectionProgress.Connected;
             
             // Ok, let's connect
             Log.Trace("Connecting to web app");
@@ -430,7 +437,7 @@ public class TcpAdaptor : ITcpAdaptor
                 else
                 {
                     Log.Trace("Not enough data received to do SSL/TLS detection. Waiting for more.");
-                    return false;
+                    return ConnectionProgress.WaitingForMoreData;
                 }
             }
             catch (Exception ex)
@@ -438,10 +445,10 @@ public class TcpAdaptor : ITcpAdaptor
                 Log.Error("Can't connect to web app", ex);
                 SocketThroughTunnel.StartClose();
                 _transport.TerminateConnection(SelfKey);
-                return false;
+                return ConnectionProgress.ConnectionFailed;
             }
 
-            return true;
+            return ConnectionProgress.Connected;
         }
     }
 
@@ -712,4 +719,13 @@ public class TcpAdaptor : ITcpAdaptor
         _transport.TerminateConnection(SelfKey);
         GC.SuppressFinalize(this);
     }
+}
+
+internal enum ConnectionProgress
+{
+    // ReSharper disable once UnusedMember.Global
+    Invalid = 0,
+    WaitingForMoreData = 1,
+    Connected = 2,
+    ConnectionFailed = 3
 }
