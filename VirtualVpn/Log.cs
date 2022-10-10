@@ -40,7 +40,8 @@ public static class Log
     public static bool IsTracing => _level >= LogLevel.Trace;
     public static bool IncludeInfo => _level >= LogLevel.Info;
     public static bool NotTraceOrDebug => _level <= LogLevel.Info;
-    
+    public static bool DoTrafficLogs { get; set; } = true;
+
     private static readonly object _lock = new();
 
     public static void SetLevel(LogLevel level)

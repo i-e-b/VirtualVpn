@@ -428,6 +428,11 @@ public class TcpSocket
             return; // drop the packet and await a retry.
         }
 
+        if (Log.DoTrafficLogs)
+        {
+            Log.Info($"{wrapper.Source.AsString}:{segment.SourcePort} -> {wrapper.Destination.AsString}:{segment.DestinationPort} FLAGS={segment.Flags.ToString()}; Payload={segment.Payload.Length} bytes");
+        }
+
         _closeWait.Clear();
         
         var frame = new TcpFrame(segment, wrapper); // lib/tcp/tcp.c:152
@@ -788,6 +793,11 @@ public class TcpSocket
         // Here, we pass to a tunnel
         
         seg.UpdateChecksum(_route.LocalAddress.Value, _route.RemoteAddress.Value);
+
+        if (Log.DoTrafficLogs)
+        {
+            Log.Info($"{_route.RemoteAddress.AsString}:{seg.DestinationPort} <- {_route.LocalAddress.AsString}:{seg.SourcePort} FLAGS={seg.Flags.ToString()}; Payload={seg.Payload.Length} bytes");
+        }
 
         Log.Trace("Virtual TcpSocket sending a segment");
         _adaptor.Reply(seg, route);
@@ -1193,6 +1203,15 @@ public class TcpSocket
         {
             case TcpSocketState.SynReceived: // lib/tcp/input.c:985
             case TcpSocketState.Established:
+                if (_sendBuffer.TotalWritten < 1 && _receiveQueue.TotalRead < 1)
+                {
+                    Log.Warn($"FIN received from state {_state.ToString()}, but no data send or received.");
+                }
+                else
+                {
+                    Log.Debug($"FIN received from state {_state.ToString()}");
+                }
+
                 SetState(TcpSocketState.CloseWait);
                 break;
             case TcpSocketState.FinWait1: // lib/tcp/input.c:997
@@ -1634,7 +1653,12 @@ public class TcpSocket
         switch (_state)
         {
             case TcpSocketState.SynReceived:
-                if (IsSynReceivedWithReset(frame)) return true;
+                if (IsSynReceivedWithReset(frame))
+                {
+                    Log.Warn("Got RST flag during SynReceived state");
+                    return true;
+                }
+
                 break;
 
             case TcpSocketState.Established:

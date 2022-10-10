@@ -8,11 +8,14 @@ public class SendBuffer
     public long ReadHead { get; set; }
     public long End { get; set; }
 
+    public long TotalWritten { get; private set; }
+
     public SendBuffer()
     {
         Start = -1;
         ReadHead = -1;
         End = -1;
+        TotalWritten = 0;
     }
 
     public byte[] this[long seq]
@@ -175,6 +178,7 @@ public class SendBuffer
                 End = nextSequence + written;
             }
 
+            TotalWritten += written;
             Log.Debug($"Wrote to SendBuffer. Buffer start seq={Start}, write start seq={nextSequence}, write end seq={End}; read head={ReadHead}");
         }
     }

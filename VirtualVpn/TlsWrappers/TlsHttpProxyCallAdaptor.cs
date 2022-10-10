@@ -151,7 +151,7 @@ public class TlsHttpProxyCallAdaptor : ISocketAdaptor
     /// </summary>
     private void RunDirectAdaptor()
     {
-        Log.Trace($"Proxy: Direct adaptor, request buffer={_httpRequestBuffer.Count} bytes, outgoingQueue={_blockingBuffer.Available} bytes");
+        Log.Info($"Proxy: Direct adaptor, request buffer={_httpRequestBuffer.Count} bytes, outgoingQueue={_blockingBuffer.Available} bytes");
         
         // Add everything to the outgoing queue
         lock (_transferLock)
@@ -172,7 +172,7 @@ public class TlsHttpProxyCallAdaptor : ISocketAdaptor
                 lock (_transferLock)
                 {
                     read = _blockingBuffer.Read(buf, 0, buf.Length);
-                    Log.Trace($"Proxy direct: transferring {read} bytes");
+                    Log.Info($"Proxy direct: transferring {read} bytes");
                 }
 
                 _httpResponseBuffer.FeedData(buf, 0, read);
@@ -188,7 +188,7 @@ public class TlsHttpProxyCallAdaptor : ISocketAdaptor
                 Log.Error("Failure in proxy adaptor: RunDirectAdaptor", ex);
             }
         }
-        Log.Trace("Proxy direct: ended");
+        Log.Info("Proxy direct: ended");
     }
     
     /// <summary>
@@ -281,7 +281,7 @@ public class TlsHttpProxyCallAdaptor : ISocketAdaptor
         var cleanEnd = _messagePumpThread.Join(250);
         if (!cleanEnd)
         {
-            Log.Warn("Proxy call SSL/TLS adaptor did not end correctly");
+            Log.Warn("Proxy call adaptor did not end correctly");
         }
         Log.Trace("HttpProxyCallAdaptor: Connection closed");
     }

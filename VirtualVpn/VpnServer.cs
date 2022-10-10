@@ -205,7 +205,10 @@ public class VpnServer : ISessionHost, IDisposable
             var proxyAddress = IpV4Address.FromString(request.ProxyLocalAddress);
             var tunnel = FindTunnelTo(target);
             
-            using var apiSide = new TlsHttpProxyCallAdaptor(request, uri.Scheme == "https");
+            var useTls = uri.Scheme == "https";
+            Log.Info($"Starting connection to {uri}, useTls={useTls}");
+            
+            using var apiSide = new TlsHttpProxyCallAdaptor(request, useTls);
             using var channel = tunnel.OpenTcpSession(target, uri.Port, proxyAddress, apiSide);
             
             var timeout = new Stopwatch();

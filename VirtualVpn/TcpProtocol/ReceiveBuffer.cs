@@ -8,6 +8,8 @@ public class ReceiveBuffer
     /// <summary> Location that next read-out should start from </summary>
     private long _readHead = long.MaxValue;
     
+    public long TotalRead { get; private set; }
+    
     /// <summary> Flag set when reading starts. New packets before the start point are rejected if true </summary>
     private bool _isReading;
 
@@ -15,6 +17,7 @@ public class ReceiveBuffer
     {
         _isReading = false;
         ReadDataState = TcpReadDataState.Waiting;
+        TotalRead = 0;
     }
 
     public void Insert(TcpSegment seg)
@@ -23,11 +26,14 @@ public class ReceiveBuffer
         {
             if (ReadDataState < TcpReadDataState.Cached) ReadDataState = TcpReadDataState.Cached;
             
+            
             if (_isReading && seg.SequenceNumber < _readHead)
             {
                 Log.Warn($"Segment at sequence {seg.SequenceNumber} ignored because reading has already passed that point");
                 return;
             }
+            
+            TotalRead += seg.Payload.Length;
 
             _segments.Add(seg);
             _segments.Sort((a, b) => a.SequenceNumber.CompareTo(b.SequenceNumber));
