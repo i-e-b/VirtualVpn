@@ -184,6 +184,34 @@ public class VpnSession
         State = SessionState.DELETED; // event pump should unbind the session and it's child soon.
         return true;
     }
+    
+    public bool EndChildSaWithPeer(ChildSa child)
+    {
+        // Check we're in a fit state
+        if (_lastContact is null)
+        {
+            Log.Error("Tried to cleanly end session, but can't send message -- I don't have a last contact address");
+            return false;
+        }
+
+        // List SPIs for this session
+        var spiList = new List<byte[]>{
+            Bit.UInt32ToBytes(child.SpiIn),
+            Bit.UInt32ToBytes(child.SpiOut)
+        };
+
+        // Send the delete
+        var response = BuildResponse(ExchangeType.INFORMATIONAL, _myMsgId++, sendZeroHeader: true, _myCrypto,
+            new PayloadDelete(IkeProtocolType.IKE, spiList)
+        );
+
+        Log.Warn($"Sending DELETE message to gateway {_lastContact.ToString()}. MsgId={_myMsgId}, localSpi={_localSpi:x16}, peerSpi={_peerSpi:x16}");
+        Send(to: _lastContact, response);
+        
+        // Switch our mode
+        State = SessionState.DELETED; // event pump should unbind the session and it's child soon.
+        return true;
+    }
 
     // pvpn/server.py:253
     private byte[] BuildResponse(ExchangeType exchange, int msgId, bool sendZeroHeader, IkeCrypto? crypto, params MessagePayload[] payloads)
@@ -328,6 +356,8 @@ public class VpnSession
                     case SessionState.ESTABLISHED:
                     {
                         Log.Critical("IKE_AUTH received for established connection. We might have failed a DPD check, or not sent keep-alive messages?");
+                        Log.Info("Taking down this connection. If 'always' is set, a new session should be started.");
+                        EndConnectionWithPeer();
                         break;
                     }
                     default:
@@ -346,6 +376,8 @@ public class VpnSession
                 AssertState(SessionState.ESTABLISHED, request);
                 // TODO: Handle this -- for us as initiator, and for re-heat
                 Log.Critical("CREATE_CHILD_SA received");
+                Log.Info("Taking down this connection. If 'always' is set, a new session should be started.");
+                EndConnectionWithPeer();
                 break;
 
 
@@ -608,9 +640,65 @@ public class VpnSession
 
         Log.Debug("    Setting state to established");
         State = SessionState.ESTABLISHED; // Should now have a full Child SA
+        
+        CleanupChildSessions();
+        _sessionHost.PrintStatus();
+        
         // Should now get INFORMATIONAL messages, possibly with some `IKE_DELETE` payloads to tell me about expired sessions.
     }
-    
+
+    /// <summary>
+    /// If we have multiple ChildSA open to the same gateway,
+    /// remove all but the newest
+    /// </summary>
+    private void CleanupChildSessions()
+    {
+        var toRemove = new List<uint>();
+        var newest = new Dictionary<IpV4Address, ChildSa>();
+        
+        // make sure all keys are correct
+        foreach (var kvp in _thisSessionChildren)
+        {
+            kvp.Value.ExternalKey = kvp.Key;
+        }
+
+        // filter out any replaced child-sa
+        foreach (var kvp in _thisSessionChildren)
+        {
+            var @this = kvp.Value;
+            var gateway = @this.Gateway;
+            
+            if (newest.ContainsKey(gateway))
+            {
+                // check which is newest, add the older to the remove list
+                var other = newest[gateway];
+                if (other.StartTime > @this.StartTime) // other is newer, reject this
+                {
+                    toRemove.Add(@this.ExternalKey);
+                }
+                else // this is newer, bump the old one
+                {
+                    toRemove.Add(other.ExternalKey);
+                    newest[gateway] = @this;
+                }
+            }
+            else
+            {
+                // first seen.
+                newest.Add(gateway, @this);
+            }
+        }
+        
+        // Kill off any replaced child-sa
+        foreach (var key in toRemove)
+        {
+            var replaced = _thisSessionChildren[key];
+            _thisSessionChildren.Remove(key);
+            
+            EndChildSaWithPeer(replaced);
+        }
+    }
+
     /// <summary>
     /// Handle the reply to AUTH message, when we are the initiator.
     /// The remote gateway should already consider us as Established.
@@ -784,7 +872,7 @@ public class VpnSession
         // '_thisSessionChildren' using spiOut, '_sessionHost' using spiIn.
         _sessionHost.AddChildSession(childSa); // this gets us the 32-bit SA used for ESA, not the 64-bit used for key exchange
         _thisSessionChildren.Add(spiOut, childSa);
-
+        
         return childSa;
     }
 

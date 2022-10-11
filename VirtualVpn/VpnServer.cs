@@ -20,6 +20,7 @@ public interface ISessionHost
     void AddChildSession(ChildSa childSa);
     void RemoveChildSession(params uint[] spis);
     void RemoveSession(bool wasRemoteRequest, params ulong[] spis);
+    void PrintStatus();
 }
 
 public class VpnServer : ISessionHost, IDisposable
@@ -412,6 +413,11 @@ public class VpnServer : ISessionHost, IDisposable
     /// </summary>
     private void StatsEvent(EspTimedEvent obj)
     {
+        PrintStatus();
+    }
+
+    public void PrintStatus()
+    {
         _statsTimer.Reset();
         if ( ! Log.IncludeInfo) return;
         
@@ -493,7 +499,7 @@ public class VpnServer : ISessionHost, IDisposable
             else
             {
                 Log.Info("Ending session");
-                var canCloseProperly = parent.EndConnectionWithPeer();
+                var canCloseProperly = parent.EndChildSaWithPeer(espSession.Value);
                 
                 // if it's a half-open or junk connection, just ditch it
                 if (!canCloseProperly) _childSessions.Remove(espSession.Key);

@@ -35,6 +35,8 @@ public class ChildSa : ITransportTunnel
     public int ActiveSessionCount => _tcpSessions.Count;
     public int ParkedSessionCount => _parkedSessions.Count;
 
+    public DateTime StartTime { get; }
+    public uint ExternalKey { get; set; }
 
     private readonly byte[] _spiIn;
     private readonly byte[] _spiOut;
@@ -68,6 +70,8 @@ public class ChildSa : ITransportTunnel
         Parent = parent;
         _trafficSelect = trafficSelect;
         _pingTimer = new Stopwatch();
+        
+        StartTime = DateTime.UtcNow;
 
         _keepAliveTrigger = new EspTimedEvent(KeepAliveEvent, Settings.KeepAliveTimeout);
 

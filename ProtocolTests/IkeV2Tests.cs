@@ -105,4 +105,7 @@ public class TestSessionHost : ISessionHost
     {
         throw new NotImplementedException();
     }
+
+    public void PrintStatus() { throw new NotImplementedException();
+    }
 }
