@@ -287,6 +287,8 @@ public class VpnServer : ISessionHost, IDisposable
 
             case "quit": // exit VirtualVPN session
             {
+                _alwaysConnections.Clear();
+                KillAllSessions();
                 _running = false;
                 return;
             }
@@ -407,7 +409,15 @@ public class VpnServer : ISessionHost, IDisposable
                 return;
         }
     }
-    
+
+    private void KillAllSessions()
+    {
+        foreach (var session in _sessions.Values)
+        {
+            session.EndConnectionWithPeer(); // should also end child SAs
+        }
+    }
+
     /// <summary>
     /// Writes server statistics to console
     /// </summary>

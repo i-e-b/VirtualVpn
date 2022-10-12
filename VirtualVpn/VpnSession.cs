@@ -261,6 +261,9 @@ public class VpnSession
         }
     }
 
+    /// <summary>
+    /// THIS IS THE CORE OF MESSAGE ROUTING
+    /// </summary>
     private void HandleIkeInternal(IkeMessage request, IPEndPoint sender, bool sendZeroHeader)
     {
         // pvpn/server.py:260
@@ -385,16 +388,74 @@ public class VpnSession
 
             case ExchangeType.CREATE_CHILD_SA: // pvpn/server.py:340
                 AssertState(SessionState.ESTABLISHED, request);
+                HandleSessionReKey(request, sender, sendZeroHeader);
                 // TODO: Handle this -- for us as initiator, and for re-heat
-                Log.Critical("CREATE_CHILD_SA received");
-                Log.Info("Taking down this connection. If 'always' is set, a new session should be started.");
-                EndConnectionWithPeer();
+                //Log.Critical("CREATE_CHILD_SA received");
+                //Log.Info("Taking down this connection. If 'always' is set, a new session should be started.");
+                //EndConnectionWithPeer();
                 break;
 
 
             default:
                 throw new Exception($"Unexpected request: {request.Exchange.ToString()}");
         }
+    }
+
+    /// <summary>
+    /// Handle CREATE_CHILD_SA for an established session.
+    /// This is very similar to <see cref="HandleAuth"/> and <see cref="HandleAuthConfirm"/>
+    /// </summary>
+    private void HandleSessionReKey(IkeMessage request, IPEndPoint sender, bool sendZeroHeader)
+    { // pvpn/server.py:340
+        
+        Log.Info($"Re-key requested for session {_localSpi:x} / {_peerSpi:x}");
+        
+        var sa = request.GetPayload<PayloadSa>() ?? throw new Exception("CREATE_CHILD_SA did not have an SA payload");
+        var chosenChildProposal = sa.GetProposalFor(EncryptionTypeId.ENCR_AES_CBC);
+        if (chosenChildProposal is null)
+        {
+            Log.Warn("    FATAL: could not find a compatible Child SA during re-key");
+            // Try to reject by sending back an empty proposal. Not sure about this
+            Send(to: sender, BuildResponse(ExchangeType.CREATE_CHILD_SA, _peerMsgId, sendZeroHeader, _myCrypto, new PayloadSa(new Proposal())));
+            return;
+        }
+
+        if (chosenChildProposal.Protocol != IkeProtocolType.IKE) // pvpn/server.py:343
+        {
+            var tsi = request.GetPayload<PayloadTsi>() ?? throw new Exception(@"Protocol error: Non-IKE CREATE_CHILD_SA without a TSi.");
+            var tsr = request.GetPayload<PayloadTsr>() ?? throw new Exception(@"Protocol error: Non-IKE CREATE_CHILD_SA without a TSr.");
+            var notify = request.GetPayload<PayloadNotify>(p => p.NotificationType == NotifyId.REKEY_SA) ?? throw new Exception(@"Protocol error: Non-IKE CREATE_CHILD_SA without a REKEY_SA.");
+            var matchingChild = TryGetMatchingChildSession(notify.SpiData);
+            if (matchingChild is null) throw new Exception(@"Protocol error: Non-IKE CREATE_CHILD_SA tried to re-key a session we don't know");
+            
+            var peerNonce = request.GetPayload<PayloadNonce>()?.Data ?? throw new Exception(@"Protocol error: Non-IKE CREATE_CHILD_SA did not have a valid peer n-once");
+            var localNonce = Bit.RandomNonce();
+            
+            var newChild = CreateChildKey(Gateway, chosenChildProposal, peerNonce, localNonce, tsi);
+            chosenChildProposal.SpiData = Bit.UInt32ToBytes(newChild.SpiIn);
+            
+            Log.Info("Re-key session. Created new ChildSA, sending confirmation message");
+            
+            // pvpn/server.py:358 & pvpn/server.py:371
+            // Send our message back
+            var response = BuildResponse(ExchangeType.CREATE_CHILD_SA, _peerMsgId, sendZeroHeader, _myCrypto,
+                new PayloadNotify(chosenChildProposal.Protocol, NotifyId.REKEY_SA, Bit.UInt32ToBytes(matchingChild.SpiIn), null),
+                new PayloadNonce(localNonce),
+                new PayloadSa(chosenChildProposal),
+                tsi, tsr // just accept whatever traffic selectors. We're virtual.
+            );
+            Send(to: sender, message: response);
+            return;
+        }
+
+        Log.Critical("Remote peer tried to re-negotiate the whole session. Will end this one and wait for a new session.");
+        EndConnectionWithPeer();
+    }
+
+    private ChildSa? TryGetMatchingChildSession(byte[] notifySpiData)
+    {
+        var spi = Bit.BytesToUInt32(notifySpiData);
+        return _thisSessionChildren.Values.FirstOrDefault(c=>c.SpiIn == spi || c.SpiOut == spi);
     }
 
     /// <summary>
@@ -575,7 +636,7 @@ public class VpnSession
     /// remote gateway will consider the session established when
     /// it gets our reply.
     /// <p></p>
-    /// This is related to <see cref="HandleAuthConfirm"/>
+    /// This is related to <see cref="HandleAuthConfirm"/> and <see cref="HandleSessionReKey"/>
     /// </summary>
     private void HandleAuth(IkeMessage request, IPEndPoint sender, bool sendZeroHeader)
     {
@@ -614,7 +675,7 @@ public class VpnSession
             return;
         }
 
-        var childKey = CreateChildKey(sender, chosenChildProposal, _peerNonce, _localNonce, tsi);
+        var childKey = CreateChildKey(IpV4Address.FromEndpoint(sender), chosenChildProposal, _peerNonce, _localNonce, tsi);
         Log.Debug($"    New ESP SPI = {childKey.SpiIn:x8}");
         chosenChildProposal.SpiData = Bit.UInt32ToBytes(childKey.SpiIn); // Used to refer to the child SA in ESP messages?
         chosenChildProposal.SpiSize = 4;
@@ -715,7 +776,7 @@ public class VpnSession
     /// The remote gateway should already consider us as Established.
     /// Follows from <see cref="HandleSaConfirm"/>
     /// <p></p>
-    /// This is related to <see cref="HandleAuth"/>
+    /// This is related to <see cref="HandleAuth"/> and <see cref="HandleSessionReKey"/>
     /// </summary>
     private void HandleAuthConfirm(IkeMessage request, IPEndPoint sender, bool sendZeroHeader)
     {
@@ -777,7 +838,7 @@ public class VpnSession
         }
 
         // Generate a new ChildSA with crypto and IP range
-        var childKey = CreateChildKey(sender, chosenChildProposal, _peerNonce, _localNonce, tsr);
+        var childKey = CreateChildKey(IpV4Address.FromEndpoint(sender), chosenChildProposal, _peerNonce, _localNonce, tsr);
         Log.Debug($"    New ESP SPI = {childKey.SpiIn:x8}; spi_out={childKey.SpiOut:x8}");
         chosenChildProposal.SpiData = Bit.UInt32ToBytes(childKey.SpiIn); // Used to refer to the child SA in ESP messages?
         chosenChildProposal.SpiSize = 4;
@@ -831,7 +892,7 @@ public class VpnSession
     /// <remarks>
     /// <p>Related to <see cref="IkeCrypto.CreateKeysAndCryptoInstances"/></p>
     /// </remarks>
-    private ChildSa CreateChildKey(IPEndPoint gateway, Proposal childProposal, byte[] peerNonce, byte[] localNonce, PayloadTsx? trafficSelect)
+    private ChildSa CreateChildKey(IpV4Address gateway, Proposal childProposal, byte[] peerNonce, byte[] localNonce, PayloadTsx? trafficSelect)
     {
         // pvpn/server.py:237
 
@@ -878,7 +939,7 @@ public class VpnSession
         // The crypto settings are swapped depending on who started the exchanges.
         if (_weAreInitiator) (cryptoIn, cryptoOut) = (cryptoOut, cryptoIn);
         
-        var childSa = new ChildSa(IpV4Address.FromEndpoint(gateway), _localSpiOut, childProposal.SpiData, cryptoIn, cryptoOut, _server, this, trafficSelect);
+        var childSa = new ChildSa(gateway, _localSpiOut, childProposal.SpiData, cryptoIn, cryptoOut, _server, this, trafficSelect);
 
         // '_thisSessionChildren' using spiOut, '_sessionHost' using spiIn.
         _sessionHost.AddChildSession(childSa); // this gets us the 32-bit SA used for ESA, not the 64-bit used for key exchange
