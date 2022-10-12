@@ -159,10 +159,12 @@ public class VpnSession
 
     public bool EndConnectionWithPeer()
     {
+        Log.Info("Ending session by local request");
         // Check we're in a fit state
         if (_lastContact is null)
         {
             Log.Error("Tried to cleanly end session, but can't send message -- I don't have a last contact address");
+            _sessionHost.RemoveSession(false, _localSpi, _peerSpi);
             return false;
         }
 
@@ -292,7 +294,16 @@ public class VpnSession
         }
         
         // We should have crypto now, as long as we're out of IKE_SA_INIT phase
-        request.ReadPayloadChain(_peerCrypto); // pvpn/server.py:266
+        try
+        {
+            request.ReadPayloadChain(_peerCrypto); // pvpn/server.py:266
+        }
+        catch (BadSessionException ex)
+        {
+            Log.Error("Error indicates session is bad. Sending DELETE", ex);
+            EndConnectionWithPeer();
+            return;
+        }
 
         // make sure we're in sequence
         if (request.MessageId != _peerMsgId)

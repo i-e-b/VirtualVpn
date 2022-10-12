@@ -294,8 +294,11 @@ public class IkeMessage
             case PayloadType.SK: // encrypted body. This needs to be sent back around to read contents.
             {
                 // https://www.rfc-editor.org/rfc/rfc7296#section-3
-                if (ikeCrypto is null) throw new Exception("Received an encrypted packet without agreeing on session crypto");
-                
+                if (ikeCrypto is null)
+                {
+                    throw new BadSessionException("Received an encrypted packet without agreeing on session crypto");
+                }
+
                 //if (rawData is not null) File.WriteAllBytes(Settings.FileBase + "SK-raw.bin", rawData); // log the entire message
                 
                 var ok = ikeCrypto.VerifyChecksum(srcData);
@@ -343,4 +346,9 @@ public class IkeMessage
     }
 
     public IEnumerable<string> DescribeAllPayloads() => Payloads.Select(payload => payload.Describe());
+}
+
+public class BadSessionException : Exception
+{
+    public BadSessionException(string message):base(message) { }
 }
