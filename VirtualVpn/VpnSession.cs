@@ -163,9 +163,8 @@ public class VpnSession
         // Check we're in a fit state
         if (_lastContact is null)
         {
-            Log.Error("Tried to cleanly end session, but can't send message -- I don't have a last contact address");
-            _sessionHost.RemoveSession(false, _localSpi, _peerSpi);
-            return false;
+            Log.Warn($"EndConnectionWithPeer: I don't have a last contact address, will assume gateway at {Gateway.AsString}:4500");
+            _lastContact = Gateway.MakeEndpoint(4500);
         }
 
         // List SPIs for this session
@@ -184,6 +183,7 @@ public class VpnSession
         
         // Switch our mode
         State = SessionState.DELETED; // event pump should unbind the session and it's child soon.
+        _sessionHost.RemoveSession(false, _localSpi, _peerSpi);
         return true;
     }
     
