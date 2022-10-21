@@ -73,7 +73,7 @@ public class TcpAdaptor : ITcpAdaptor
     public SenderPort SelfKey { get; }
 
     // Transaction state triggers
-    private volatile bool _closeCalled, _disposed;
+    private volatile bool _closeCalled, _disposed, _terminalOnce;
 
     private readonly object _transferLock = new();
     private readonly object _connectionLock = new();
@@ -127,6 +127,7 @@ public class TcpAdaptor : ITcpAdaptor
         
         _disposed = false;
         _closeCalled = false;
+        _terminalOnce = true; // terminate connection and write warning only once when entering a faulted state
 
         _socketToLocalSide = socketAdaptor;
 
@@ -705,8 +706,17 @@ public class TcpAdaptor : ITcpAdaptor
                 return acted;
 
             default:
-                Log.Error($"Tcp virtual socket is in errored state: code={SocketThroughTunnel.ErrorCode.ToString()}, state={SocketThroughTunnel.State.ToString()}");
-                _transport.TerminateConnection(SelfKey);
+                if (_terminalOnce)
+                {
+                    _terminalOnce = false;
+                    Log.Error($"Tcp virtual socket is in errored state: code={SocketThroughTunnel.ErrorCode.ToString()}, state={SocketThroughTunnel.State.ToString()}");
+                    _transport.TerminateConnection(SelfKey);
+                }
+                else
+                {
+                    Log.Trace("Event pump called on errored TcpAdaptor");
+                }
+
                 return false;
         }
     }

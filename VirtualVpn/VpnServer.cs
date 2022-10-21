@@ -149,10 +149,26 @@ public class VpnServer : ISessionHost, IDisposable
 
         foreach (var spi in spis)
         {
-            if (!_sessions.ContainsKey(spi)) continue;
+            if (!_sessions.ContainsKey(spi))
+            {
+                Log.Debug($"Did not find session for {spi:x}");
+                continue;
+            }
 
             // Unhook the old session
             var session = _sessions[spi];
+
+            var childSessions = _childSessions.ToArray();
+            foreach (var kvp in childSessions)
+            {
+                if (kvp.Value.Parent == session)
+                {
+                    Log.Debug($"Unhooking {kvp.Value.Describe()}");
+                    _childSessions.Remove(kvp.Key);
+                }
+            }
+            
+            // Remove it
             var removed = _sessions.Remove(spi);
             Log.Info($"Session {spi:x} removed. It was connected to {session.Gateway}");
 
@@ -166,12 +182,10 @@ public class VpnServer : ISessionHost, IDisposable
             }
         }
 
-
         if (removedCount < 1)
         {
             Log.Warn($"No matching session found in set: {string.Join(", ", spis.Select(i=>i.ToString("x")))}");
         }
-
     }
 
     public void RemoveChildSession(params uint[] spis)
@@ -580,7 +594,7 @@ public class VpnServer : ISessionHost, IDisposable
         }
     }
 
-    private IpV4Address? TryStartVpnIfNotAlreadyConnected(string gatewayAddress)
+    private void TryStartVpnIfNotAlreadyConnected(string gatewayAddress)
     {
         // Assume gateway address is IPv4 decimals for now.
         Console.WriteLine($"Requested connection to [{gatewayAddress}], searching for existing connections");
@@ -593,7 +607,7 @@ public class VpnServer : ISessionHost, IDisposable
             if (childSession.Value.Gateway == requestedGateway)
             {
                 Console.WriteLine($"A VPN session is already open with {requestedGateway} as {childSession.Key:x}.\r\nTry 'kill {childSession.Key:x}' if you want to restart");
-                return null;
+                return;
             }
         }
         
@@ -603,13 +617,12 @@ public class VpnServer : ISessionHost, IDisposable
             if (vpnSession.Value.Gateway == requestedGateway && vpnSession.Value.IsStarting())
             {
                 Console.WriteLine($"A VPN session is in progress with {requestedGateway} as {vpnSession.Key:x}.\r\nTry 'kill {vpnSession.Key:x}' if you want to restart");
-                return null;
+                return;
             }
         }
         
         Console.WriteLine("Starting contact with gateway");
         StartVpnSession(requestedGateway);
-        return requestedGateway;
     }
 
     /// <summary>
@@ -825,10 +838,15 @@ public class VpnServer : ISessionHost, IDisposable
                 //Log.Trace("Triggering event pump");
 
                 // Pump sessions (timing and connection)
-                foreach (var session in _sessions.Values)
+                var sessions = _sessions.Values.ToArray();
+                foreach (var session in sessions)
                 {
                     try
                     {
+                        if (session.State == SessionState.DELETED)
+                        {
+                            Log.Info("Session in deleted state, should be removed");
+                        }
                         session.EventPump();
                     }
                     catch (Exception ex)
@@ -838,7 +856,8 @@ public class VpnServer : ISessionHost, IDisposable
                 }
 
                 // Pump Child SAs (tunnel data)
-                foreach (var childSa in _childSessions.Values)
+                var childSessions = _childSessions.Values.ToArray();
+                foreach (var childSa in childSessions)
                 {
                     try
                     {

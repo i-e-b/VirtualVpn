@@ -147,7 +147,7 @@ public class ChildSa : ITransportTunnel
         {
             _keepAliveTrigger.TriggerIfExpired();
         }
-
+        
         // Check TCP sessions, close them if they are timed out.
         var allSessions = _tcpSessions.Keys.ToList();
         foreach (var tcpKey in allSessions)
