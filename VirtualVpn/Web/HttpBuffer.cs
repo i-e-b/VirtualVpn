@@ -68,9 +68,14 @@ public class HttpBuffer
             var value = line.Substring(sp + 2);
 
             // Check for defined-length message
-            if (key == "Content-Length"
+            if (key.ToLowerInvariant() == "content-length" // note: I am seeing malformed headers from some callers.
                 && int.TryParse(value, out var declaredLength))
             {
+                if (key != "Content-Length")
+                {
+                    Log.Warn($"Invalid casing on content length header: '{key}'. This may cause downstream to fault");
+                }
+
                 var endOfHeader = cursor - 1;
                 var bodySizeGuess = Length - endOfHeader;
                 Log.Trace($"Saw content length={declaredLength}. Currently have {Length} bytes in buffer, with {endOfHeader} of header.");
@@ -86,8 +91,12 @@ public class HttpBuffer
             }
 
             // Checked for a chunked transfer
-            if (key == "Transfer-Encoding" && value.Contains("chunked"))
+            if (key.ToLowerInvariant() == "transfer-encoding" && value.Contains("chunked"))
             {
+                if (key != "Transfer-Encoding")
+                {
+                    Log.Warn($"Invalid casing on encoding header: '{key}'. This may cause downstream to fault");
+                }
                 checkChunks = true;
                 // don't break out early, so we consume the rest of the headers
             }
