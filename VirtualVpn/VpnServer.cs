@@ -463,6 +463,7 @@ public class VpnServer : ISessionHost, IDisposable
         
         var sb = new StringBuilder();
 
+        if (Settings.CaptureTraffic) sb.Append("Traffic capture is ON\r\n");
         sb.Append($"Statistics:\r\n\r\nSessions={_sessions.Count} active, {_sessionsStarted} started;"); 
         sb.Append($"\r\nTotal data in={Bit.Human(_server.TotalIn)}, out={Bit.Human(_server.TotalOut)}");
         sb.Append($"\r\nMemory: process={Bit.Human(allMem)}, GC.Total={Bit.Human(GC.GetTotalMemory(false))}, GC.Heap={Bit.Human(gc.HeapSizeBytes)}, Avail={Bit.Human(gc.TotalAvailableMemoryBytes)}");
