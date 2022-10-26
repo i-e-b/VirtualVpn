@@ -402,7 +402,7 @@ public class TcpAdaptor : ITcpAdaptor
                     //       We should still make a HTTPS call to our web app so
                     //       that we aren't exposing private data.
                     var key = new IpV4Address(LocalAddress).AsString;
-                    if (incomingIsTls && Settings.TlsKeyPaths.ContainsKey(key))
+                    if (incomingIsTls && Settings.TlsKeyPaths?.ContainsKey(key) == true)
                     {
                         // Rather than Remote<-[tunnel]->WebApp
                         //  we will do Remote<->VirtualVPN | VirtualVPN<->WebApp separately.

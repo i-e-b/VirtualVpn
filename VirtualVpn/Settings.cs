@@ -109,7 +109,7 @@ public static class Settings
     /// This allows us to give correct certificates to callers
     /// regardless of the final app.
     /// </summary>
-    public static Dictionary<string,string> TlsKeyPaths = new(){
+    public static Dictionary<string,string>? TlsKeyPaths = new(){
         {"55.55.55.55","/root/vpnCerts/hans-privkey.pem;/root/vpnCerts/hans-fullchain.pem"}
     };
     

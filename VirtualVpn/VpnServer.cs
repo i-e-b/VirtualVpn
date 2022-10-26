@@ -55,6 +55,8 @@ public class VpnServer : ISessionHost, IDisposable
             Log.Error("Failed to start core network interface", ex);
             throw;
         }
+        
+        Console.WriteLine("VPN server starting up.");
 
         _statsTimer = new EspTimedEvent(StatsEvent, Settings.StatsFrequency);
         _eventPumpThread = new Thread(EventPumpLoop) { IsBackground = true };
@@ -564,6 +566,27 @@ public class VpnServer : ISessionHost, IDisposable
         Json.DefrostInto(typeof(Settings), json);
         
         Log.Info($"Loaded: {json}");
+        
+        Log.Info("Checking TLS configuration");
+        if (Settings.TlsKeyPaths is null)
+        {
+            Log.Info("No TLS keys configured");
+        }
+        else
+        {
+            foreach (var kvp in Settings.TlsKeyPaths)
+            {
+                var ok = TlsUnwrap.TestCertificates(kvp.Value, out var message);
+                if (!ok)
+                {
+                    Log.Warn($"Keys for '{kvp.Key}' are not valid: {message}");
+                }
+                else
+                {
+                    Log.Info($"Keys for '{kvp.Key}' are ok: {message}");
+                }
+            }
+        }
         Program.RestartHttpServer();
     }
 

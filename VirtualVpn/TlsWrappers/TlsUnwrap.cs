@@ -21,7 +21,7 @@ namespace VirtualVpn.TlsWrappers;
 /// </summary>
 public class TlsUnwrap : ISocketAdaptor
 {
-    public static volatile int CaptureNumber = 0;
+    public static volatile int CaptureNumber;
     private readonly string _id;
     private readonly Func<ISocketAdaptor> _outgoingConnectionFunction;
     private static volatile int _runningThreads;
@@ -100,6 +100,37 @@ public class TlsUnwrap : ISocketAdaptor
         _pumpThreadIncoming.Start();
         
         _pumpThreadOutgoing = new Thread(BufferPumpOutgoing) { IsBackground = true };
+    }
+
+    /// <summary>
+    /// Check that the given key paths contain a valid set of crypto keys
+    /// </summary>
+    public static bool TestCertificates(string tlsKeyPaths, out string message)
+    {
+        try
+        {
+            message = "ok";
+            var filePaths = tlsKeyPaths.Split(';');
+
+            if (filePaths.Length != 2) throw new Exception("TLS key paths must have exactly two files specified, separated by ';'");
+
+            var privatePath = filePaths[0];
+            var publicPath = filePaths[1];
+
+            if (!File.Exists(privatePath)) throw new Exception($"Private key is not present, or this service does not have permissions to access it ({privatePath})");
+            if (!File.Exists(publicPath)) throw new Exception($"Private key is not present, or this service does not have permissions to access it ({publicPath})");
+            
+            var cert = GetX509Certificate(privatePath, publicPath);
+            
+            message = $"{cert.Issuer} -> {cert.Subject}";
+            
+            return true;
+        }
+        catch (Exception ex)
+        {
+            message = ex.Message;
+            return false;
+        }
     }
 
     ~TlsUnwrap()
