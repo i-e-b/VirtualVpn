@@ -19,10 +19,20 @@ public class HttpHostHeaderRewriter
 
     public HttpHostHeaderRewriter(string realHost)
     {
-        _done = false;
-        _first = true;
-        _lastTail = null;
-        _newHostHeaderLine = Encoding.ASCII.GetBytes($"Host: {realHost}\r\n");
+        if (string.IsNullOrWhiteSpace(realHost))
+        {
+            _done = true; // don't process anything
+            _first = true;
+            _lastTail = null;
+            _newHostHeaderLine=Array.Empty<byte>();
+        }
+        else
+        {
+            _done = false;
+            _first = true;
+            _lastTail = null;
+            _newHostHeaderLine = Encoding.ASCII.GetBytes($"Host: {realHost}\r\n");
+        }
     }
 
     /// <summary>

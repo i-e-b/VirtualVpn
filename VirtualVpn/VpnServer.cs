@@ -437,41 +437,47 @@ public class VpnServer : ISessionHost, IDisposable
     /// </summary>
     private void StatsEvent(EspTimedEvent obj)
     {
+        _statsTimer.Reset();
+        if ( ! Log.IncludeInfo) return;
         PrintStatus();
     }
 
     public void PrintStatus()
     {
-        _statsTimer.Reset();
-        if ( ! Log.IncludeInfo) return;
-        
         GC.Collect();
         var gc = GC.GetGCMemoryInfo();
         using var myProc = Process.GetCurrentProcess();
         var tCount = myProc.Threads.Count;
         var allMem = myProc.PrivateMemorySize64;
 
-        var expectedThreads = TlsUnwrap.ClosedAdaptors * 2;
-        var unexpectedThreads = tCount - expectedThreads;
+        var tlsThreadCount = TlsUnwrap.ClosedAdaptors * 2;
+        var otherThreadCount = tCount - tlsThreadCount;
         
         var sb = new StringBuilder();
 
         sb.Append($"Statistics:\r\n\r\nSessions={_sessions.Count} active, {_sessionsStarted} started;"); 
         sb.Append($"\r\nTotal data in={Bit.Human(_server.TotalIn)}, out={Bit.Human(_server.TotalOut)}");
         sb.Append($"\r\nMemory: process={Bit.Human(allMem)}, GC.Total={Bit.Human(GC.GetTotalMemory(false))}, GC.Heap={Bit.Human(gc.HeapSizeBytes)}, Avail={Bit.Human(gc.TotalAvailableMemoryBytes)}");
-        sb.Append($"\r\nActive threads={tCount}, tls wrappers running={TlsUnwrap.RunningThreads}, tls waiting dispose={expectedThreads}, unaccounted={unexpectedThreads}");
+        sb.Append($"\r\nActive threads={tCount}, tls wrappers running={TlsUnwrap.RunningThreads}, tls waiting dispose={tlsThreadCount}, other={otherThreadCount}");
         
-        sb.Append("\r\nChild sessions:\r\n");
-        foreach (var childSa in _childSessions.Values)
+        
+        sb.Append("\r\nSessions:\r\n");
+        foreach (var session in _sessions.Values)
         {
-            sb.Append($"    Gateway={childSa.Gateway}, Spi-in={childSa.SpiIn:x}, Spi-out={childSa.SpiOut:x}\r\n");
-            sb.Append($"        Parent:   spi={childSa.Parent?.LocalSpi:x}, state={childSa.Parent?.State.ToString() ?? "<orphan>"}\r\n");
-            sb.Append($"        Messages: in={childSa.MessagesIn}, out={childSa.MessagesOut}\r\n");
-            sb.Append($"        Data:     in={Bit.Human(childSa.DataIn)}, out={Bit.Human(childSa.DataOut)}\r\n");
-            sb.Append($"        Sessions: active={childSa.ActiveSessionCount}, parked={childSa.ParkedSessionCount}\r\n");
+            sb.Append(session.Describe());
+            sb.Append("\r\nChild sessions:\r\n");
+            foreach (var childSa in session.ChildSessions())
+            {
+                sb.Append($"    Gateway={childSa.Gateway}, Spi-in={childSa.SpiIn:x}, Spi-out={childSa.SpiOut:x}\r\n");
+                sb.Append($"        Parent:   spi={childSa.Parent?.LocalSpi:x}, state={childSa.Parent?.State.ToString() ?? "<orphan>"}\r\n");
+                sb.Append($"        Messages: in={childSa.MessagesIn}, out={childSa.MessagesOut}\r\n");
+                sb.Append($"        Data:     in={Bit.Human(childSa.DataIn)}, out={Bit.Human(childSa.DataOut)}\r\n");
+                sb.Append($"        Sessions: active={childSa.ActiveSessionCount}, parked={childSa.ParkedSessionCount}\r\n");
+            }
+
+            sb.Append("\r\n");
         }
-        sb.Append("\r\n");
-        
+
         Console.WriteLine(sb.ToString());
     }
 
@@ -582,6 +588,7 @@ public class VpnServer : ISessionHost, IDisposable
 
     private void ListGateways()
     {
+        PrintStatus();
         Console.WriteLine("\r\nEstablished connections:");
         foreach (var session in _childSessions)
         {

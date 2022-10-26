@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+﻿using System.Collections;
+using System.Diagnostics;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
@@ -50,6 +51,8 @@ public class VpnSession
 
     private ulong _peerSpi;
     private readonly ulong _localSpi;
+    private ulong _incomingMessageCount, _outgoingMessageCount;
+    private DateTime _startDateTime;
 
     //## Algorithmic selections (negotiated with peer) ##//
 
@@ -87,6 +90,10 @@ public class VpnSession
         _peerMsgId = 0;
         _myMsgId = 0;
         _mobIkeMsgId = 0;
+        
+        _startDateTime = DateTime.UtcNow;
+        _incomingMessageCount = 0;
+        _outgoingMessageCount = 0;
         
         LastTouchTimer = new Stopwatch();
         LastTouchTimer.Start();
@@ -250,7 +257,8 @@ public class VpnSession
     {
         try
         {
-            Log.Info($"    Incoming IKE message {request.Exchange.ToString()} {request.MessageId}");
+            _incomingMessageCount++;
+            Log.Debug($"    Incoming IKE message {request.Exchange.ToString()} {request.MessageId}");
             HandleIkeInternal(request, sender, sendZeroHeader);
 
             _previousRequestRawData = request.RawData; // needed to do PSK auth
@@ -1243,7 +1251,6 @@ public class VpnSession
         );
     }
 
-
     /// <summary>
     /// Find a transform attribute with type of key-length,
     /// and return the value
@@ -1255,6 +1262,7 @@ public class VpnSession
 
     private void Send(IPEndPoint to, byte[] message)
     {
+        _outgoingMessageCount++;
         _lastContact = to;
         _lastSentMessageBytes = message;
         Log.Trace($"Message outgoing. {message.Length} bytes to {to.Address}:{to.Port}");
@@ -1314,4 +1322,15 @@ public class VpnSession
                 throw new ArgumentOutOfRangeException();
         }
     }
+
+    /// <summary>
+    /// Human readable description of the session
+    /// </summary>
+    public string Describe()
+    {
+        var cryptState = _peerCrypto is null ? "no cipher" : "cipher established";
+        return $"Session to {Gateway.AsString} since {_startDateTime:yyyy-MM-dd HH:mm:ss} {cryptState}; State={State.ToString()}; IKE message count in={_incomingMessageCount}, out={_outgoingMessageCount};";
+    }
+
+    public IEnumerable<ChildSa> ChildSessions() => _thisSessionChildren.Values.ToArray();
 }
