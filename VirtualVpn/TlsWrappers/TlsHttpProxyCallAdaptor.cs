@@ -160,7 +160,14 @@ public class TlsHttpProxyCallAdaptor : ISocketAdaptor
                 }
             }
 
-            _sslStream.Close();
+            try
+            {
+                _sslStream.Close();
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Error closing SSL stream in TlsHttpProxyCallAdaptor.RunSslAdaptor", ex);
+            }
 
             if (Settings.CaptureTraffic)
             {
@@ -315,26 +322,35 @@ public class TlsHttpProxyCallAdaptor : ISocketAdaptor
     /// </summary>
     private void EndConnection()
     {
-        Log.Trace("HttpProxyCallAdaptor: EndConnection");
-        
-        Connected = false;
         try
         {
-            if (_messagePumpRunning) _sslStream?.Close();
+            Log.Trace("HttpProxyCallAdaptor: EndConnection");
+
+            Connected = false;
+            try
+            {
+                if (_messagePumpRunning) _sslStream?.Close();
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Failure when trying to end connection", ex);
+            }
+
+            _messagePumpRunning = false;
+            _blockingBuffer.Close();
+
+            var cleanEnd = _messagePumpThread.Join(500);
+            if (!cleanEnd)
+            {
+                Log.Warn("Proxy call adaptor did not end correctly (_messagePumpThread.Join timed out)");
+            }
+
+            Log.Trace("HttpProxyCallAdaptor: Connection closed");
         }
         catch (Exception ex)
         {
-            Log.Error("Failure when trying to end connection", ex);
+            Log.Error("Error in TlsHttpProxyCallAdaptor.EndConnection", ex);
         }
-        _messagePumpRunning = false;
-        _blockingBuffer.Close();
-
-        var cleanEnd = _messagePumpThread.Join(500);
-        if (!cleanEnd)
-        {
-            Log.Warn("Proxy call adaptor did not end correctly (_messagePumpThread.Join timed out)");
-        }
-        Log.Trace("HttpProxyCallAdaptor: Connection closed");
     }
     
     /// <summary>

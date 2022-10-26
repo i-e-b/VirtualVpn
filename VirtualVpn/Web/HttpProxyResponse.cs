@@ -26,10 +26,14 @@ public class HttpProxyResponse
     public string Describe()
     {
         var sb = new StringBuilder();
+
+        if (Success) sb.AppendLine("Success");
+        else sb.AppendLine($"Request failed: {ErrorMessage ?? "<no details>"}");
+        
         
         sb.AppendLine($"{StatusCode} {StatusDescription}");
 
-        if (Success)
+        if (Headers.Count > 0)
         {
             foreach (var header in Headers)
             {
@@ -38,7 +42,7 @@ public class HttpProxyResponse
         }
         else
         {
-            sb.AppendLine($"Request failed: {ErrorMessage ?? "<no details>"}");
+            sb.AppendLine("<no headers returned>");
         }
 
         if (Body is null)
