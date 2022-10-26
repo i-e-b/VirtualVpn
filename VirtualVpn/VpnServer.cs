@@ -387,24 +387,29 @@ public class VpnServer : ISessionHost, IDisposable
                     Console.WriteLine($"Expected IP and URL. Got {parts.Length} parts (should be 2)");
                     break;
                 }
-                
                 var uri = new Uri(parts[1], UriKind.Absolute);
-
-                // Kick off a proxy call as if the external API was hit.
-                var request= new HttpProxyRequest
-                {
-                    Url = parts[1],
-                    Headers = {
-                        { "Host", uri.Host },
-                        {"Accept", "*/*"},
-                        {"Content-Length", "0"}
-                    },
-                    HttpMethod = "GET",
-                    ProxyLocalAddress = parts[0]
-                };
-                var response = MakeProxyCall(request);
                 
-                Console.WriteLine(response.Describe());
+                new Thread(() =>
+                {
+                    Console.WriteLine("Preparing call");
+                    // Kick off a proxy call as if the external API was hit.
+                    var request = new HttpProxyRequest
+                    {
+                        Url = parts[1],
+                        Headers =
+                        {
+                            { "Host", uri.Host },
+                            { "Accept", "*/*" },
+                            { "Content-Length", "0" }
+                        },
+                        HttpMethod = "GET",
+                        ProxyLocalAddress = parts[0]
+                    };
+                    var response = MakeProxyCall(request);
+
+                    Console.WriteLine("Call complete:");
+                    Console.WriteLine(response.Describe());
+                }){IsBackground = true}.Start();
                 break;
             }
             default:
