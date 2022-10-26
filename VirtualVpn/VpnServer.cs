@@ -464,15 +464,23 @@ public class VpnServer : ISessionHost, IDisposable
         sb.Append("\r\nSessions:\r\n");
         foreach (var session in _sessions.Values)
         {
-            sb.Append(session.Describe());
-            sb.Append("\r\nChild sessions:\r\n");
-            foreach (var childSa in session.ChildSessions())
+            sb.Append("  " + session.Describe());
+            var childSessions = session.ChildSessions().ToList();
+            if (childSessions.Any())
             {
-                sb.Append($"    Gateway={childSa.Gateway}, Spi-in={childSa.SpiIn:x}, Spi-out={childSa.SpiOut:x}\r\n");
-                sb.Append($"        Parent:   spi={childSa.Parent?.LocalSpi:x}, state={childSa.Parent?.State.ToString() ?? "<orphan>"}\r\n");
-                sb.Append($"        Messages: in={childSa.MessagesIn}, out={childSa.MessagesOut}\r\n");
-                sb.Append($"        Data:     in={Bit.Human(childSa.DataIn)}, out={Bit.Human(childSa.DataOut)}\r\n");
-                sb.Append($"        Sessions: active={childSa.ActiveSessionCount}, parked={childSa.ParkedSessionCount}\r\n");
+                sb.Append("\r\n    Child sessions:\r\n");
+                foreach (var childSa in session.ChildSessions())
+                {
+                    sb.Append($"      Gateway={childSa.Gateway}, Spi-in={childSa.SpiIn:x}, Spi-out={childSa.SpiOut:x}\r\n");
+                    sb.Append($"        Parent:   spi={childSa.Parent?.LocalSpi:x}, state={childSa.Parent?.State.ToString() ?? "<orphan>"}\r\n");
+                    sb.Append($"        Messages: in={childSa.MessagesIn}, out={childSa.MessagesOut}\r\n");
+                    sb.Append($"        Data:     in={Bit.Human(childSa.DataIn)}, out={Bit.Human(childSa.DataOut)}\r\n");
+                    sb.Append($"        Sessions: active={childSa.ActiveSessionCount}, parked={childSa.ParkedSessionCount}\r\n");
+                }
+            }
+            else
+            {
+                sb.Append("\r\n    No child sessions established.\r\n");
             }
 
             sb.Append("\r\n");
