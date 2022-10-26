@@ -310,7 +310,6 @@ public class TlsHttpProxyCallAdaptor : ISocketAdaptor
         Log.Trace("HttpProxyCallAdaptor: EndConnection");
         
         Connected = false;
-        _messagePumpRunning = false;
         try
         {
             if (_messagePumpRunning) _sslStream?.Close();
@@ -319,11 +318,13 @@ public class TlsHttpProxyCallAdaptor : ISocketAdaptor
         {
             Log.Error("Failure when trying to end connection", ex);
         }
+        _messagePumpRunning = false;
+        _blockingBuffer.Close();
 
-        var cleanEnd = _messagePumpThread.Join(250);
+        var cleanEnd = _messagePumpThread.Join(500);
         if (!cleanEnd)
         {
-            Log.Warn("Proxy call adaptor did not end correctly");
+            Log.Warn("Proxy call adaptor did not end correctly (_messagePumpThread.Join timed out)");
         }
         Log.Trace("HttpProxyCallAdaptor: Connection closed");
     }

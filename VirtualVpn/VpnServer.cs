@@ -258,6 +258,7 @@ public class VpnServer : ISessionHost, IDisposable
         }
         catch (Exception ex)
         {
+            Log.Error("Failure in VpnServer.MakeProxyCall", ex);
             return new HttpProxyResponse{
                 Success = false,
                 ErrorMessage = ex.ToString()
