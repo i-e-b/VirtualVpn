@@ -124,6 +124,15 @@ public class TlsHttpProxyCallAdaptor : ISocketAdaptor
             // and try to read back the response
             var rawRequest = _httpRequestBuffer.ToArray();
             Log.Trace("Proxy: SSL Outgoing request (plain)", () => Bit.Describe("Raw", rawRequest));
+            
+            if (Settings.CaptureTraffic)
+            {
+                var capNum = Interlocked.Increment(ref TlsUnwrap.CaptureNumber);
+                File.WriteAllText(Settings.FileBase + $"Tls{capNum:0000}_proxy_out.txt",
+                    Bit.Describe("payload", rawRequest)
+                );
+            }
+
             _sslStream.Write(rawRequest);
 
             Log.Trace($"Proxy: {nameof(RunSslAdaptor)}, authenticated and written");

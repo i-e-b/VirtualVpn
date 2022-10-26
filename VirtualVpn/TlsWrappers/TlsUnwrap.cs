@@ -21,6 +21,7 @@ namespace VirtualVpn.TlsWrappers;
 /// </summary>
 public class TlsUnwrap : ISocketAdaptor
 {
+    public static volatile int CaptureNumber = 0;
     private readonly string _id;
     private readonly Func<ISocketAdaptor> _outgoingConnectionFunction;
     private static volatile int _runningThreads;
@@ -206,7 +207,16 @@ public class TlsUnwrap : ISocketAdaptor
                 if (read > 0)
                 {
                     _socket.IncomingFromTunnel(buffer, 0, read);
-                    Log.Trace($"TlsUnwrap: Data from tunnel to web app: {read} bytes;\r\n{Bit.Describe("payload", buffer.Take(read))}");
+                    
+                    if (Settings.CaptureTraffic)
+                    {
+                        var capNum = Interlocked.Increment(ref CaptureNumber);
+                        File.WriteAllText(Settings.FileBase + $"Tls{capNum:0000}_in.txt",
+                            Bit.Describe("payload", buffer.Take(read))
+                        );
+                    }
+
+                    Log.Trace($"TlsUnwrap: Data from tunnel to web app: {read} bytes;", () => $"\r\n{Bit.Describe("payload", buffer.Take(read))}");
                 }
                 else Log.Trace("TlsUnwrap: no data from tunnel");
 
@@ -247,7 +257,15 @@ public class TlsUnwrap : ISocketAdaptor
                 var toWrite = _socket.OutgoingFromLocal(buffer);
                 if (toWrite > 0)
                 {
-                    Log.Trace($"TlsUnwrap: Data from web app: {toWrite} bytes;\r\n{Bit.Describe("payload", buffer.Take(toWrite))}");
+                    if (Settings.CaptureTraffic)
+                    {
+                        var capNum = Interlocked.Increment(ref CaptureNumber);
+                        File.WriteAllText(Settings.FileBase + $"Tls{capNum:0000}_out.txt",
+                            Bit.Describe("payload", buffer.Take(toWrite))
+                        );
+                    }
+
+                    Log.Trace($"TlsUnwrap: Data from web app: {toWrite} bytes;", () => $"\r\n{Bit.Describe("payload", buffer.Take(toWrite))}");
                     _sslStream.Write(buffer, 0, toWrite);
                     Log.Trace("TlsUnwrap: written.");
                 }
