@@ -172,10 +172,15 @@ public class HttpBuffer
             var key = line.Substring(0, sp);
             var value = line.Substring(sp + 2).Trim(); // should have "\r\n" at end, which we remove.
 
-            if (key == "Content-Length")
+            var lowerKey = key.ToLowerInvariant();
+            if (lowerKey == "content-length")
             {
+                key = "Content-Length"; // normalise bad headers
                 int.TryParse(value, out expectedLength);
             }
+
+            if (lowerKey == "transfer-encoding") key = "Transfer-Encoding"; // normalise bad headers
+            if (lowerKey == "content-type") key = "Content-Type"; // normalise bad headers
 
             if (response.Headers.ContainsKey(key))
             {
@@ -194,12 +199,18 @@ public class HttpBuffer
             if (response.Headers.ContainsKey("Transfer-Encoding")
                 && response.Headers["Transfer-Encoding"].Contains("chunked"))
             {
+                Log.Info("Decoding chunked message");
                 response.Body = DecodeChunked(cursor, ref endedCorrectly);
             }
             else
             {
                 response.Body = _incomingBuffer.Skip(cursor).ToArray();
                 endedCorrectly = response.Body.Length == expectedLength;
+                Log.Debug($"Decoding body. Read {response.Body.Length} bytes, expected {expectedLength} bytes");
+                if (!endedCorrectly)
+                {
+                    Log.Warn($"Unexpected HTTP length. Buffer={_incomingBuffer.Count}, Cursor={cursor}, Expected={expectedLength}, Read={response.Body.Length}");
+                }
             }
         }
         else

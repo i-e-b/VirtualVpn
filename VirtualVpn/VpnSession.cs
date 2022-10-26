@@ -1,5 +1,4 @@
-﻿using System.Collections;
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
@@ -52,7 +51,7 @@ public class VpnSession
     private ulong _peerSpi;
     private readonly ulong _localSpi;
     private ulong _incomingMessageCount, _outgoingMessageCount;
-    private DateTime _startDateTime;
+    private readonly DateTime _startDateTime;
 
     //## Algorithmic selections (negotiated with peer) ##//
 
@@ -326,11 +325,9 @@ public class VpnSession
             }
             else
             {
-                Log.Warn($"Request is out of sequence. Expected {_peerMsgId}, but got {request.MessageId}. Not responding");
+                Log.Warn($"Request is out of sequence. Expected {_peerMsgId}, but got {request.MessageId}. Will reset");
                 Log.Debug($"Out of sequence request: exchange type={request.Exchange.ToString()}, flags={request.MessageFlag.ToString()}, payloads:", request.DescribeAllPayloads);
                 
-                //return;
-                Log.Debug("Actually just allowing it through for testing...");
                 _peerMsgId = (int)request.MessageId;
             }
         }
@@ -474,6 +471,7 @@ public class VpnSession
         Log.Debug("        HandleMobIke():: payloads incoming:", request.DescribeAllPayloads);
         Log.Debug($"        sender={sender.Address}:{sender.Port}, zero pad={sendZeroHeader}");
         
+        Log.Warn("Received MobIKE, but ignoring it.");
         // https://datatracker.ietf.org/doc/html/rfc4555#page-7
         /*
    (Initiator gets information from lower layers that its attachment
@@ -584,7 +582,8 @@ public class VpnSession
 
     private void HandleMobIkeHandshake(IkeMessage request, IPEndPoint sender, bool sendZeroHeader)
     {
-        if (request.MessageId != _mobIkeMsgId) Log.Warn($"Treating message as MobIke handshake, but it was out of sequence- expected {_mobIkeMsgId}, got {request.MessageId}");
+        if (request.MessageId != _mobIkeMsgId) Log.Warn($"Treating message as MobIke handshake, but it was out of sequence- expected {_mobIkeMsgId}, got {request.MessageId}. Will reset");
+        _mobIkeMsgId = (int)request.MessageId;
         Log.Debug($"Info exchange (MobIke handshake) MSG IN: flags={request.MessageFlag.ToString()}, msgId={request.MessageId}, spi_i={request.SpiI:x16}, spi_r={request.SpiR:x16}");
 
         if (request.Payloads.Count < 1) // other side is saying no change?
