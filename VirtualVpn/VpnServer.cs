@@ -681,7 +681,7 @@ public class VpnServer : ISessionHost, IDisposable
     private void IkeResponder(byte[] data, IPEndPoint sender)
     {
         // write capture to file for easy testing
-        Log.Info($"Got a 500 packet, {data.Length} bytes");
+        Log.Debug($"Got a 500 packet, {data.Length} bytes");
 
         if (data.Length == 1)
         {
@@ -703,7 +703,7 @@ public class VpnServer : ISessionHost, IDisposable
         // read the message to figure out session data
         var ikeMessage = IkeMessage.FromBytes(data, 0);
 
-        Log.Info($"Got a 500 packet, {data.Length} bytes, ex={ikeMessage.Exchange}");
+        Log.Debug($"Got a 500 packet, {data.Length} bytes, ex={ikeMessage.Exchange}");
         Log.Debug($"IKE flags {ikeMessage.MessageFlag.ToString()}, message id={ikeMessage.MessageId}, first payload={ikeMessage.FirstPayload.ToString()}");
 
         if (ikeMessage.Exchange == ExchangeType.IDENTITY_1) // start of an IkeV1 session
@@ -717,11 +717,11 @@ public class VpnServer : ISessionHost, IDisposable
             var session = _sessions[ikeMessage.SpiI];
             if (session.WeStarted)
             {
-                Log.Info($"    it's for an existing session we started {ikeMessage.SpiI:x16} (us) => {ikeMessage.SpiR:x16} (them)");
+                Log.Debug($"    it's for an existing session we started {ikeMessage.SpiI:x16} (us) => {ikeMessage.SpiR:x16} (them)");
             }
             else
             {
-                Log.Info($"    it's for an existing session started by the peer {ikeMessage.SpiI:x16} (them) => {ikeMessage.SpiR:x16} (us)");
+                Log.Debug($"    it's for an existing session started by the peer {ikeMessage.SpiI:x16} (them) => {ikeMessage.SpiR:x16} (us)");
             }
 
             // Pass message to existing session

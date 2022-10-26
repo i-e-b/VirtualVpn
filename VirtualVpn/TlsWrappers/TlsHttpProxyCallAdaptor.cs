@@ -154,6 +154,14 @@ public class TlsHttpProxyCallAdaptor : ISocketAdaptor
 
             _sslStream.Close();
 
+            if (Settings.CaptureTraffic)
+            {
+                var capNum = Interlocked.Increment(ref TlsUnwrap.CaptureNumber);
+                File.WriteAllText(Settings.FileBase + $"Tls{capNum:0000}_proxy_in.txt",
+                    Bit.Describe("payload", _httpResponseBuffer.RawIncomingData())
+                );
+            }
+
             Log.Trace($"Proxy: {nameof(RunSslAdaptor)} ended");
         }
         catch (Exception ex)
@@ -174,7 +182,15 @@ public class TlsHttpProxyCallAdaptor : ISocketAdaptor
         // Add everything to the outgoing queue
         lock (_transferLock)
         {
-            _blockingBuffer.WriteOutgoingNonBlocking(_httpRequestBuffer.ToArray());
+            var outData = _httpRequestBuffer.ToArray();
+            if (Settings.CaptureTraffic)
+            {
+                var capNum = Interlocked.Increment(ref TlsUnwrap.CaptureNumber);
+                File.WriteAllText(Settings.FileBase + $"Tls{capNum:0000}_proxy_out.txt",
+                    Bit.Describe("payload", outData)
+                );
+            }
+            _blockingBuffer.WriteOutgoingNonBlocking(outData);
             _httpRequestBuffer.Clear();
         }
 
@@ -205,6 +221,14 @@ public class TlsHttpProxyCallAdaptor : ISocketAdaptor
             {
                 Log.Error("Failure in proxy adaptor: RunDirectAdaptor", ex);
             }
+        }
+        
+        if (Settings.CaptureTraffic)
+        {
+            var capNum = Interlocked.Increment(ref TlsUnwrap.CaptureNumber);
+            File.WriteAllText(Settings.FileBase + $"Tls{capNum:0000}_proxy_in.txt",
+                Bit.Describe("payload", _httpResponseBuffer.RawIncomingData())
+            );
         }
         Log.Info("Proxy direct: ended");
     }

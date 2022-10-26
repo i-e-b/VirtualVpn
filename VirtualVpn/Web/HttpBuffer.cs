@@ -285,4 +285,9 @@ public class HttpBuffer
         if (start >= cursor) return "";
         return Encoding.UTF8.GetString(_incomingBuffer.GetRange(start, cursor - start).ToArray());
     }
+
+    /// <summary>
+    /// Return a copy of all received data so far
+    /// </summary>
+    public byte[] RawIncomingData() => _incomingBuffer.ToArray();
 }
