@@ -700,7 +700,7 @@ public class VpnServer : ISessionHost, IDisposable
 
     private void IkeSessionResponder(byte[] data, IPEndPoint sender, bool sendZeroHeader)
     {
-        if (Settings.CaptureTraffic)
+        if (Settings.CaptureTraffic && Log.IsTracing)
         {
             var name = Settings.FileBase + $"IKEv2-{_messageCount++}_Port-{sender.Port}_IKE.bin";
             File.WriteAllBytes(name, data);
@@ -792,7 +792,7 @@ public class VpnServer : ISessionHost, IDisposable
         idx = 0;
         var spi = Bit.ReadUInt32(data, ref idx);
 
-        if (Settings.CaptureTraffic)
+        if (Settings.CaptureTraffic && Log.IsTracing)
         {
             File.WriteAllText(Settings.FileBase+$"ESP_{_espCount}.txt", Bit.Describe($"esp_{_espCount}", data));
             _espCount++;

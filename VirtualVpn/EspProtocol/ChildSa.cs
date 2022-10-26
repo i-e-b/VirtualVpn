@@ -421,7 +421,7 @@ public class ChildSa : ITransportTunnel
         IncrementMessageId(espPkt.Sequence);
         
         // dump the crypto details if requested
-        if (Settings.CaptureTraffic)
+        if (Settings.CaptureTraffic && Log.IncludeCrypto)
         {
             File.WriteAllText(Settings.FileBase + "CSA.txt",
                 Bit.Describe("SPI-in", _spiIn) +
@@ -711,7 +711,7 @@ public class ChildSa : ITransportTunnel
 
     private void CaptureTraffic(byte[] plain, string direction)
     {
-        if (!Settings.CaptureTraffic) return;
+        if (!Settings.CaptureTraffic || !Log.IsTracing) return;
         
         File.WriteAllText(Settings.FileBase + $"IPv4_{_captureNumber}_{direction}.txt", Bit.Describe($"ipv4_{_captureNumber}_{direction}", plain));
         _captureNumber++;

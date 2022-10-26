@@ -1263,7 +1263,7 @@ public class VpnSession
         Log.Trace($"Message outgoing. {message.Length} bytes to {to.Address}:{to.Port}");
         _server.SendRaw(message, to);
 
-        if (Settings.CaptureTraffic)
+        if (Settings.CaptureTraffic && Log.IsTracing)
         {
             var name = Settings.FileBase + $"IKEv2-Reply_{_peerMsgId}_Port-{to.Port}_IKE.bin";
             File.WriteAllBytes(name, message);

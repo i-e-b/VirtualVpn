@@ -208,7 +208,7 @@ public class TlsUnwrap : ISocketAdaptor
                 {
                     _socket.IncomingFromTunnel(buffer, 0, read);
                     
-                    if (Settings.CaptureTraffic)
+                    if (Settings.CaptureTraffic && Log.IncludeInfo)
                     {
                         var capNum = Interlocked.Increment(ref CaptureNumber);
                         File.WriteAllText(Settings.FileBase + $"Tls{capNum:0000}_in.txt",
@@ -257,7 +257,7 @@ public class TlsUnwrap : ISocketAdaptor
                 var toWrite = _socket.OutgoingFromLocal(buffer);
                 if (toWrite > 0)
                 {
-                    if (Settings.CaptureTraffic)
+                    if (Settings.CaptureTraffic && Log.IncludeInfo)
                     {
                         var capNum = Interlocked.Increment(ref CaptureNumber);
                         File.WriteAllText(Settings.FileBase + $"Tls{capNum:0000}_out.txt",

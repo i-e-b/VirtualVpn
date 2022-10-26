@@ -138,7 +138,8 @@ public static class Settings
     public static bool RunAirliftSite = false;
     
     /// <summary>
-    /// If true, traffic will be captured into files
+    /// If true, traffic will be captured into files.
+    /// The number of files captured depends on log level.
     /// </summary>
     public static bool CaptureTraffic = false;
     
