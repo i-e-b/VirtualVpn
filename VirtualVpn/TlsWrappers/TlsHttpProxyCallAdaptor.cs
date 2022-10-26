@@ -139,10 +139,18 @@ public class TlsHttpProxyCallAdaptor : ISocketAdaptor
             var buffer = new byte[8192];
             while (_messagePumpRunning)
             {
-                var actual = _sslStream.Read(buffer, 0, buffer.Length);
-                var final = _httpResponseBuffer.FeedData(buffer, 0, actual);
-                Log.Trace($"Proxy received {final} bytes of a potential {actual} through SSL/TLS");
-                Log.Trace("Proxy: SSL incoming response", () => Bit.Describe("Raw", buffer, 0, actual));
+                try
+                {
+                    var actual = _sslStream.Read(buffer, 0, buffer.Length);
+                    var final = _httpResponseBuffer.FeedData(buffer, 0, actual);
+                    Log.Trace($"Proxy received {final} bytes of a potential {actual} through SSL/TLS");
+                    Log.Trace("Proxy: SSL incoming response", () => Bit.Describe("Raw", buffer, 0, actual));
+                }
+                catch (NullReferenceException nex)
+                {
+                    Log.Error("SSL read null-reference exception. Source stream is likely truncated. Ending message loop", nex);
+                    break;
+                }
 
 
                 if (_httpResponseBuffer.IsComplete())
