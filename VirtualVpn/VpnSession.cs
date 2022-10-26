@@ -286,7 +286,7 @@ public class VpnSession
             // Might be restart ID of next exchange type?
             if (request.MessageId == 0 && request.Exchange == ExchangeType.INFORMATIONAL)
             {
-                Log.Info("Got message ID=0 and information exchange. This should be some kind of keep alive? Sending reply back.");
+                Log.Debug("Got message ID=0 and information exchange. This should be some kind of keep alive? Sending reply back.");
                 _peerMsgId = 0;
             }
             else
@@ -390,17 +390,13 @@ public class VpnSession
 
             case ExchangeType.INFORMATIONAL: // pvpn/server.py:315
                 AssertState(SessionState.ESTABLISHED, request);
-                Log.Info("INFORMATIONAL received");
+                Log.Debug("INFORMATIONAL received");
                 HandleInformational(request, sender, sendZeroHeader);
                 break;
 
             case ExchangeType.CREATE_CHILD_SA: // pvpn/server.py:340
                 AssertState(SessionState.ESTABLISHED, request);
                 HandleSessionReKey(request, sender, sendZeroHeader);
-                // TODO: Handle this -- for us as initiator, and for re-heat
-                //Log.Critical("CREATE_CHILD_SA received");
-                //Log.Info("Taking down this connection. If 'always' is set, a new session should be started.");
-                //EndConnectionWithPeer();
                 break;
 
 
