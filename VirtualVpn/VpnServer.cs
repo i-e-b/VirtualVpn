@@ -79,6 +79,7 @@ public class VpnServer : ISessionHost, IDisposable
         
         _server.Start();
         _eventPumpThread.Start();
+        Console.WriteLine("VPN host starting");
 
         if (args is not null)
         {

@@ -24,14 +24,21 @@ internal class LokiLogServer
     /// </summary>
     public void AddLog(LogLevel level, string message)
     {
-        lock (_lock)
+        try
         {
-            _logQueue.Enqueue(new PendingLogLine
+            lock (_lock)
             {
-                Date = DateTime.UtcNow,
-                Level = level,
-                Message = message
-            });
+                _logQueue.Enqueue(new PendingLogLine
+                {
+                    Date = DateTime.UtcNow,
+                    Level = level,
+                    Message = message
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to store log line: {ex}");
         }
     }
 

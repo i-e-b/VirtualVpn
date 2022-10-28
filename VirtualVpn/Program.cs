@@ -30,11 +30,13 @@ internal static class Program
             Console.WriteLine("Running in interactive mode. Press enter to see command list.");
         }
 
+        Console.WriteLine("Starting logger");
         Log.SetLevel(Settings.DefaultLogLevel);
         Log.RestartLokiServer();
 
         // Mini web site that provides an API,
         // and allows file captures to be retrieved if Settings.RunAirliftSite is on.
+        Console.WriteLine("Starting HTTP host");
         HttpServer = new HttpListenerAndApi();
         HttpServer.Start();
 
@@ -43,6 +45,7 @@ internal static class Program
         // for various commands, including for
         // starting IP-SEC connections, and to
         // set log levels.
+        Console.WriteLine("Starting VPN host");
         using var vpnServer = new VpnServer();
         VpnServer = vpnServer;
         vpnServer.Run(args); // this will block the main thread until ended with 'quit' command
