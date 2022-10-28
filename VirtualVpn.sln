@@ -9,6 +9,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "_Info", "_Info", "{609B476C
 		.gitignore = .gitignore
 		LICENSE = LICENSE
 		README.md = README.md
+		VirtualVpn.service = VirtualVpn.service
+		RunVpn.sh = RunVpn.sh
 	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ProtocolTests", "ProtocolTests\ProtocolTests.csproj", "{F6010588-6EF2-453F-92FB-FB7522B5A767}"

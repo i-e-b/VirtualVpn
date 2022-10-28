@@ -1,0 +1,36 @@
+
+# Basic service file to run VirtualVPN when
+# the host system boots up.
+# Make sure to edit the ExecStart path, and 'RunVpn.sh' to taste
+# Important things to set correctly are the config.json file
+# and the target gateway for 'always'
+#
+# Then copy this file to /etc/systemd/system
+# And run 
+#    systemctl daemon-reload
+#    systemctl enable VirtualVpn.service
+#    systemctl start VirtualVpn.service
+#
+# Check things are ok with
+#    systemctl status VirtualVpn.service
+#    journalctl -f -u VirtualVpn.service
+#
+# You probably also want to check that the service comes
+# up after a normal re-boot, and if you kill the process.
+
+[Unit]
+Description=VirtualVPN service which exposes an external web app as a VPN network
+After=network.target
+
+[Install]
+WantedBy=multi-user.target
+
+[Service]
+Type=simple
+ExecStart=/root/VirtualVpn/RunVpn.sh
+WorkingDirectory=/root/VirtualVpn/VirtualVpn
+Restart=always
+RestartSec=5
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=%n
