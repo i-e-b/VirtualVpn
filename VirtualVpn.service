@@ -27,7 +27,7 @@ WantedBy=multi-user.target
 
 [Service]
 Type=simple
-ExecStart=/root/VirtualVpn/RunVpn.sh
+ExecStart=/root/VirtualVpn/VirtualVpn/RunVpn.sh
 WorkingDirectory=/root/VirtualVpn/VirtualVpn
 Restart=always
 RestartSec=5
