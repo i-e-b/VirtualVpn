@@ -1,36 +1,9 @@
 ﻿using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 
 // ReSharper disable UnusedMember.Global
 
-namespace VirtualVpn;
-
-
-[SuppressMessage("ReSharper", "UnusedMember.Global")]
-public enum LogLevel
-{
-    None = 0,
-    Error = 1,
-    Warning = 2,
-    Info = 3,
-    Debug = 4,
-    
-    /// <summary>
-    /// Include very verbose messages
-    /// </summary>
-    Trace = 5,
-    
-    /// <summary>
-    /// Include raw data for debugging crypto
-    /// </summary>
-    Crypto = 100,
-    
-    /// <summary>
-    /// Output all logs
-    /// </summary>
-    Everything = 255
-}
+namespace VirtualVpn.Logging;
 
 public static class Log
 {
@@ -42,6 +15,13 @@ public static class Log
     public static bool NotTraceOrDebug => _level <= LogLevel.Info;
 
     private static readonly object _lock = new();
+    
+    private static readonly LokiLogServer _lokiLogs = new();
+
+    public static void RestartLokiServer()
+    {
+        _lokiLogs.Restart();
+    }
 
     public static void SetLevel(LogLevel level)
     {
@@ -269,5 +249,10 @@ public static class Log
     private static void BlankTimestamp()
     {
         Console.Write("                       "); // same spacing as timestamp
+    }
+
+    public static void Stop()
+    {
+        _lokiLogs.Shutdown();
     }
 }

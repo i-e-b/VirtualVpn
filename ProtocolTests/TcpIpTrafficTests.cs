@@ -3,10 +3,10 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using NUnit.Framework;
-using VirtualVpn;
 using VirtualVpn.Enums;
 using VirtualVpn.Helpers;
 using VirtualVpn.InternetProtocol;
+using VirtualVpn.Logging;
 using VirtualVpn.TcpProtocol;
 // ReSharper disable InconsistentNaming
 

@@ -1,5 +1,8 @@
 ﻿// ReSharper disable BuiltInTypeReferenceStyle
 // ReSharper disable UnusedMember.Global
+
+using VirtualVpn.Logging;
+
 namespace VirtualVpn.TcpProtocol;
 
 /// <summary>

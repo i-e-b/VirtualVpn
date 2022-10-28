@@ -3,7 +3,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using NUnit.Framework;
 using SkinnyJson;
-using VirtualVpn;
+using VirtualVpn.Logging;
 using VirtualVpn.TlsWrappers;
 using VirtualVpn.Web;
 

@@ -1,6 +1,8 @@
 ﻿using VirtualVpn.Enums;
 using VirtualVpn.EspProtocol.Payloads.PayloadSubunits;
 using VirtualVpn.Helpers;
+using VirtualVpn.Logging;
+
 // ReSharper disable FieldCanBeMadeReadOnly.Global
 // ReSharper disable ConvertToConstant.Global
 // ReSharper disable AutoPropertyCanBeMadeGetOnly.Global
@@ -120,6 +122,17 @@ public static class Settings
     /// Prefix on capture files
     /// </summary>
     public static string FileBase = Platform.Current() == Platform.Kind.Linux ? "/root/airlift/" : @"C:\temp\traffic\";
+    
+    /// <summary>
+    /// If set to a valid URL, logs will be output to this Loki server.
+    /// </summary>
+    public static string? LokiLogUrl = null;
+    
+    /// <summary>
+    /// Name of the 'host' to pass with Loki logs.
+    /// This can be used to help track down errors.
+    /// </summary>
+    public static string LokiLogHost = "virtualVpn";
     
     /// <summary>
     /// Listener prefix for the web "airlift". This helps you pull logs.

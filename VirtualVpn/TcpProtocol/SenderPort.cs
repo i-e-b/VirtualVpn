@@ -1,4 +1,5 @@
 ﻿using VirtualVpn.InternetProtocol;
+using VirtualVpn.Logging;
 
 namespace VirtualVpn.TcpProtocol;
 

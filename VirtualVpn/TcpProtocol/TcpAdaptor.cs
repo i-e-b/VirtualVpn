@@ -5,6 +5,7 @@ using VirtualVpn.Enums;
 using VirtualVpn.EspProtocol;
 using VirtualVpn.Helpers;
 using VirtualVpn.InternetProtocol;
+using VirtualVpn.Logging;
 using VirtualVpn.TlsWrappers;
 
 namespace VirtualVpn.TcpProtocol;

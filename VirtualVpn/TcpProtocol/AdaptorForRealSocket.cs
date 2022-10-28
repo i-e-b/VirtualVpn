@@ -1,4 +1,5 @@
 using System.Net.Sockets;
+using VirtualVpn.Logging;
 using VirtualVpn.Web;
 
 namespace VirtualVpn.TcpProtocol;

@@ -8,6 +8,7 @@ using VirtualVpn.Enums;
 using VirtualVpn.EspProtocol;
 using VirtualVpn.Helpers;
 using VirtualVpn.InternetProtocol;
+using VirtualVpn.Logging;
 using VirtualVpn.TlsWrappers;
 using VirtualVpn.Web;
 
@@ -582,9 +583,14 @@ public class VpnServer : ISessionHost, IDisposable
         
         var json = File.ReadAllText(prefix[1]);
         Json.DefrostInto(typeof(Settings), json);
-        
         Log.Info($"Loaded: {json}");
         
+        // Restart ancillaries that might have been affected:
+        Program.RestartHttpServer();
+        Log.RestartLokiServer();
+        
+        // Check TLS certs are valid.
+        // If not, we won't stop, but we will warn
         Log.Info("Checking TLS configuration");
         if (Settings.TlsKeyPaths is null)
         {
@@ -605,7 +611,6 @@ public class VpnServer : ISessionHost, IDisposable
                 }
             }
         }
-        Program.RestartHttpServer();
     }
 
     private void SaveSettings(string[] prefix)

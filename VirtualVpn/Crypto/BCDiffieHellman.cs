@@ -1,5 +1,6 @@
 ﻿using System.Security.Cryptography;
 using VirtualVpn.Enums;
+using VirtualVpn.Logging;
 
 // ReSharper disable InconsistentNaming
 

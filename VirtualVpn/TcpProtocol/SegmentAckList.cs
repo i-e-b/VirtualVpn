@@ -1,4 +1,5 @@
 ﻿using System.Collections;
+using VirtualVpn.Logging;
 
 namespace VirtualVpn.TcpProtocol;
 

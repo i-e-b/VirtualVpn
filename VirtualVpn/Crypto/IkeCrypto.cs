@@ -1,6 +1,7 @@
 ﻿using System.Text;
 using VirtualVpn.Enums;
 using VirtualVpn.Helpers;
+using VirtualVpn.Logging;
 
 namespace VirtualVpn.Crypto;
 

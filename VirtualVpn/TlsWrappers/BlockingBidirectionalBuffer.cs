@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using VirtualVpn.Logging;
 
 namespace VirtualVpn.TlsWrappers;
 

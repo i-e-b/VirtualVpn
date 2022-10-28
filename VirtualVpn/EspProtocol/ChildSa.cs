@@ -5,6 +5,7 @@ using VirtualVpn.Enums;
 using VirtualVpn.EspProtocol.Payloads;
 using VirtualVpn.Helpers;
 using VirtualVpn.InternetProtocol;
+using VirtualVpn.Logging;
 using VirtualVpn.TcpProtocol;
 
 // ReSharper disable BuiltInTypeReferenceStyle

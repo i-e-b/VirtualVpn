@@ -1,4 +1,6 @@
-﻿namespace VirtualVpn.TcpProtocol;
+﻿using VirtualVpn.Logging;
+
+namespace VirtualVpn.TcpProtocol;
 
 public class SendBuffer
 {

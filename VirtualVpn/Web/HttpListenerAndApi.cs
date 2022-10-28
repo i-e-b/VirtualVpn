@@ -2,6 +2,7 @@
 using System.Text;
 using SkinnyJson;
 using Tag;
+using VirtualVpn.Logging;
 
 namespace VirtualVpn.Web;
 

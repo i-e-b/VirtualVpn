@@ -1,5 +1,6 @@
 ﻿using System.Net.Sockets;
 using VirtualVpn.Helpers;
+using VirtualVpn.Logging;
 
 namespace VirtualVpn.TlsWrappers;
 

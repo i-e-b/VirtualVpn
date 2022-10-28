@@ -1,5 +1,6 @@
 ﻿using VirtualVpn.Enums;
 using VirtualVpn.EspProtocol.Payloads.PayloadSubunits;
+using VirtualVpn.Logging;
 
 namespace VirtualVpn.EspProtocol.Payloads;
 

@@ -2,6 +2,7 @@
 using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
 using VirtualVpn.Helpers;
+using VirtualVpn.Logging;
 using VirtualVpn.TcpProtocol;
 
 namespace VirtualVpn.TlsWrappers;

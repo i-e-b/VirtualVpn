@@ -1,4 +1,5 @@
 ﻿using VirtualVpn.Helpers;
+using VirtualVpn.Logging;
 using VirtualVpn.Web;
 
 namespace VirtualVpn;
@@ -30,6 +31,7 @@ internal static class Program
         }
 
         Log.SetLevel(Settings.DefaultLogLevel);
+        Log.RestartLokiServer();
 
         // Mini web site that provides an API,
         // and allows file captures to be retrieved if Settings.RunAirliftSite is on.
@@ -44,6 +46,10 @@ internal static class Program
         using var vpnServer = new VpnServer();
         VpnServer = vpnServer;
         vpnServer.Run(args); // this will block the main thread until ended with 'quit' command
+        
+        Log.Warn("VirtualVPN is shutting down");
         VpnServer = null;
+        HttpServer.Stop();
+        Log.Stop();
     }
 }

@@ -10,6 +10,7 @@ using VirtualVpn.EspProtocol.Payloads;
 using VirtualVpn.EspProtocol.Payloads.PayloadSubunits;
 using VirtualVpn.Helpers;
 using VirtualVpn.InternetProtocol;
+using VirtualVpn.Logging;
 
 namespace VirtualVpn;
 

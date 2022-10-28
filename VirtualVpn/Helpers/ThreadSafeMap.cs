@@ -1,4 +1,6 @@
 ﻿
+using VirtualVpn.Logging;
+
 namespace VirtualVpn.Helpers;
 
 /// <summary>

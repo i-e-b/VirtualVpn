@@ -4,6 +4,7 @@ using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using VirtualVpn.Helpers;
+using VirtualVpn.Logging;
 using VirtualVpn.TcpProtocol;
 using VirtualVpn.Web;
 
