@@ -17,10 +17,10 @@ public class HttpListenerAndApi
         _listener.IgnoreWriteExceptions = true;
 
         _listener.Prefixes.Add("http" + Settings.HttpPrefix);
-        
-        _listenThread = new Thread(ListenThreadLoop){IsBackground = true}; 
+
+        _listenThread = new Thread(ListenThreadLoop) { IsBackground = true };
     }
-    
+
     public void Start()
     {
         Log.Info("Starting API");
@@ -28,7 +28,7 @@ public class HttpListenerAndApi
         _listener.Start();
         _listenThread.Start();
     }
-    
+
     public void Stop()
     {
         _running = false;
@@ -40,7 +40,7 @@ public class HttpListenerAndApi
         Log.Info($"API Listening on {string.Join(" | ", _listener.Prefixes.Select(p => p))}");
         while (_running)
         {
-            
+
             HttpListenerContext? ctx = null;
             try
             {
@@ -58,7 +58,7 @@ public class HttpListenerAndApi
                     HandleAirliftRequest(url, ctx);
                 }
                 // Ignore anything else
-                
+
                 ctx.Response.Close();
                 ctx = null;
             }
@@ -76,7 +76,6 @@ public class HttpListenerAndApi
     /// </summary>
     private void HandleApiRequest(string url, HttpListenerContext ctx)
     {
-        
         var cmd = url.Substring(5); // trim off '/api/'
         switch (cmd)
         {
@@ -88,7 +87,11 @@ public class HttpListenerAndApi
                 var ok = HandleProxyCall(ctx);
                 if (!ok) goto default;
                 return;
-            
+
+            case "health":
+                HandleHealthCheck(ctx);
+                return;
+
             default:
                 Log.Warn($"Unknown command '{cmd}'");
                 var bytes = ShowApiInfoPage();
@@ -153,6 +156,93 @@ public class HttpListenerAndApi
             Log.Error("Unexpected error in HttpCapture.HandleProxyCall", ex);
             return false;
         }
+    }
+
+    /// <summary>
+    /// Respond with basic system status information.
+    /// This is used by external status check software
+    /// </summary>
+    private static void HandleHealthCheck(HttpListenerContext ctx)
+    {
+        #region fault conditions
+        if (Program.VpnServer is null)
+        {
+            ctx.Response.AddHeader("Content-Type", "text/html");
+            ctx.Response.StatusCode = 503; // Service unavailable - https://httpstatusdogs.com/
+            ctx.Response.StatusDescription = "core server is null";
+
+            var document = T.g("html")[
+                T.g("head")[ T.g("title")["VirtualVPN - fault"] ],
+                T.g("body")[ T.g("h1")["Error"], T.g("p")["The VirtualVPN core server is null"] ]
+            ];
+
+            ctx.Response.OutputStream.Write(document.ToBytes(Encoding.UTF8));
+            return;
+        }
+
+        if (!Program.VpnServer.IsRunning())
+        {
+            ctx.Response.AddHeader("Content-Type", "text/html");
+            ctx.Response.StatusCode = 410; // 'Gone'
+            ctx.Response.StatusDescription = "core server is not running";
+
+            var document = T.g("html")[
+                T.g("head")[ T.g("title")["VirtualVPN - fault"] ],
+                T.g("body")[ T.g("h1")["Error"], T.g("p")["The VirtualVPN core server is not running"] ]
+            ];
+
+            ctx.Response.OutputStream.Write(document.ToBytes(Encoding.UTF8));
+            return;
+        }
+
+        if (Program.VpnServer.ActiveSessionCount() < 1)
+        {
+            ctx.Response.AddHeader("Content-Type", "text/html");
+            ctx.Response.StatusCode = 502; // Bad Gateway
+            ctx.Response.StatusDescription = "no active gateway connections";
+
+            var document = T.g("html")[
+                T.g("head")[ T.g("title")["VirtualVPN - fault"] ],
+                T.g("body")[ T.g("h1")["Warning"], T.g("p")["VirtualVPN has no active gateway connections"] ]
+            ];
+
+            ctx.Response.OutputStream.Write(document.ToBytes(Encoding.UTF8));
+            return;
+        }
+        
+        var sinceLastTraffic = Program.VpnServer.MostRecentTraffic();
+        var ageSeconds = sinceLastTraffic.TotalSeconds;
+        if (ageSeconds > 120)
+        {
+            ctx.Response.AddHeader("Content-Type", "text/html");
+            ctx.Response.StatusCode = 408; // Request Timeout
+            ctx.Response.StatusDescription = "no traffic on VPN";
+
+            var document = T.g("html")[
+                T.g("head")[ T.g("title")["VirtualVPN - fault"] ],
+                T.g("body")[ T.g("h1")["Warning"], T.g("p")[$"VirtualVPN has not received traffic from the tunnel for {sinceLastTraffic}"] ]
+            ];
+
+            ctx.Response.OutputStream.Write(document.ToBytes(Encoding.UTF8));
+            return;
+        }
+        #endregion
+        
+        
+        ctx.Response.AddHeader("Content-Type", "text/html");
+        ctx.Response.StatusCode = 200; // OK
+        ctx.Response.StatusDescription = "VPN is up";
+
+        var doc = T.g("html")[
+            T.g("head")[ T.g("title")["VirtualVPN"] ],
+            T.g("body")[
+                T.g("h1")["VirtualVPN"],
+                T.g("p")["The VirtualVPN is running"],
+                T.g("pre")[Program.VpnServer.StatusToString()]
+            ]
+        ];
+
+        ctx.Response.OutputStream.Write(doc.ToBytes(Encoding.UTF8));
     }
 
     /// <summary>

@@ -716,8 +716,8 @@ public class VpnSession
         Log.Debug("    Setting state to established");
         State = SessionState.ESTABLISHED; // Should now have a full Child SA
         
+        _sessionHost.StatusToString();
         CleanupChildSessions();
-        _sessionHost.PrintStatus();
         
         // Should now get INFORMATIONAL messages, possibly with some `IKE_DELETE` payloads to tell me about expired sessions.
     }

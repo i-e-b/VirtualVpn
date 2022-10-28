@@ -149,6 +149,13 @@ public static class Settings
     public static LogLevel DefaultLogLevel = LogLevel.Info;
     
     /// <summary>
+    /// Log packet traffic at the TCP stack level.
+    /// This is useful for diagnosing badly behaved
+    /// firewalls and proxies.
+    /// </summary>
+    public static bool DoTcpTrafficLogs = false;
+    
+    /// <summary>
     /// If true, the output of `Bit.Describe` generates C# code.
     /// Otherwise it looks like StrongSwan log format.
     /// </summary>

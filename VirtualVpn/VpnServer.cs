@@ -20,7 +20,7 @@ public interface ISessionHost
     void AddChildSession(ChildSa childSa);
     void RemoveChildSession(params uint[] spis);
     void RemoveSession(bool wasRemoteRequest, params ulong[] spis);
-    void PrintStatus();
+    string StatusToString();
 }
 
 public class VpnServer : ISessionHost, IDisposable
@@ -42,6 +42,7 @@ public class VpnServer : ISessionHost, IDisposable
     private readonly EspTimedEvent _statsTimer;
     private ulong _sessionsStarted;
     private readonly ISet<IpV4Address> _alwaysConnections = new HashSet<IpV4Address>();
+    private readonly Stopwatch _timeSinceAnyTraffic = new();
 
     public VpnServer()
     {
@@ -60,6 +61,7 @@ public class VpnServer : ISessionHost, IDisposable
 
         _statsTimer = new EspTimedEvent(StatsEvent, Settings.StatsFrequency);
         _eventPumpThread = new Thread(EventPumpLoop) { IsBackground = true };
+        _timeSinceAnyTraffic.Start();
     }
 
     /// <summary>
@@ -112,6 +114,21 @@ public class VpnServer : ISessionHost, IDisposable
         }
     }
 
+    /// <summary>
+    /// Return true if the server's internal run flag is still set.
+    /// If false, the server is attempting to shut down
+    /// </summary>
+    public bool IsRunning() => _running;
+    
+    /// <summary>
+    /// Returns count of sessions still active
+    /// </summary>
+    public int ActiveSessionCount() => _sessions.Count;
+
+    /// <summary>
+    /// Returns the duration since any gateway traffic was received
+    /// </summary>
+    public TimeSpan MostRecentTraffic() => _timeSinceAnyTraffic.Elapsed;
 
     /// <summary>
     /// Runs a set of command-line arguments against
@@ -446,13 +463,13 @@ public class VpnServer : ISessionHost, IDisposable
     private void StatsEvent(EspTimedEvent obj)
     {
         _statsTimer.Reset();
+        GC.Collect();
         if ( ! Log.IncludeInfo) return;
-        PrintStatus();
+        Console.WriteLine(StatusToString());
     }
 
-    public void PrintStatus()
+    public string StatusToString()
     {
-        GC.Collect();
         var gc = GC.GetGCMemoryInfo();
         using var myProc = Process.GetCurrentProcess();
         var tCount = myProc.Threads.Count;
@@ -463,8 +480,8 @@ public class VpnServer : ISessionHost, IDisposable
         
         var sb = new StringBuilder();
 
+        sb.Append($"Statistics:\r\n\r\nSessions={_sessions.Count} active, {_sessionsStarted} started;");
         if (Settings.CaptureTraffic) sb.Append("Traffic capture is ON\r\n");
-        sb.Append($"Statistics:\r\n\r\nSessions={_sessions.Count} active, {_sessionsStarted} started;"); 
         sb.Append($"\r\nTotal data in={Bit.Human(_server.TotalIn)}, out={Bit.Human(_server.TotalOut)}");
         sb.Append($"\r\nMemory: process={Bit.Human(allMem)}, GC.Total={Bit.Human(GC.GetTotalMemory(false))}, GC.Heap={Bit.Human(gc.HeapSizeBytes)}, Avail={Bit.Human(gc.TotalAvailableMemoryBytes)}");
         sb.Append($"\r\nActive threads={tCount}, tls wrappers running={TlsUnwrap.RunningThreads}, tls waiting dispose={tlsThreadCount}, other={otherThreadCount}");
@@ -495,7 +512,7 @@ public class VpnServer : ISessionHost, IDisposable
             sb.Append("\r\n");
         }
 
-        Console.WriteLine(sb.ToString());
+        return sb.ToString();
     }
 
     /// <summary>
@@ -626,7 +643,7 @@ public class VpnServer : ISessionHost, IDisposable
 
     private void ListGateways()
     {
-        PrintStatus();
+        Console.WriteLine(StatusToString());
         Console.WriteLine("\r\nEstablished connections:");
         foreach (var session in _childSessions)
         {
@@ -710,8 +727,8 @@ public class VpnServer : ISessionHost, IDisposable
     /// </summary>
     private void IkeResponder(byte[] data, IPEndPoint sender)
     {
-        // write capture to file for easy testing
         Log.Debug($"Got a 500 packet, {data.Length} bytes");
+        _timeSinceAnyTraffic.Restart();
 
         if (data.Length == 1)
         {
@@ -777,6 +794,7 @@ public class VpnServer : ISessionHost, IDisposable
     {
         if (data.Length < 1) return; // junk message
 
+        _timeSinceAnyTraffic.Restart();
         Log.Trace($"Got a 4500 packet, {data.Length} bytes");
 
         // Check for keep-alive ping?

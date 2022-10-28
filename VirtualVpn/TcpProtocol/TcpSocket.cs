@@ -1,5 +1,6 @@
 ﻿// ReSharper disable BuiltInTypeReferenceStyle
 
+using System.Diagnostics;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using VirtualVpn.Helpers;
@@ -70,6 +71,8 @@ public class TcpSocket
         _timeWait = new TcpTimedEvent(TimeWaitExpired, TcpDefaults.MaxSegmentLifetime.Multiply(2));
         _closeWait = new TcpTimedEvent(CloseWaitExpired, TcpDefaults.CloseWaitLifetime);
         _closeWait.Clear(); // don't run closeWait until we reset it
+        _totalTime = new Stopwatch();
+        _totalTime.Start();
 
         _tcb = new TransmissionControlBlock();
         _route = new TcpRoute();
@@ -92,6 +95,17 @@ public class TcpSocket
         
         // If shutting down?
         if (_closeWait.TriggerIfExpired()) return false;
+
+        if (State == TcpSocketState.SynReceived || State == TcpSocketState.SynSent)
+        {
+            if (_totalTime.Elapsed > Settings.ConnectionTimeout)
+            {
+                Log.Warn($"Connection timed out after {_totalTime.Elapsed}");
+                SetState(TcpSocketState.Closed);
+                _closeWait.Reset();
+                KillSession();
+            }
+        }
 
         // Normal event triggers
         Log.Trace("TcpSocket.EventPump");
@@ -411,6 +425,8 @@ public class TcpSocket
     /// for the remote window clearing.
     /// </summary>
     private bool _nudgeDataSent;
+    
+    private Stopwatch _totalTime;
 
     #endregion
 
@@ -428,9 +444,9 @@ public class TcpSocket
             return; // drop the packet and await a retry.
         }
 
-        if (Log.DoTrafficLogs)
+        if (Settings.DoTcpTrafficLogs)
         {
-            Log.Info($"{wrapper.Source.AsString}:{segment.SourcePort} -> {wrapper.Destination.AsString}:{segment.DestinationPort} FLAGS={segment.Flags.ToString()}; Payload={segment.Payload.Length} bytes");
+            Log.Debug($"{wrapper.Source.AsString}:{segment.SourcePort} -> {wrapper.Destination.AsString}:{segment.DestinationPort} FLAGS={segment.Flags.ToString()}; Payload={segment.Payload.Length} bytes");
         }
 
         _closeWait.Clear();
@@ -794,9 +810,9 @@ public class TcpSocket
         
         seg.UpdateChecksum(_route.LocalAddress.Value, _route.RemoteAddress.Value);
 
-        if (Log.DoTrafficLogs)
+        if (Settings.DoTcpTrafficLogs)
         {
-            Log.Info($"{_route.RemoteAddress.AsString}:{seg.DestinationPort} <- {_route.LocalAddress.AsString}:{seg.SourcePort} FLAGS={seg.Flags.ToString()}; Payload={seg.Payload.Length} bytes");
+            Log.Debug($"{_route.RemoteAddress.AsString}:{seg.DestinationPort} <- {_route.LocalAddress.AsString}:{seg.SourcePort} FLAGS={seg.Flags.ToString()}; Payload={seg.Payload.Length} bytes");
         }
 
         Log.Trace("Virtual TcpSocket sending a segment");
