@@ -26,6 +26,7 @@ public interface ISessionHost
 
 public class VpnServer : ISessionHost, IDisposable
 {
+    private readonly bool _interactive;
     private const int NonEspHeader = 0; // https://docs.strongswan.org/docs/5.9/features/natTraversal.html
 
     // Session management
@@ -45,8 +46,9 @@ public class VpnServer : ISessionHost, IDisposable
     private readonly ISet<IpV4Address> _alwaysConnections = new HashSet<IpV4Address>();
     private readonly Stopwatch _timeSinceAnyTraffic = new();
 
-    public VpnServer()
+    public VpnServer(bool interactive)
     {
+        _interactive = interactive;
         try
         {
             _server = new UdpServer(IkeResponder, SpeResponder);
@@ -87,6 +89,20 @@ public class VpnServer : ISessionHost, IDisposable
             RunCommandArgs(args);
         }
 
+        if (_interactive) InteractiveMainLoop();
+        else ServiceMainLoop();
+    }
+
+    private void ServiceMainLoop()
+    {
+        while (_running)
+        {
+            Thread.Sleep(1000);
+        }
+    }
+
+    private void InteractiveMainLoop()
+    {
         while (_running)
         {
             // wait for local commands

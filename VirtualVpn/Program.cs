@@ -24,10 +24,17 @@ internal static class Program
 
     public static void Main(string[]? args)
     {
+        var interactive = false;
         Console.WriteLine($"Starting up VirtualVPN. Current platform={Platform.Current().ToString()}");
         if (args is null || args.Length < 1)
         {
             Console.WriteLine("Running in interactive mode. Press enter to see command list.");
+            interactive = true;
+        }
+        else if (args[0] == "int")
+        {
+            Console.WriteLine("Running in interactive mode. Press enter to see command list.");
+            interactive = true;
         }
 
         Console.WriteLine("Starting logger");
@@ -46,7 +53,7 @@ internal static class Program
         // starting IP-SEC connections, and to
         // set log levels.
         Console.WriteLine("Starting VPN host");
-        using var vpnServer = new VpnServer();
+        using var vpnServer = new VpnServer(interactive);
         VpnServer = vpnServer;
         vpnServer.Run(args); // this will block the main thread until ended with 'quit' command
         
