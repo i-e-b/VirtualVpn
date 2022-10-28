@@ -65,7 +65,15 @@ public class HttpListenerAndApi
             }
             catch (Exception ex)
             {
-                Log.Error("Failure in HTTP handler", ex);
+                if (_running)
+                {
+                    Log.Error("Failure in HTTP handler", ex);
+                }
+                else
+                {
+                    Log.Info("HTTP handler closing normally");
+                }
+
                 TryCloseContext(ctx);
                 Thread.Sleep(1000);
             }

@@ -26,7 +26,6 @@ internal class LokiLogServer
     {
         try
         {
-            Console.WriteLine($"Incoming log to Loki: {level} {message}");
             lock (_lock)
             {
                 _logQueue.Enqueue(new PendingLogLine
@@ -78,7 +77,6 @@ internal class LokiLogServer
             
             _logPump = new Thread(LoggingThreadCore){IsBackground = true};
             _logPump.Start();
-            Console.WriteLine("Logger is up");
         }
     }
 
@@ -94,7 +92,6 @@ internal class LokiLogServer
             // If not configured, clear any logs and wait
             if (string.IsNullOrWhiteSpace(Settings.LokiLogUrl))
             {
-                Console.WriteLine("Loki logger not configured");
                 lock (_lock) { _logQueue.Clear(); }
                 Thread.Sleep(1000);
                 continue;
@@ -116,7 +113,6 @@ internal class LokiLogServer
             if (timer.Elapsed < TimeSpan.FromSeconds(10)
                 && _logQueue.Count < 25)
             {
-                Console.WriteLine($"Loki logger waiting: {_logQueue.Count} messages, delay={timer.Elapsed}");
                 Thread.Sleep(100 * backoff);
                 if (backoff < 10) backoff++;
                 continue;
@@ -125,8 +121,6 @@ internal class LokiLogServer
             // if timer reset, but there are no messages, reset the timer and continue to wait
             timer.Restart();
             if (_logQueue.Count < 1) { continue; }
-            
-            Console.WriteLine("Processing logs");
             
             // Reset wait duration, send all waiting messages
             backoff = 1;
