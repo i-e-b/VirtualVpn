@@ -1,5 +1,6 @@
 #!/bin/bash
 
-dotnet run /root/VirtualVpn/VirtualVpn/. load=mpesa.json always=197.250.65.132
+cd /root/VirtualVpn/VirtualVpn || exit 2
+dotnet run . load=mpesa.json always=197.250.65.132
 
 exit 1
