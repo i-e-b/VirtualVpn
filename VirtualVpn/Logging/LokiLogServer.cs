@@ -168,7 +168,7 @@ internal class LokiLogServer
         var stream = new LokiLogStream
         {
             // These values keep the VirtualVPN logs similar to the Docker logs the other services output.
-            stream = { { "source", "stderr" }, { "container_name", "virtual_vpn" }, { "host", Settings.LokiLogHost } }
+            stream = { { "source", "stdout" }, { "container_name", "virtual_vpn" }, { "host", Settings.LokiLogHost } }
         };
 
         foreach (var message in messages)
