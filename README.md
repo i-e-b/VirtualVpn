@@ -41,9 +41,23 @@ Load settings with `load mySettings.json`<kbd>enter</kbd>
 Once settings are loaded, you can connect from the remote gateway, or request a connection
 by typing `start 192.168.x.x`<kbd>enter</kbd> at the console (with the IP address of the remote gateway).
 
+## Running as a service
+
+If you run VirtualVPN with command-line arguments, it will enter 'non-interactive' mode,
+designed for running as a service.
+
+- See `VirtualVpn.service` file for information on setting up a systemd service.
+- See `VirtualVpn/RunVpn.sh` for an example of calling command-line arguments.
+
+The command line arguments are the same as the interactive arguments, and are run
+in the order they are supplied.
+
+If the first argument is `int`, VirtualVPN will run in interactive mode even when
+command line arguments are supplied.
+
 ## Layout
 
-The projects `JustListen`, `ManualTlsTest`, and `SmallWebTest` are tools to help with development,
+The projects `ProtocolTests`, and `TestProxy` are tools to help with development,
 and are not required when running Virtual VPN
 
 ### Virtual VPN parts
@@ -53,17 +67,20 @@ and are not required when running Virtual VPN
 - **EspProtocol** - Handlers for Child SAs, ESP packets, IKE packets. This is where the gateway-to-gateway tunnelled traffic is handled
 - **Helpers** - Serialisation tools, low level C# bits
 - **InternetProtocol** - Various IP bits, including packet, addresses, and ICMP bits
+- **Logging** - Log level control, log formatting, and output to Loki servers
 - **TcpProtocol** - Embedded TCP stack to handle termination and re-routing to host web-app
-- **Web** - A tiny website for remotely lifting traffic captures off of the VirtualVPN
+- **TlsWrappers** - Adaptors to decrypt and re-encrypt TLS/SSL traffic so VirtualVPN can pretend to be a different HTTPS server
+- **Web** - An api and a website for remotely lifting traffic captures off of the VirtualVPN
+- Program - The entry point
+- Settings - Configuration root and documentation. Read the comments to understand the setting values.
 - VpnServer - root listener for IKE and ESP traffic. This directs to one of a set of VpnSessions
 - VpnSession - handler for a single VPN session. This deals with IKEv2 protocol, but not tunnelled traffic.
 
-## Current issues & work-face
+## Proxy API
 
-- [x] Add `Host:` injection to WebApp proxying
-- [ ] Migrate Payloads to Bitwise serialiser? (might need counts & looping)
-- [ ] Go through the collection types and make them thread safe
-- [ ] Check all "to-do" items
+VirtualVPN lets other systems call out through the remote gateway as if they were a machine on the
+virtual network. See `TestProxy/TestProxyApiProgram.cs` for an example of calling this.
+You will need to supply complete and correct HTTP headers and body.
 
 ## Helpful Bash Commands
 

@@ -5,7 +5,10 @@
 # Important things to set correctly are the config.json file
 # and the target gateway for 'always'
 #
-# Then copy this file to /etc/systemd/system
+# Then do
+#    chmod +x RunVpn.sh
+#
+# Then copy this 'VirtualVpn.service' file to /etc/systemd/system
 # And run 
 #    systemctl daemon-reload
 #    systemctl enable VirtualVpn.service
