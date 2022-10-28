@@ -28,6 +28,7 @@ WantedBy=multi-user.target
 [Service]
 Type=simple
 ExecStart=/root/VirtualVpn/VirtualVpn/RunVpn.sh
+Environment=DOTNET_CLI_HOME=/tmp
 WorkingDirectory=/root/VirtualVpn/VirtualVpn
 Restart=always
 RestartSec=5
