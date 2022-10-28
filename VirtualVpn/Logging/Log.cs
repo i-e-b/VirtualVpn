@@ -19,11 +19,11 @@ public static class Log
     
     private static readonly LokiLogServer _lokiLogs = new();
 
-    public static void RestartLokiServer()
+    public static void StartLokiServer()
     {
         lock (_lock)
         {
-            _lokiLogs.Restart();
+            _lokiLogs.Start();
         }
     }
 

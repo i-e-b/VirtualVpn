@@ -43,15 +43,6 @@ internal class LokiLogServer
     }
 
     /// <summary>
-    /// Restart log sending thread
-    /// </summary>
-    public void Restart()
-    {
-        Shutdown();
-        EnsureLoggingThread();
-    }
-
-    /// <summary>
     /// Flush all waiting logs, then stop writer thread
     /// </summary>
     public void Shutdown()
@@ -75,7 +66,10 @@ internal class LokiLogServer
     }
     
 
-    private void EnsureLoggingThread()
+    /// <summary>
+    /// Start the logger thread
+    /// </summary>
+    public void Start()
     {
         lock (_lock)
         {
@@ -91,6 +85,7 @@ internal class LokiLogServer
         var timer = new Stopwatch();
         timer.Start();
         var backoff = 1;
+        Console.WriteLine("LokiLog thread is up");
         
         while (_running)
         {

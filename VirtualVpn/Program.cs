@@ -32,7 +32,7 @@ internal static class Program
 
         Console.WriteLine("Starting logger");
         Log.SetLevel(Settings.DefaultLogLevel);
-        Log.RestartLokiServer();
+        Log.StartLokiServer();
 
         // Mini web site that provides an API,
         // and allows file captures to be retrieved if Settings.RunAirliftSite is on.

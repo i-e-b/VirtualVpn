@@ -588,7 +588,6 @@ public class VpnServer : ISessionHost, IDisposable
         
         // Restart ancillaries that might have been affected:
         Program.RestartHttpServer();
-        Log.RestartLokiServer();
         
         // Check TLS certs are valid.
         // If not, we won't stop, but we will warn
