@@ -1,5 +1,6 @@
 ﻿using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using System.Text;
 
 // ReSharper disable UnusedMember.Global
 
@@ -20,7 +21,10 @@ public static class Log
 
     public static void RestartLokiServer()
     {
-        _lokiLogs.Restart();
+        lock (_lock)
+        {
+            _lokiLogs.Restart();
+        }
     }
 
     public static void SetLevel(LogLevel level)
@@ -29,6 +33,10 @@ public static class Log
         _level = level;
     }
 
+    /// <summary>
+    /// Write cryptographically sensitive log.
+    /// This is never sent to any remote log servers.
+    /// </summary>
     public static void Crypto(string msg)
     {
         if (_level < LogLevel.Crypto) return;
@@ -46,6 +54,7 @@ public static class Log
         {
             BlankTimestamp();
             Console.WriteLine(msg);
+            _lokiLogs.AddLog(LogLevel.Trace, msg);
         }
     }
     public static void Trace(string msg, Func<string> more)
@@ -55,8 +64,12 @@ public static class Log
         lock (_lock)
         {
             BlankTimestamp();
-            Console.Write(msg);
-            Console.WriteLine(more());
+            var sb = new StringBuilder();
+            sb.Append(msg);
+            sb.AppendLine(more());
+            
+            Console.Write(sb.ToString());
+            _lokiLogs.AddLog(LogLevel.Trace, sb.ToString());
         }
     }
     public static void Trace(Func<string> msg)
@@ -66,7 +79,9 @@ public static class Log
         lock (_lock)
         {
             BlankTimestamp();
-            Console.Write(msg());
+            var message = msg();
+            Console.Write(message);
+            _lokiLogs.AddLog(LogLevel.Trace, message);
         }
     }
     
@@ -78,6 +93,7 @@ public static class Log
         {
             BlankTimestamp();
             Console.WriteLine(msg);
+            _lokiLogs.AddLog(LogLevel.Trace, msg);
             WriteStack();
         }
     }
@@ -90,15 +106,20 @@ public static class Log
         {
             Timestamp();
 
-            Console.WriteLine(msg);
-            if (subLines is null) return;
-
-            var lines = subLines();
-            foreach (var line in lines)
+            var sb = new StringBuilder();
+            sb.AppendLine(msg);
+            if (subLines is not null)
             {
-                Console.Write("    ");
-                Console.WriteLine(line);
+                var lines = subLines();
+                foreach (var line in lines)
+                {
+                    sb.Append("    ");
+                    sb.AppendLine(line);
+                }
             }
+
+            Console.WriteLine(sb.ToString());
+            _lokiLogs.AddLog(LogLevel.Debug, sb.ToString());
         }
     }
     
@@ -106,18 +127,20 @@ public static class Log
     {
         if (_level < LogLevel.Debug) return;
 
-
         lock (_lock)
         {
             Timestamp();
-
+            
+            var sb = new StringBuilder();
             foreach (var msg in messages)
             {
-                Console.Write(msg);
-                Console.Write(" ");
+                sb.Append(msg);
+                sb.Append(" ");
             }
+            sb.AppendLine();
 
-            Console.WriteLine();
+            Console.WriteLine(sb.ToString());
+            _lokiLogs.AddLog(LogLevel.Debug, sb.ToString());
         }
     }
 
@@ -133,6 +156,7 @@ public static class Log
             Timestamp();
 
             Console.WriteLine(msg);
+            _lokiLogs.AddLog(LogLevel.Debug, msg);
             WriteStack();
         }
     }
@@ -145,6 +169,7 @@ public static class Log
         {
             Timestamp();
             Console.WriteLine(msg);
+            _lokiLogs.AddLog(LogLevel.Info, msg);
         }
     }
     
@@ -156,6 +181,7 @@ public static class Log
         {
             Timestamp();
             Console.WriteLine(msg);
+            _lokiLogs.AddLog(LogLevel.Warning, msg);
         }
     }
 
@@ -166,6 +192,7 @@ public static class Log
         {
             Timestamp();
             Console.WriteLine(msg);
+            _lokiLogs.AddLog(LogLevel.Warning, msg);
             WriteStack();
         }
     }
@@ -184,6 +211,8 @@ public static class Log
 
             BlankTimestamp();
             Console.WriteLine($"In {memberName}, {sourceFilePath}::{sourceLineNumber}");
+            
+            _lokiLogs.AddLog(LogLevel.Error, $"{msg} in  {memberName}, {sourceFilePath}::{sourceLineNumber}");
         }
     }
     
@@ -191,7 +220,6 @@ public static class Log
     public static void Error(string message, Exception ex)
     {
         if (_level < LogLevel.Error) return;
-
 
         lock (_lock)
         {
@@ -205,6 +233,8 @@ public static class Log
             {
                 Console.WriteLine(message + ": " + ex.GetType().Name + " " + ex.Message); // just the top message if not debug
             }
+
+            _lokiLogs.AddLog(LogLevel.Error, message + ": " + ex);
         }
     }
 
@@ -223,6 +253,8 @@ public static class Log
             Console.WriteLine();
             WriteStack();
             Console.WriteLine();
+            
+            _lokiLogs.AddLog(LogLevel.Critical, msg);
         }
     }
 
@@ -253,6 +285,9 @@ public static class Log
 
     public static void Stop()
     {
-        _lokiLogs.Shutdown();
+        lock (_lock)
+        {
+            _lokiLogs.Shutdown();
+        }
     }
 }

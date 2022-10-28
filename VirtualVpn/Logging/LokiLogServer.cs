@@ -1,5 +1,4 @@
 ﻿using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
 using System.Net.Http.Headers;
 using System.Text;
 using SkinnyJson;
@@ -17,6 +16,57 @@ internal class LokiLogServer
     private volatile bool _running = true;
     private readonly Queue<PendingLogLine> _logQueue = new();
     private Thread? _logPump;
+
+
+    /// <summary>
+    /// Add a log line to the outgoing queue.
+    /// It will be sent to Loki in batches.
+    /// </summary>
+    public void AddLog(LogLevel level, string message)
+    {
+        lock (_lock)
+        {
+            _logQueue.Enqueue(new PendingLogLine
+            {
+                Date = DateTime.UtcNow,
+                Level = level,
+                Message = message
+            });
+        }
+    }
+
+    /// <summary>
+    /// Restart log sending thread
+    /// </summary>
+    public void Restart()
+    {
+        Shutdown();
+        EnsureLoggingThread();
+    }
+
+    /// <summary>
+    /// Flush all waiting logs, then stop writer thread
+    /// </summary>
+    public void Shutdown()
+    {
+        lock (_lock)
+        {
+            _running = false;
+            
+            if (_logPump is null) return;
+            if (!_logPump.Join(10_000))
+            {
+                Console.WriteLine("Loki log runner thread failed to shut-down");
+                PushLogImmediate(level: LogLevel.Error, message: "Loki log runner thread failed to shut-down", time: DateTime.UtcNow);
+            }
+            else
+            {
+                PushLogImmediate(level: LogLevel.Error, message: "Loki log runner stopped normally", time: DateTime.UtcNow);
+            }
+            _logPump = null; // if the old pump is stuck, we will leak threads here.
+        }
+    }
+    
 
     private void EnsureLoggingThread()
     {
@@ -85,7 +135,7 @@ internal class LokiLogServer
             var ok = false;
             try
             {
-                TryPushToLoki(messages, logUri);
+                PushToLoki(messages, logUri);
                 ok = true;
             }
             catch (Exception ex)
@@ -107,7 +157,10 @@ internal class LokiLogServer
         }
     }
 
-    private static void TryPushToLoki(PendingLogLine[] messages, Uri logUri)
+    /// <summary>
+    /// Push a block of log messages to Loki in one HTTP call.
+    /// </summary>
+    private static void PushToLoki(PendingLogLine[] messages, Uri logUri)
     {
         // Build object for Loki
         var stream = new LokiLogStream
@@ -118,7 +171,7 @@ internal class LokiLogServer
 
         foreach (var message in messages)
         {
-            stream.AddLine(message.Date, message.Message);
+            stream.AddLine(message.Date, $"level={LokiString(message.Level)} {message.Message}");
         }
 
         var logLine = new LokiLogBlock(stream);
@@ -140,73 +193,51 @@ internal class LokiLogServer
         }
     }
 
-    public void Restart()
+    /// <summary>
+    /// log level text that matches general use
+    /// </summary>
+    private static string LokiString(LogLevel level)
     {
-        Shutdown();
-        EnsureLoggingThread();
+        return level switch
+        {
+            LogLevel.Critical => "error",
+            LogLevel.Error => "error",
+            LogLevel.Warning => "warn",
+            _ => "info"
+        };
     }
 
     /// <summary>
-    /// Flush all waiting logs, then stop writer thread
+    /// Push a single log message to Loki without
+    /// waiting for log pump thread. This should only
+    /// be used for messages in the log system itself.
     /// </summary>
-    public void Shutdown()
-    {
-        lock (_lock)
-        {
-            _running = false;
-            
-            if (_logPump is null) return;
-            if (!_logPump.Join(10_000))
-            {
-                Console.WriteLine("Loki log runner thread failed to shut-down");
-                PushLogImmediate(level: LogLevel.Error, message: "Loki log runner thread failed to shut-down", time: DateTime.UtcNow);
-            }
-            else
-            {
-                PushLogImmediate(level: LogLevel.Error, message: "Loki log runner stopped normally", time: DateTime.UtcNow);
-            }
-            _logPump = null; // if the old pump is stuck, we will leak threads here.
-        }
-    }
-
     private void PushLogImmediate(LogLevel level, string message, DateTime time)
     {
-        throw new NotImplementedException();
+        try
+        {
+            var logUrl = Settings.LokiLogUrl;
+            if (string.IsNullOrWhiteSpace(logUrl))
+            {
+                Console.WriteLine("Can't send message. Loki logging url not configured");
+                Console.WriteLine($"{time:yyyy-MM-ddTHH:mm} (utc) level={level.ToString()} {message}");
+                return;
+            }
+
+            PushToLoki(new[]
+            {
+                new PendingLogLine
+                {
+                    Date = time,
+                    Level = level,
+                    Message = message
+                }
+            }, new Uri(logUrl, UriKind.Absolute));
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to send message to Loki: {ex}");
+            Console.WriteLine($"{time:yyyy-MM-ddTHH:mm} (utc) level={level.ToString()} {message}");
+        }
     }
-}
-
-public class PendingLogLine
-{
-    public DateTime Date { get; set; }
-    public string Message { get; set; }="";
-}
-
-[SuppressMessage("ReSharper", "InconsistentNaming")]
-[SuppressMessage("ReSharper", "CollectionNeverQueried.Global")]
-[SuppressMessage("ReSharper", "MemberCanBePrivate.Global")]
-public class LokiLogBlock
-{
-    public LokiLogBlock(LokiLogStream stream)
-    {
-        streams.Add(stream);
-    }
-
-    public List<LokiLogStream> streams { get; set; } = new();
-}
-
-[SuppressMessage("ReSharper", "InconsistentNaming")]
-[SuppressMessage("ReSharper", "CollectionNeverQueried.Global")]
-[SuppressMessage("ReSharper", "MemberCanBePrivate.Global")]
-public class LokiLogStream
-{
-    public Dictionary<string, string> stream { get; } = new();
-    public List<string[]> values { get; } = new();
-
-    public void AddLine(DateTime date, string line)
-    {
-        values.Add(new[] { UnixTime(date).ToString(), line });
-    }
-
-    private static readonly DateTime _epochStart = new(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-    private static long UnixTime(DateTime date) => (date - _epochStart).Ticks * 100;
 }

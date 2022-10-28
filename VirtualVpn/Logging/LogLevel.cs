@@ -22,6 +22,11 @@ public enum LogLevel
     Crypto = 100,
     
     /// <summary>
+    /// Very important log that is always output
+    /// </summary>
+    Critical = 254,
+    
+    /// <summary>
     /// Output all logs
     /// </summary>
     Everything = 255
