@@ -55,6 +55,17 @@ in the order they are supplied.
 If the first argument is `int`, VirtualVPN will run in interactive mode even when
 command line arguments are supplied.
 
+## Health check failure codes
+
+The health check API end point gives text messages on failure, but in case you only have
+access to the HTTP status codes (looking at you, uptime-kuma), these are
+
+* 200 - All OK: VpnServer is up with an active session
+* 503 - VpnServer instance is null
+* 410 - VpnServer instance is not running
+* 502 - VpnServer is running, but there are no active sessions
+* 408 - VpnServer is up, a session is established, but no traffic (including keep-alive pings) has been received for over 2 minutes
+
 ## Layout
 
 The projects `ProtocolTests`, and `TestProxy` are tools to help with development,
