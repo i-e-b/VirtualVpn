@@ -125,9 +125,25 @@ public class ChildSa : ITransportTunnel
     private void KeepAliveEvent(EspTimedEvent obj)
     {
         Log.Debug($"Sending keep-alive to {Gateway.AsString}:{4500}");
+        Parent?.SetLastKeepAlive(Gateway);
+        
+        try
+        {
+            _server?.SendRaw(new byte[] { 0xff }, Gateway.MakeEndpoint(4500));
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Failed to send ping to gateway", ex);
+        }
+
         _keepAliveTrigger.Reset();
-        _server?.SendRaw(new byte[]{ 0xff }, Gateway.MakeEndpoint(4500));
     }
+    
+    /// <summary>
+    /// Start the keep-alive timer back at zero.
+    /// This will delay the sending of keep-alive pings
+    /// </summary>
+    public void ResetKeepAliveTimer() => _keepAliveTrigger.Reset();
 
     public void IncrementMessageId(uint espPacketSequence)
     {
@@ -143,11 +159,9 @@ public class ChildSa : ITransportTunnel
     {
         var goFaster = false;
         
-        // if we are the initiator, we should send periodic keep-alive pings to the peer.
-        if (Parent?.WeStarted == true)
-        {
-            _keepAliveTrigger.TriggerIfExpired();
-        }
+        // We should send periodic keep-alive pings to the peer.
+        // If the peer is sending them, we will reset this timer to reduce flooding.
+        _keepAliveTrigger.TriggerIfExpired();
         
         // Check TCP sessions, close them if they are timed out.
         var allSessions = _tcpSessions.Keys.ToList();
@@ -457,7 +471,7 @@ public class ChildSa : ITransportTunnel
 
                 if (session.WebAppConnectionIsFaulted()
                     || session.TunnelConnectionIsClosedOrFaulted()
-                    )
+                   )
                 {
                     Log.Critical("Data still incoming to broken connection!");
                     Log.Info("Removing session, will try to make it fall through to a new one");

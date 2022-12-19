@@ -32,6 +32,11 @@ public interface ISessionHost
     /// Mark a connection as 'terminated', for use in the termination alarm (<see cref="VpnServer.AlarmIsActive"/>).
     /// </summary>
     void ConnectionRemoteTerminated(IpV4Address gateway);
+
+    /// <summary>
+    /// Informs the VPN server that a keep-alive was just sent to the target gateway
+    /// </summary>
+    void SetLastKeepAlive(IpV4Address gateway);
 }
 
 public class VpnServer : ISessionHost, IDisposable
@@ -53,6 +58,9 @@ public class VpnServer : ISessionHost, IDisposable
     // Stats stuff
     private readonly EspTimedEvent _statsTimer;
     private ulong _sessionsStarted;
+    private readonly object _keepAliveLock = new();
+    private readonly Dictionary<IpV4Address, Stopwatch> _lastPings = new ();
+    
     private readonly ISet<IpV4Address> _alwaysConnections = new HashSet<IpV4Address>();
     private readonly Stopwatch _timeSinceAnyTraffic = new();
 
@@ -76,7 +84,7 @@ public class VpnServer : ISessionHost, IDisposable
         _eventPumpThread = new Thread(EventPumpLoop) { IsBackground = true };
         _timeSinceAnyTraffic.Start();
     }
-
+    
     /// <summary>
     /// Run the VirtualVPN software
     /// </summary>
@@ -831,8 +839,21 @@ public class VpnServer : ISessionHost, IDisposable
         // Check for keep-alive ping?
         if (data.Length < 4 && data[0] == 0xff)
         {
-            Log.Info("    Looks like a keep-alive ping. Sending pong");
+            var gateway = IpV4Address.FromEndpoint(sender);
+            
+            // If we just sent a ping to this endpoint, don't reply
+            if (RecentlySentKeepAlive(gateway))
+            {
+                Log.Info("Received keep-alive reply from remote");
+                return;
+            }
+
+            // Probably the other side sending, we must reply.
+            Log.Info("Received keep-alive ping. Sending reply");
             _server.SendRaw(data, sender);
+            
+            // Reset keep-alive timers any Child SAs attached to this gateway
+            ResetChildSaKeepAliveTimers(gateway);
             return;
         }
 
@@ -891,6 +912,15 @@ public class VpnServer : ISessionHost, IDisposable
         {
             Log.Warn($"Failed to handle SPE message from {sender.Address}: {ex.Message}");
             Log.Debug(ex.ToString());
+        }
+    }
+
+    private void ResetChildSaKeepAliveTimers(IpV4Address gateway)
+    {
+        var sessionSnap = _childSessions.Values.ToArray();
+        foreach (var childSa in sessionSnap)
+        {
+            if (childSa.Gateway == gateway) childSa.ResetKeepAliveTimer();
         }
     }
 
@@ -1070,5 +1100,29 @@ public class VpnServer : ISessionHost, IDisposable
     {
         _lastTerminationGateway = IpV4Address.Any;
         _terminationCount = 0;
+    }
+
+    /// <summary>
+    /// Informs the VPN server that a keep-alive was just sent to the target gateway
+    /// </summary>
+    public void SetLastKeepAlive(IpV4Address gateway)
+    {
+        lock (_keepAliveLock)
+        {
+            if (!_lastPings.ContainsKey(gateway)) _lastPings.Add(gateway, new Stopwatch());
+            _lastPings[gateway].Restart();
+        }
+    }
+    
+    /// <summary>
+    /// Returns true if we have recently sent a ping to the given gateway
+    /// </summary>
+    private bool RecentlySentKeepAlive(IpV4Address gateway)
+    {
+        lock (_keepAliveLock)
+        {
+            if (!_lastPings.ContainsKey(gateway)) return false;
+            return _lastPings[gateway].Elapsed < TimeSpan.FromSeconds(5);
+        }
     }
 }

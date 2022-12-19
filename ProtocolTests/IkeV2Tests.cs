@@ -91,25 +91,11 @@ public class TestUdpServer : IUdpServer
 
 public class TestSessionHost : ISessionHost
 {
-    public void AddChildSession(ChildSa childSa)
-    {
-        throw new NotImplementedException();
-    }
-
-    public void RemoveChildSession(params uint[] spis)
-    {
-        throw new NotImplementedException();
-    }
-
-    public void RemoveSession(bool wasRemoteRequest, params ulong[] spis)
-    {
-        throw new NotImplementedException();
-    }
-
-    public string StatusToString() { throw new NotImplementedException();
-    }
-
+    public void AddChildSession(ChildSa childSa) { throw new NotImplementedException(); }
+    public void RemoveChildSession(params uint[] spis) { throw new NotImplementedException(); }
+    public void RemoveSession(bool wasRemoteRequest, params ulong[] spis) { throw new NotImplementedException(); }
+    public string StatusToString() { throw new NotImplementedException(); }
     public void ConnectionNormal() { }
-
     public void ConnectionRemoteTerminated(IpV4Address gateway) { }
+    public void SetLastKeepAlive(IpV4Address gateway) { }
 }

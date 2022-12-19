@@ -1342,4 +1342,12 @@ public class VpnSession
     /// This is part of the <see cref="VpnServer.AlarmIsActive"/> system.
     /// </summary>
     public void ConnectionNormal() => _sessionHost.ConnectionNormal();
+
+    /// <summary>
+    /// Informs the VPN server that a keep-alive was just sent to the target gateway
+    /// </summary>
+    public void SetLastKeepAlive(IpV4Address gateway)
+    {
+        _sessionHost.SetLastKeepAlive(gateway);
+    }
 }
