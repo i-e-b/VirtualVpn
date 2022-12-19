@@ -108,4 +108,8 @@ public class TestSessionHost : ISessionHost
 
     public string StatusToString() { throw new NotImplementedException();
     }
+
+    public void ConnectionNormal() { }
+
+    public void ConnectionRemoteTerminated(IpV4Address gateway) { }
 }

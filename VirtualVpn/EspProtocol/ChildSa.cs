@@ -798,4 +798,16 @@ public class ChildSa : ITransportTunnel
     }
 
     public string Describe() => $"Child SA, ({Bit.HexString(_spiIn)} / {Bit.HexString(_spiOut)}) Gateway={Gateway.AsString}, ParentSession={Parent?.LocalSpi:x16}";
+
+    /// <summary>
+    /// Notify the Security Association that a connection was terminated at an unexpected point.
+    /// This is part of the <see cref="VpnServer.AlarmIsActive"/> system.
+    /// </summary>
+    public void ConnectionRemoteTerminated() => Parent?.ConnectionRemoteTerminated(Gateway);
+
+    /// <summary>
+    /// Notify the Security Association that a connection was fully established in a normal way.
+    /// This is part of the <see cref="VpnServer.AlarmIsActive"/> system.
+    /// </summary>
+    public void ConnectionNormal() => Parent?.ConnectionNormal();
 }

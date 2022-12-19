@@ -64,6 +64,7 @@ access to the HTTP status codes (looking at you, uptime-kuma), these are
 * 503 - VpnServer instance is null
 * 410 - VpnServer instance is not running
 * 502 - VpnServer is running, but there are no active sessions
+* 409 - VpnServer is up, a session is established, but **tunnelled** TCP connections are being terminated (indicates some filtering software is misconfigured at the remote side)
 * 408 - VpnServer is up, a session is established, but no traffic (including keep-alive pings) has been received for over 2 minutes
 
 ## Layout

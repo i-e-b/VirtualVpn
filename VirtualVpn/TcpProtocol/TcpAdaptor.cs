@@ -65,6 +65,9 @@ public class TcpAdaptor : ITcpAdaptor
         return $"{IpV4Address.Describe(LocalAddress)}:{LocalPort} -> {IpV4Address.Describe(RemoteAddress)}:{RemotePort}";
     }
 
+    public void ConnectionRemoteTerminated() => _transport.ConnectionRemoteTerminated();
+    public void ConnectionNormal() => _transport.ConnectionNormal();
+
     /// <summary> The tunnel session we are connected to (used for sending replies) </summary>
     private readonly ChildSa _transport;
 

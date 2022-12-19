@@ -22,6 +22,16 @@ public interface ISessionHost
     void RemoveChildSession(params uint[] spis);
     void RemoveSession(bool wasRemoteRequest, params ulong[] spis);
     string StatusToString();
+
+    /// <summary>
+    /// Mark a connection as 'normal', for use in the termination alarm (<see cref="VpnServer.AlarmIsActive"/>)
+    /// </summary>
+    void ConnectionNormal();
+
+    /// <summary>
+    /// Mark a connection as 'terminated', for use in the termination alarm (<see cref="VpnServer.AlarmIsActive"/>).
+    /// </summary>
+    void ConnectionRemoteTerminated(IpV4Address gateway);
 }
 
 public class VpnServer : ISessionHost, IDisposable
@@ -269,7 +279,7 @@ public class VpnServer : ISessionHost, IDisposable
             while (
                 apiSide.Connected // this will be flipped when the Tcp connection is over
                 && timeout.Elapsed < TimeSpan.FromSeconds(30) // timeout -- needs to be quite long as our SSL/TLS is slow
-                )
+            )
             {
                 if (!channel.EventPump())
                 {
@@ -1014,5 +1024,51 @@ public class VpnServer : ISessionHost, IDisposable
             if (childSa.ContainsIp(target)) return childSa;
         }
         throw new Exception($"No open SA to '{target.AsString}' exists.");
+    }
+
+    /// <summary>
+    /// Returns true if remote connections are getting a TCP 'FIN' before any data is transmitted.
+    /// This can happen if filtering software is misconfigured at the remote side.
+    /// <p></p>
+    /// There is a little bit of slack in the alarm, and it should not trigger unless most traffic
+    /// is being terminated.
+    /// The alarm should self-clear if normal traffic resumes.
+    /// </summary>
+    public bool AlarmIsActive() => _terminationCount > 10;
+
+    /// <summary>
+    /// Returns the last gateway that triggered an alarm
+    /// </summary>
+    public string AlarmLastGateway() => _lastTerminationGateway.AsString;
+    
+    private volatile int _terminationCount;
+    private IpV4Address _lastTerminationGateway = IpV4Address.Any;
+
+    /// <summary>
+    /// Mark a connection as 'normal', for use in the termination alarm (<see cref="AlarmIsActive"/>)
+    /// </summary>
+    public void ConnectionNormal()
+    {
+        if (_terminationCount < 1) return;
+        Interlocked.Decrement(ref _terminationCount);
+    }
+
+    /// <summary>
+    /// Mark a connection as 'terminated', for use in the termination alarm (<see cref="AlarmIsActive"/>).
+    /// </summary>
+    public void ConnectionRemoteTerminated(IpV4Address gateway)
+    {
+        _lastTerminationGateway = gateway;
+        if (_terminationCount > 20) return;
+        Interlocked.Increment(ref _terminationCount);
+    }
+
+    /// <summary>
+    /// Clear the termination alarm (should be user intervention only)
+    /// </summary>
+    public void AlarmReset()
+    {
+        _lastTerminationGateway = IpV4Address.Any;
+        _terminationCount = 0;
     }
 }

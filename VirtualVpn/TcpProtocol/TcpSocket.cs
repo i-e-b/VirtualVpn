@@ -1222,6 +1222,7 @@ public class TcpSocket
             case TcpSocketState.Established:
                 if (_sendBuffer.TotalWritten < 1 && _receiveQueue.TotalRead < 1)
                 {
+                    _adaptor.ConnectionRemoteTerminated();
                     Log.Warn($"FIN received from state {_state.ToString()}, but no data send or received.");
                 }
                 else
@@ -1384,6 +1385,8 @@ public class TcpSocket
                 if (segLen < 1) break; // no data
 
                 _receiveQueue.Insert(frame.Tcp);
+                
+                _adaptor.ConnectionNormal(); // let the adaptor know we got at least some data from this connection
 
                 // Segments take up space in the receive window regardless
                 // of being in-order. Adjust the window:

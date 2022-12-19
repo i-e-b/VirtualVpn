@@ -71,7 +71,32 @@ public interface ITcpAdaptor: IDisposable
     /// <summary> The tunnel gateway we expect to be talking to </summary>
     IPEndPoint Gateway { get; }
 
+    /// <summary>
+    /// Return true if the tunnel-side connection is in a state where we don't expect
+    /// any further data
+    /// </summary>
     bool TunnelConnectionIsClosedOrFaulted();
+    
+    /// <summary>
+    /// Return true if there was a connection fault on the Web-app side
+    /// </summary>
     bool WebAppConnectionIsFaulted();
+    
+    /// <summary>
+    /// Provide a human-readable description of the adaptor
+    /// </summary>
     string Describe();
+    
+    
+    /// <summary>
+    /// Notify the adaptor that a connection was terminated at an unexpected point.
+    /// This is part of the <see cref="VpnServer.AlarmIsActive"/> system.
+    /// </summary>
+    void ConnectionRemoteTerminated();
+    
+    /// <summary>
+    /// Notify the adaptor that a connection was fully established in a normal way.
+    /// This is part of the <see cref="VpnServer.AlarmIsActive"/> system.
+    /// </summary>
+    void ConnectionNormal();
 }

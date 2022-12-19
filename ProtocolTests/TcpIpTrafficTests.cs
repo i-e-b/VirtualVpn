@@ -659,6 +659,8 @@ public class TestAdaptor : ITcpAdaptor
 
     public bool WebAppConnectionIsFaulted() => false;
     public string Describe() => "test adaptor";
+    public void ConnectionRemoteTerminated() { }
+    public void ConnectionNormal() { }
 
     public void Clear()
     {

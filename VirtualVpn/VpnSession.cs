@@ -1329,4 +1329,17 @@ public class VpnSession
     }
 
     public IEnumerable<ChildSa> ChildSessions() => _thisSessionChildren.Values.ToArray();
+
+    
+    /// <summary>
+    /// Notify the Session that a connection was terminated at an unexpected point.
+    /// This is part of the <see cref="VpnServer.AlarmIsActive"/> system.
+    /// </summary>
+    public void ConnectionRemoteTerminated(IpV4Address gateway) => _sessionHost.ConnectionRemoteTerminated(gateway);
+
+    /// <summary>
+    /// Notify the Session that a connection was fully established in a normal way.
+    /// This is part of the <see cref="VpnServer.AlarmIsActive"/> system.
+    /// </summary>
+    public void ConnectionNormal() => _sessionHost.ConnectionNormal();
 }

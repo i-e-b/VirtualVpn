@@ -100,6 +100,11 @@ public class HttpListenerAndApi
             case "health":
                 HandleHealthCheck(ctx);
                 return;
+            
+            case "reset-alarm":
+                Program.VpnServer?.AlarmReset();
+                HandleHealthCheck(ctx);
+                return;
 
             default:
                 Log.Warn($"Unknown command '{cmd}'");
@@ -218,7 +223,27 @@ public class HttpListenerAndApi
             ctx.Response.OutputStream.Write(document.ToBytes(Encoding.UTF8));
             return;
         }
-        
+
+        if (Program.VpnServer.AlarmIsActive())
+        {
+            ctx.Response.AddHeader("Content-Type", "text/html");
+            ctx.Response.StatusCode = 409; // Conflict
+            ctx.Response.StatusDescription = "Remote filter is terminating connections";
+
+            var document = T.g("html")[
+                T.g("head")[ T.g("title")["VirtualVPN - fault"] ],
+                T.g("body")[
+                    T.g("h1")["Warning"],
+                    T.g("p")["VirtualVPN is connected, but it looks like a filter on the remote side is terminating connections."],
+                    T.g("p")[$"This should be reported to the owner or administrator of the gateway at '{Program.VpnServer.AlarmLastGateway()}'"],
+                    T.g("p")[T.g("a", "href","reset-alarm")["Reset Alarm"]]
+                ]
+            ];
+
+            ctx.Response.OutputStream.Write(document.ToBytes(Encoding.UTF8));
+            return;
+        }
+
         var sinceLastTraffic = Program.VpnServer.MostRecentTraffic();
         var ageSeconds = sinceLastTraffic.TotalSeconds;
         if (ageSeconds > 120)
