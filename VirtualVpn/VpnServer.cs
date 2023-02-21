@@ -225,12 +225,12 @@ public class VpnServer : ISessionHost, IDisposable
             
             // Remove it
             var removed = _sessions.Remove(spi);
-            Log.Info($"Session {spi:x} removed. It was connected to {session.Gateway}");
+            Log.Info($"Session {spi:x} removed. It was connected to {session.Gateway}. {_sessions.Count} sessions remain.");
 
             if (removed) removedCount++;
             
-            // If this is a persistent session ended from elsewhere, start it back up
-            if (wasRemoteRequest && Settings.ReEstablishOnDisconnect)
+            // If this is a persistent session ended from elsewhere (or was the last one), start it back up
+            if (Settings.ReEstablishOnDisconnect && (wasRemoteRequest || _sessions.Count < 0))
             {
                 Log.Info($"Attempting to restart session with {session.Gateway}");
                 StartVpnSession(session.Gateway);
@@ -521,6 +521,7 @@ public class VpnServer : ISessionHost, IDisposable
         sb.Append($"\r\nTotal data in={Bit.Human(_server.TotalIn)}, out={Bit.Human(_server.TotalOut)}");
         sb.Append($"\r\nMemory: process={Bit.Human(allMem)}, GC.Total={Bit.Human(GC.GetTotalMemory(false))}, GC.Heap={Bit.Human(gc.HeapSizeBytes)}, Avail={Bit.Human(gc.TotalAvailableMemoryBytes)}");
         sb.Append($"\r\nActive threads={tCount}, tls wrappers running={TlsUnwrap.RunningThreads}, tls waiting dispose={tlsThreadCount}, other={otherThreadCount}");
+        sb.Append($"\r\n{_alwaysConnections.Count} permanent connections configured.");
         
         
         sb.Append("\r\nSessions:\r\n");

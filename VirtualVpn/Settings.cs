@@ -23,7 +23,10 @@ public static class Settings
     /// If true, and the remote peer disconnects, VirtualVPN will try to restart the
     /// connection.
     /// <p></p>
-    /// If false, or the connection was ended locally, we will not try to re-establish
+    /// If true, and the connection was closed from the local side, we will re-establish
+    /// the session only if there are no other sessions open.
+    /// <p></p>
+    /// If false, we will not try to re-establish
     /// the connection, but we will accept remote connections.
     /// </summary>
     public static bool ReEstablishOnDisconnect = true;

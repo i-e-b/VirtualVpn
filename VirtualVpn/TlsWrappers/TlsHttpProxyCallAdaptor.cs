@@ -138,7 +138,7 @@ public class TlsHttpProxyCallAdaptor : ISocketAdaptor
 
             Log.Trace($"Proxy: {nameof(RunSslAdaptor)}, authenticated and written");
             var buffer = new byte[8192];
-            while (_messagePumpRunning)
+            while (_messagePumpRunning && _sslStream is not null)
             {
                 try
                 {
@@ -163,7 +163,7 @@ public class TlsHttpProxyCallAdaptor : ISocketAdaptor
 
             try
             {
-                _sslStream.Close();
+                _sslStream?.Close();
             }
             catch (Exception ex)
             {
