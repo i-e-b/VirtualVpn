@@ -624,14 +624,14 @@ public class BigInt
         else if (xyCmp == 0)
         {
             count = new int[1];
-
             count[0] = 1;
+            zero(x); // no remainder
         }
         else
         {
             count = new int[1];
-
             count[0] = 0;
+            // remainder is entire value
         }
 
         return count;
