@@ -1660,14 +1660,11 @@ public class BigInt
 
         if (val._sign < 0)
         {
-            if (_sign > 0)
-                return add(val.negate());
+            return add(val.negate());
         }
-        else
-        {
-            if (_sign < 0)
-                return add(val.negate());
-        }
+
+        if (_sign < 0)
+            return add(val.negate());
 
         BigInt bigun,
             littlun;
