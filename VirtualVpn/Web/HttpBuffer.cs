@@ -1,4 +1,5 @@
-﻿using System.Globalization;
+﻿using System.Diagnostics;
+using System.Globalization;
 using System.Text;
 using VirtualVpn.Logging;
 
@@ -140,7 +141,7 @@ public class HttpBuffer
         var response = new HttpProxyResponse();
         // Read initial status line
         var cursor = 0;
-        var firstLine = ReadLine(ref cursor);
+        var firstLine = ReadNonEmptyLine(ref cursor);
         var status = firstLine.Split(new[] { ' ' }, 3, StringSplitOptions.TrimEntries);
 
         if (status.Length < 2 || !firstLine.StartsWith("HTTP/1.1")) // probably completely wrong
@@ -183,13 +184,9 @@ public class HttpBuffer
             if (lowerKey == "transfer-encoding") key = "Transfer-Encoding"; // normalise bad headers
             if (lowerKey == "content-type") key = "Content-Type"; // normalise bad headers
 
-            if (response.Headers.ContainsKey(key))
+            if (!response.Headers.TryAdd(key, value))
             {
                 response.Headers[key] += ", " + value;
-            }
-            else
-            {
-                response.Headers.Add(key, value);
             }
         }
 
@@ -277,7 +274,29 @@ public class HttpBuffer
         
         return length; // Looks like a valid chunk spec
     }
-    
+
+    /// <summary>
+    /// Read from the cursor to the next line end.
+    /// Tries to skip any empty lines.
+    /// <p/>
+    /// Cursor is updated to point to first character on next line
+    /// </summary>
+    private string ReadNonEmptyLine(ref int cursor)
+    {
+        var sw = new Stopwatch();
+        sw.Stop();
+
+        var result = "";
+        for (int i = 0; i < 10; i++)
+        {
+            result = ReadLine(ref cursor);
+            if (!string.IsNullOrEmpty(result)) return result;
+        }
+        
+        Log.Warn("Could not find non-empty line in response");
+        return result;
+    }
+
     /// <summary>
     /// Read from the cursor to the next line end.
     /// Cursor is updated to point to first character on next line
