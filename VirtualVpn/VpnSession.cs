@@ -353,7 +353,9 @@ public class VpnSession
                         HandleSaConfirm(request, sender, sendZeroHeader);
                         break;
                     default:
-                        throw new Exception($"Received {nameof(ExchangeType.IKE_SA_INIT)}, so expected to be in state {nameof(SessionState.INITIAL)} or {nameof(SessionState.SA_SENT)}, but was in {State.ToString()}");
+                        throw new Exception($"Received {nameof(ExchangeType.IKE_SA_INIT)}," +
+                                            $" so expected to be in state {nameof(SessionState.INITIAL)} or {nameof(SessionState.IKE_INIT_SENT)}," +
+                                            $" but was in {State.ToString()}");
                 }
 
                 break;
@@ -381,7 +383,9 @@ public class VpnSession
                         break;
                     }
                     default:
-                        throw new Exception($"Received {nameof(ExchangeType.IKE_AUTH)}, so expected to be in state {nameof(SessionState.SA_SENT)} or {nameof(SessionState.AUTH_SENT)}, but was in {State.ToString()}");
+                        throw new Exception($"Received {nameof(ExchangeType.IKE_AUTH)}," +
+                                            $" so expected to be in state {nameof(SessionState.SA_SENT)} or {nameof(SessionState.AUTH_SENT)}," +
+                                            $" but was in {State.ToString()}");
                 }
 
                 break;
